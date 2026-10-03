@@ -55,7 +55,9 @@ func ModPage(game string, modID int) string {
 	return fmt.Sprintf("https://www.nexusmods.com/%s/mods/%d", url.PathEscape(game), modID)
 }
 
-// FilesPage возвращает адрес списка файлов мода на сайте.
-func FilesPage(game string, modID int) string {
-	return ModPage(game, modID) + "?tab=files"
+// DownloadPage возвращает адрес страницы загрузки одного файла мода для
+// менеджера модов: на ней остаётся нажать одну кнопку, и сайт отдаёт ссылку
+// nxm://. Тот же адрес открывает Vortex пользователям без Premium.
+func DownloadPage(game string, modID, fileID int) string {
+	return fmt.Sprintf("%s?tab=files&file_id=%d&nmm=1", ModPage(game, modID), fileID)
 }

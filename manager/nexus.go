@@ -608,10 +608,10 @@ func (a *Manager) UpdateMod(ctx context.Context, id string, progress func(Progre
 		res, err := a.installFile(ctx, c, domain, v.NexusID, found.FileID, "", "", progress)
 		return UpdateResult{State: res.State, Message: res.Message}, err
 	}
-	res := UpdateResult{URL: nexus.FilesPage(domain, v.NexusID)}
-	res.Message = fmt.Sprintf("Открыта страница файлов «%s»: нажмите «Mod Manager Download» у версии %s", v.Name, found.Version)
+	res := UpdateResult{URL: nexus.DownloadPage(domain, v.NexusID, found.FileID)}
+	res.Message = fmt.Sprintf("Открыта страница загрузки «%s» %s: нажмите на ней кнопку загрузки", v.Name, found.Version)
 	if !ours {
-		res.Message = fmt.Sprintf("Открыта страница файлов «%s». Ссылки с сайта сейчас открывает не Modvault: включите их щелчком по «Ссылки nxm» в строке состояния или скачайте архив вручную и добавьте его кнопкой «Добавить мод»", v.Name)
+		res.Message = fmt.Sprintf("Открыта страница загрузки «%s». Ссылки с сайта сейчас открывает не Modvault: включите их щелчком по «Ссылки nxm» в строке состояния или скачайте архив вручную и добавьте его кнопкой «Добавить мод»", v.Name)
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()

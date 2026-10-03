@@ -437,7 +437,7 @@ func TestUpdates(t *testing.T) {
 
 	// Без Premium обновление идёт через сайт.
 	up, err := a.UpdateMod(ctx, "score_board", nil)
-	if err != nil || up.URL != "https://www.nexusmods.com/"+testDomain+"/mods/22?tab=files" {
+	if err != nil || up.URL != "https://www.nexusmods.com/"+testDomain+"/mods/22?tab=files&file_id=101&nmm=1" {
 		t.Errorf("обновление без Premium: %+v, %v", up, err)
 	}
 	if _, err := a.UpdateMod(ctx, "flux", nil); err == nil {
