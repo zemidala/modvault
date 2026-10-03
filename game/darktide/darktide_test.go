@@ -274,9 +274,13 @@ func TestValidateAndManagers(t *testing.T) {
 	if m := d.Managers(dir); len(m) != 0 {
 		t.Errorf("менеджеры в чистой игре: %v", m)
 	}
-	os.WriteFile(filepath.Join(dir, "vortex.deployment.json"), []byte("{}"), 0o644)
+	// Пустая папка с чужим названием — не менеджер модов.
 	os.Mkdir(filepath.Join(dir, "Servo-Modquisitor-2"), 0o755)
-	if m := strings.Join(d.Managers(dir), ","); m != "Vortex,Servo-Modquisitor" {
+	if m := d.Managers(dir); len(m) != 0 {
+		t.Errorf("пустая папка принята за менеджер: %v", m)
+	}
+	os.WriteFile(filepath.Join(dir, "vortex.deployment.json"), []byte("{}"), 0o644)
+	if m := strings.Join(d.Managers(dir), ","); m != "Vortex" {
 		t.Errorf("менеджеры = %s", m)
 	}
 }

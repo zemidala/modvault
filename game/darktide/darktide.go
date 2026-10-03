@@ -56,21 +56,13 @@ func (*Darktide) Validate(dir string) error {
 	return nil
 }
 
-// Managers ищет следы других менеджеров модов.
+// Managers ищет следы других менеджеров модов. Учитывается только Vortex:
+// он ведёт учёт развёрнутых файлов прямо в папке игры.
 func (*Darktide) Managers(dir string) []string {
-	var found []string
 	if _, err := os.Stat(filepath.Join(dir, "vortex.deployment.json")); err == nil {
-		found = append(found, "Vortex")
+		return []string{"Vortex"}
 	}
-	if entries, err := os.ReadDir(dir); err == nil {
-		for _, e := range entries {
-			if e.IsDir() && strings.HasPrefix(strings.ToLower(e.Name()), "servo-modquisitor") {
-				found = append(found, "Servo-Modquisitor")
-				break
-			}
-		}
-	}
-	return found
+	return nil
 }
 
 // Generate собирает mod_load_order.txt и пропатченную базу бандлов.

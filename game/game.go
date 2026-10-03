@@ -3,6 +3,12 @@
 // запустить. Каждая игра живёт в своём подпакете.
 package game
 
+import (
+	"time"
+
+	"github.com/zemidala/modvault/rules"
+)
+
 // Install — найденная установка игры.
 type Install struct {
 	Dir   string `json:"dir"`
@@ -67,6 +73,25 @@ type Context struct {
 	Original func(rel string) (string, error) // путь к оригиналу файла игры
 }
 
+// OrderContext — то, что игре нужно, чтобы рассказать о порядке загрузки.
+type OrderContext struct {
+	Dir  string
+	Mods []ModInfo
+	// Read читает файл мода по его пути в игре.
+	Read func(modID, gamePath string) ([]byte, error)
+}
+
+// Ordering — что известно о порядке загрузки модов.
+type Ordering struct {
+	// Auto — загрузчик сам упорядочивает моды и не слушает порядок из профиля.
+	Auto  bool
+	Rules []rules.Rule
+	// LastOrder — папки модов в порядке, в котором игра загрузила их
+	// в последний раз; пусто, если это неизвестно.
+	LastOrder     []string
+	LastOrderTime time.Time
+}
+
 // Game — плагин игры.
 type Game interface {
 	ID() string
@@ -83,6 +108,8 @@ type Game interface {
 	// Originals перечисляет оригиналы файлов игры, которые сохранили другие
 	// инструменты: путь в игре → путь к сохранённому оригиналу там же.
 	Originals(dir string) map[string]string
+	// Ordering сообщает правила порядка загрузки и то, кто его задаёт.
+	Ordering(ctx OrderContext) Ordering
 	// Generate собирает служебные файлы: порядок загрузки, патчи.
 	Generate(ctx Context) ([]Generated, []Notice, error)
 	// Managers перечисляет другие менеджеры модов, найденные в папке игры.
