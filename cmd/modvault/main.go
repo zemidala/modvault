@@ -61,6 +61,8 @@ func run(args []string, stdout, stderr io.Writer, open func() *manager.Manager) 
 		"move":     c.move,
 		"deploy":   c.deploy,
 		"verify":   c.verify,
+		"check":    c.check,
+		"sort":     c.sort,
 		"rollback": c.rollback,
 		"profile":  c.profile,
 		"game":     c.game,
@@ -102,6 +104,7 @@ func usage(w io.Writer) {
   status                    игра, хранилище, замечания, план развёртывания
   list                      моды текущего профиля в порядке загрузки
   verify                    проверить, не тронуты ли файлы модов в игре
+  check                     все замечания: зависимости модов, порядок, конфликты
 
 Моды:
   add <архив>...            добавить моды из архивов
@@ -109,6 +112,7 @@ func usage(w io.Writer) {
   enable <мод>...           включить моды
   disable <мод>...          выключить моды
   move <мод> <место>        переставить мод в порядке загрузки (с 1)
+  sort [--dry-run]          расставить моды по правилам их авторов
 
 Игра:
   game [папка]              показать или выбрать папку игры
@@ -396,6 +400,66 @@ func (c *cli) verify(args []string) error {
 		return fmt.Errorf("найдено проблем: %d", bad)
 	}
 	fmt.Fprintln(c.out, "Проблем не найдено")
+	return nil
+}
+
+func (c *cli) check(args []string) error {
+	s, err := c.state()
+	if err != nil {
+		return err
+	}
+	if len(s.Issues) == 0 {
+		fmt.Fprintln(c.out, "Замечаний нет")
+	}
+	bad := 0
+	for _, i := range s.Issues {
+		if i.Level == manager.LevelError {
+			bad++
+		}
+		fmt.Fprintf(c.out, "%s %s\n   %s\n", levelMark[i.Level], i.Title, i.Detail)
+	}
+	if s.OrderNote != "" {
+		fmt.Fprintf(c.out, "\n%s\n", s.OrderNote)
+	}
+	if bad > 0 {
+		return fmt.Errorf("найдено проблем: %d", bad)
+	}
+	return nil
+}
+
+func (c *cli) sort(args []string) error {
+	dry, err := dryRunFlag(c, "sort", args)
+	if err != nil {
+		return err
+	}
+	if _, err := c.state(); err != nil {
+		return err
+	}
+	plan, err := c.manager().SortPreview()
+	if err != nil {
+		return err
+	}
+	if plan.Auto {
+		fmt.Fprintln(c.out, "Загрузчик модов сам расставляет их при запуске игры; список встанет как при последнем запуске")
+	}
+	for _, cyc := range plan.Cycles {
+		fmt.Fprintf(c.out, "!  правила противоречат друг другу: %s\n", strings.Join(cyc, ", "))
+	}
+	if len(plan.Moves) == 0 {
+		fmt.Fprintln(c.out, "Передвигать нечего: порядок уже такой")
+		return nil
+	}
+	for _, m := range plan.Moves {
+		fmt.Fprintln(c.out, m)
+	}
+	if dry {
+		fmt.Fprintf(c.out, "\nПередвинется модов: %d. Ничего не изменено (--dry-run)\n", len(plan.Moves))
+		return nil
+	}
+	if _, err := c.manager().Sort(); err != nil {
+		return err
+	}
+	fmt.Fprintf(c.out, "\nПередвинуто модов: %d. Чтобы порядок попал в игру — modvault deploy\n", len(plan.Moves))
 	return nil
 }
 

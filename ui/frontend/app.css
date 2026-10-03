@@ -378,3 +378,5 @@ tr[data-enabled="false"] .name, tr[data-enabled="false"] .version { color: var(-
 .ask-message { white-space: pre-line; line-height: 1.45; }
 .sheet-actions { gap: 8px; }
 .plate.danger { background: var(--error-line); color: var(--parchment); }
+
+.order-note { margin: 0; }

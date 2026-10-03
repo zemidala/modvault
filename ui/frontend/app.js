@@ -76,7 +76,7 @@ function renderIssues() {
     row.append(text);
     if (issue.action) {
       const button = el("button", "ghost", issue.action);
-      button.addEventListener("click", () => (issue.command ? run(issue.command) : notYet(issue.action, issue.stage)));
+      button.addEventListener("click", () => (issue.command ? run(issue.command, issue.arg) : notYet(issue.action, issue.stage)));
       row.append(button);
     }
     box.append(row);
@@ -197,6 +197,8 @@ function render() {
   $("profile").textContent = state.profile;
   $("version").textContent = state.version;
   $("demo").hidden = !state.demo;
+  $("order-note").hidden = !state.orderNote;
+  $("order-note").textContent = state.orderNote || "";
   $("home").hidden = state.demo;
   $("home").textContent = "Хранилище: " + state.home;
   renderStatus();
@@ -214,8 +216,11 @@ function ask(question) {
     $("ask-title").textContent = question.title;
     $("ask-message").textContent = question.message;
     const ok = $("ask-ok");
-    ok.textContent = question.ok || "Да";
+    // Без подписи действия вопрос только сообщает: остаётся одна кнопка.
+    ok.hidden = !question.ok;
+    ok.textContent = question.ok || "";
     ok.classList.toggle("danger", !!question.danger);
+    $("ask-cancel").textContent = question.ok ? "Отмена" : "Закрыть";
     const done = (answer) => {
       box.hidden = true;
       box.removeEventListener("keydown", onKey);
@@ -231,7 +236,7 @@ function ask(question) {
     box.addEventListener("keydown", onKey);
     box.hidden = false;
     // Необратимое по умолчанию не выбрано: Enter без раздумий его не запустит.
-    (question.danger ? $("ask-cancel") : ok).focus();
+    (question.danger || !question.ok ? $("ask-cancel") : ok).focus();
   });
 }
 
@@ -248,10 +253,12 @@ const commands = {
   Adopt: () => confirmThen(() => backend().AdoptAsk(), () => backend().Adopt()),
   Release: () => confirmThen(() => backend().ReleaseAsk(), () => backend().Release()),
   IgnoreManagers: () => confirmThen(() => backend().IgnoreManagersAsk(), () => backend().IgnoreManagers()),
+  Sort: () => confirmThen(() => backend().SortAsk(), () => backend().Sort()),
+  EnableMod: (id) => backend().SetEnabled(id, true),
 };
 
-function run(command) {
-  if (commands[command]) call(commands[command]);
+function run(command, arg) {
+  if (commands[command]) call(() => commands[command](arg));
 }
 
 async function deploy() {
@@ -327,6 +334,7 @@ function wire() {
   }));
   $("card-show-files").addEventListener("click", toggleFiles);
   $("deploy").addEventListener("click", deploy);
+  $("sort").addEventListener("click", () => run("Sort"));
   $("play").addEventListener("click", async () => {
     try {
       await backend().Play();

@@ -203,3 +203,39 @@ func TestWorkflow(t *testing.T) {
 		t.Errorf("adopt без Vortex: %d %s", code, errOut)
 	}
 }
+
+func TestSortAndCheck(t *testing.T) {
+	e := newEnv(t)
+	e.ok("game", e.game)
+	e.ok("add",
+		e.zip("dml.zip", map[string]string{"mods/base/base.mod": "return {}", "mods/base/mod_manager.lua": "-- DML", "binaries/mod_loader": "l", "tools/dtkit-patch.exe": "p"}),
+		e.zip("Addon.zip", map[string]string{"Addon/Addon.mod": `return { load_after = { "Core" }, require = { "Ghost" } }`}),
+		e.zip("Core.zip", map[string]string{"Core/Core.mod": "return {}"}),
+	)
+
+	check := e.ok("check")
+	for _, want := range []string{"нарушает 1 правило", "нужен мод Ghost"} {
+		if !strings.Contains(check, want) {
+			t.Errorf("check без %q:\n%s", want, check)
+		}
+	}
+
+	dry := e.ok("sort", "--dry-run")
+	if !strings.Contains(dry, "Core: с 3 на 2") || !strings.Contains(dry, "--dry-run") {
+		t.Errorf("sort --dry-run:\n%s", dry)
+	}
+	if !strings.Contains(e.ok("list"), "  2 [x] Addon") {
+		t.Error("--dry-run изменил порядок")
+	}
+
+	e.ok("sort")
+	if !strings.Contains(e.ok("list"), "  2 [x] Core") {
+		t.Errorf("после sort:\n%s", e.ok("list"))
+	}
+	if out := e.ok("sort"); !strings.Contains(out, "Передвигать нечего") {
+		t.Errorf("повторный sort: %s", out)
+	}
+	if strings.Contains(e.ok("check"), "нарушает") {
+		t.Error("после sort нарушение осталось")
+	}
+}

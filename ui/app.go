@@ -205,3 +205,32 @@ func plural(n int, one, few, many string) string {
 	}
 	return many
 }
+
+// SortAsk показывает, что передвинет сортировка по правилам.
+func (a *App) SortAsk() (Ask, error) {
+	plan, err := a.m.SortPreview()
+	if err != nil {
+		return Ask{}, err
+	}
+	ask := Ask{Title: "Отсортировать по правилам"}
+	intro := "Моды встанут так, как требуют правила их авторов."
+	if plan.Auto {
+		intro = "Ваш загрузчик модов сам расставляет их при запуске игры. Список встанет в том порядке, в каком игра загрузила моды в последний раз; на саму игру это не повлияет."
+	}
+	if len(plan.Moves) == 0 {
+		ask.Message = intro + "\n\nПередвигать нечего: порядок уже такой."
+		return ask, nil // без кнопки действия: только сообщить
+	}
+	const show = 14
+	lines := plan.Moves
+	if len(lines) > show {
+		lines = append(append([]string(nil), lines[:show]...), fmt.Sprintf("…и ещё %d", len(plan.Moves)-show))
+	}
+	ask.Message = fmt.Sprintf("%s\n\nПередвинется %d %s:\n%s", intro, len(plan.Moves),
+		plural(len(plan.Moves), "мод", "мода", "модов"), strings.Join(lines, "\n"))
+	ask.OK = "Отсортировать"
+	return ask, nil
+}
+
+// Sort расставляет моды по правилам.
+func (a *App) Sort() (manager.State, error) { return a.m.Sort() }
