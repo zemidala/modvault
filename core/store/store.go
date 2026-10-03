@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 
@@ -85,6 +86,18 @@ type Info struct {
 type Store struct {
 	root   string
 	limits archive.Limits
+
+	// metas помнит прочитанные описания версий: хранилище перечитывается
+	// при каждом обновлении окна, а описания меняются редко.
+	mu    sync.Mutex
+	metas map[string]meta
+}
+
+// meta — описание версии и то, по чему видно, что файл с ним не менялся.
+type meta struct {
+	size int64
+	mod  time.Time
+	v    Version
 }
 
 // Open открывает хранилище, создавая его при необходимости, и убирает
@@ -305,6 +318,17 @@ func (s *Store) Get(modID, versionID string) (Version, error) {
 
 func (s *Store) readMeta(modID, versionID string) (Version, error) {
 	path := filepath.Join(s.versionDir(modID, versionID), metaFile)
+	info, err := os.Stat(path)
+	if err != nil {
+		return Version{}, err
+	}
+	s.mu.Lock()
+	known, ok := s.metas[path]
+	s.mu.Unlock()
+	if ok && known.size == info.Size() && known.mod.Equal(info.ModTime()) {
+		return known.v, nil
+	}
+	started := time.Now()
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return Version{}, err
@@ -315,6 +339,16 @@ func (s *Store) readMeta(modID, versionID string) (Version, error) {
 	}
 	if v.ModID != modID || v.ID != versionID {
 		return Version{}, fmt.Errorf("%s: описание относится к %s/%s", path, v.ModID, v.ID)
+	}
+	// Только что записанное описание не запоминается: правка в тот же миг
+	// не изменила бы ни времени, ни размера.
+	if int64(len(data)) == info.Size() && started.Sub(info.ModTime()) > 2*time.Second {
+		s.mu.Lock()
+		if s.metas == nil {
+			s.metas = map[string]meta{}
+		}
+		s.metas[path] = meta{size: info.Size(), mod: info.ModTime(), v: v}
+		s.mu.Unlock()
 	}
 	return v, nil
 }

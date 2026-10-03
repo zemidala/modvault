@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func modZip(t *testing.T, name, modFile string) string {
+func modZip(t testing.TB, name, modFile string) string {
 	return writeZip(t, name+".zip", map[string]string{name + "/" + name + ".mod": modFile})
 }
 

@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/zemidala/modvault/core/fsx"
@@ -73,6 +74,75 @@ type Deployer struct {
 	state string
 	// ForceCopy запрещает жёсткие ссылки.
 	ForceCopy bool
+
+	// hashes помнит хеши файлов игры: расчёт развёртывания идёт при каждом
+	// обновлении окна, и перечитывать ради него все файлы модов незачем.
+	mu     sync.Mutex
+	hashes map[string]hashed
+}
+
+// hashed — хеш файла и то, по чему видно, что файл с тех пор не менялся.
+type hashed struct {
+	size int64
+	mod  time.Time
+	hash fsx.Hash
+}
+
+// racyWindow — файл, изменённый только что, в память не попадает: вторая
+// правка в тот же миг не изменила бы ни времени, ни размера.
+const racyWindow = 2 * time.Second
+
+// fileHash возвращает хеш файла. Файл перечитывается, только если у него
+// изменились размер или время изменения.
+func (d *Deployer) fileHash(abs string) (fsx.Hash, error) {
+	// Сведения берутся у открытого файла: у жёсткой ссылки запись в папке
+	// может отставать от самого файла.
+	f, err := os.Open(abs)
+	if err != nil {
+		hash, _, err := fsx.HashFile(abs) // занят — HashFile умеет переждать
+		return hash, err
+	}
+	info, err := f.Stat()
+	f.Close()
+	if err != nil {
+		return fsx.Hash{}, err
+	}
+	d.mu.Lock()
+	known, ok := d.hashes[abs]
+	d.mu.Unlock()
+	if ok && known.size == info.Size() && known.mod.Equal(info.ModTime()) {
+		return known.hash, nil
+	}
+	started := time.Now()
+	hash, size, err := fsx.HashFile(abs)
+	if err != nil {
+		return fsx.Hash{}, err
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if size == info.Size() && started.Sub(info.ModTime()) > racyWindow {
+		if d.hashes == nil {
+			d.hashes = map[string]hashed{}
+		}
+		d.hashes[abs] = hashed{size: size, mod: info.ModTime(), hash: hash}
+	} else {
+		delete(d.hashes, abs)
+	}
+	return hash, nil
+}
+
+// forget забывает хеш файла: развёртывание кладёт на его место другой.
+func (d *Deployer) forget(abs string) {
+	d.mu.Lock()
+	delete(d.hashes, abs)
+	d.mu.Unlock()
+}
+
+// forgetAll забывает все хеши: после отката на диске могло оказаться что угодно.
+func (d *Deployer) forgetAll() {
+	d.mu.Lock()
+	d.hashes = nil
+	d.mu.Unlock()
 }
 
 // Recovery — что Open сделал с прерванным развёртыванием.
@@ -368,7 +438,7 @@ func (d *Deployer) addPlace(p *Plan, t Target, backup bool, newDirs map[string]b
 
 // matches сообщает, лежит ли в игре ровно тот файл, что записан в учёте.
 func (d *Deployer) matches(abs string, e manifest.Entry) (bool, error) {
-	hash, _, err := fsx.HashFile(abs)
+	hash, err := d.fileHash(abs)
 	if err != nil {
 		return false, err
 	}
@@ -508,6 +578,7 @@ func (d *Deployer) do(id string, s step) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	d.forget(game)
 	switch s.Op {
 	case opBackup:
 		return "", moveInto(game, d.backupPath, s.Path)
@@ -563,6 +634,7 @@ func moveInto(game string, where func(string) (string, error), rel string) error
 // rollback отменяет шаги с done-1 до 0 в обратном порядке. Шаг с номером
 // done мог начаться без отметки — его отмена сверяется с диском.
 func (d *Deployer) rollback(id string, h header, done int) error {
+	d.forgetAll()
 	var errs []error
 	last := min(done, len(h.Steps)-1)
 	for i := last; i >= 0; i-- {

@@ -36,7 +36,7 @@ func fakePatcher(_, dir string) error {
 
 // newGame создаёт папку, похожую на чистый Darktide, и приложение,
 // у которого вместо dtkit-patch подменный патчер.
-func newGame(t *testing.T) (*Manager, string, string) {
+func newGame(t testing.TB) (*Manager, string, string) {
 	t.Helper()
 	a, home := newApp(t)
 	a.game = &darktide.Darktide{Patcher: fakePatcher}

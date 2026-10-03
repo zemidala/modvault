@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-func newApp(t *testing.T) (*Manager, string) {
+func newApp(t testing.TB) (*Manager, string) {
 	t.Helper()
 	home := filepath.Join(t.TempDir(), "Modvault")
 	return NewAt(home), home
@@ -35,7 +35,7 @@ func findMod(t *testing.T, s State, id string) Mod {
 	return Mod{}
 }
 
-func writeZip(t *testing.T, name string, files map[string]string) string {
+func writeZip(t testing.TB, name string, files map[string]string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), name)
 	f, err := os.Create(path)
