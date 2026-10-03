@@ -170,6 +170,8 @@ type ModInfo struct {
 	// Author — автор, как он назван на странице; UploadedBy — кто выложил.
 	Author     string `json:"author"`
 	UploadedBy string `json:"uploaded_by"`
+	// CategoryID — номер категории мода в этой игре.
+	CategoryID int `json:"category_id"`
 	// Endorsements — сколько пользователей одобрили мод; Downloads и
 	// UniqueDownloads — сколько раз его скачали всего и сколько разных людей.
 	Endorsements    int `json:"endorsement_count"`
@@ -201,6 +203,24 @@ func (c *Client) Mod(ctx context.Context, game string, modID int) (ModInfo, erro
 	var m ModInfo
 	err := c.get(ctx, fmt.Sprintf("/games/%s/mods/%d.json", url.PathEscape(game), modID), nil, &m)
 	return m, err
+}
+
+// Categories возвращает категории модов игры: номер → название.
+func (c *Client) Categories(ctx context.Context, game string) (map[int]string, error) {
+	var info struct {
+		Categories []struct {
+			ID   int    `json:"category_id"`
+			Name string `json:"name"`
+		} `json:"categories"`
+	}
+	if err := c.get(ctx, fmt.Sprintf("/games/%s.json", url.PathEscape(game)), nil, &info); err != nil {
+		return nil, err
+	}
+	out := make(map[int]string, len(info.Categories))
+	for _, cat := range info.Categories {
+		out[cat.ID] = cat.Name
+	}
+	return out, nil
 }
 
 // Разделы файлов на странице мода.

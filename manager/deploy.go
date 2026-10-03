@@ -48,6 +48,8 @@ type settings struct {
 	LaunchViaLauncher bool `json:"launchViaLauncher,omitempty"`
 	// SetupHidden — памятка «Начало работы» скрыта пользователем.
 	SetupHidden bool `json:"setupHidden,omitempty"`
+	// HiddenIssues — ключи замечаний, скрытых пользователем.
+	HiddenIssues []string `json:"hiddenIssues,omitempty"`
 	// Favorites — избранные моды.
 	Favorites []string `json:"favorites,omitempty"`
 }
@@ -403,6 +405,8 @@ func (a *Manager) realState() (State, error) {
 			row.Sets = []string{}
 		}
 		row.Favorite = favorite[e.ModID]
+		row.Installed = v.Added
+		row.Category = updates.Categories[updates.ModCategory[v.NexusID]]
 		if st, ok := updates.Stats[v.NexusID]; ok && v.NexusID != 0 && updates.Profiles[v.NexusID] != "" {
 			row.HasStats = true
 			row.Endorsements, row.Downloads, row.UniqueDownloads = st.Endorsements, st.Downloads, st.UniqueDownloads
@@ -511,6 +515,9 @@ func (a *Manager) realState() (State, error) {
 		conflictList = a.conflicts(plan, p)
 		s.Issues = append(s.Issues, conflictIssues(conflictList)...)
 	}
+
+	// Скрытые замечания не считаются и в строке состояния.
+	s.Issues, s.HiddenIssues = a.splitHidden(s.Issues)
 
 	s.Status = a.status(s, len(mods), plan)
 	if item, ok := conflictStatus(conflictList); ok {

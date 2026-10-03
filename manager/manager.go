@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/zemidala/modvault/core/deploy"
 	"github.com/zemidala/modvault/core/fsx"
@@ -47,6 +48,8 @@ type State struct {
 	Issues       []Issue      `json:"issues"`
 	Mods         []Mod        `json:"mods"`
 	PlanTitle    string       `json:"planTitle"`
+	// HiddenIssues — сколько замечаний скрыто пользователем.
+	HiddenIssues int `json:"hiddenIssues"`
 	// Settings — настройки-переключатели для раздела «Настройки».
 	Settings []Setting `json:"settings"`
 	// Bisect — ход поиска сбойного мода; nil, если поиск не идёт.
@@ -69,6 +72,8 @@ type StatusItem struct {
 
 // Issue — замечание в блоке «Требуют внимания».
 type Issue struct {
+	// Key — ключ замечания: по нему замечание скрывают.
+	Key    string `json:"key"`
 	Title  string `json:"title"`
 	Detail string `json:"detail"`
 	Level  Level  `json:"level"`
@@ -90,6 +95,10 @@ type Mod struct {
 	Available string `json:"available"`
 	Source    string `json:"source"`
 	Author    string `json:"author"` // автор по сведениям Nexus; пусто — неизвестен
+	// Category — категория мода на Nexus; пусто — неизвестна.
+	Category string `json:"category"`
+	// Installed — когда выбранная версия мода добавлена в хранилище.
+	Installed time.Time `json:"installed"`
 	// AuthorURL — профиль автора на Nexus; пусто — неизвестен.
 	AuthorURL string `json:"authorUrl"`
 	// Статистика мода на Nexus: одобрения и скачивания (разными людьми и

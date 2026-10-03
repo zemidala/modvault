@@ -255,6 +255,7 @@ func (a *Manager) installFile(ctx context.Context, c *nexus.Client, domain strin
 	known := a.loadUpdates()
 	known.Authors[modID], known.Profiles[modID] = firstNonEmpty(mod.Author, mod.UploadedBy), mod.AuthorPage(domain)
 	known.Stats[modID] = statsOf(mod, time.Now().UTC())
+	known.ModCategory[modID] = mod.CategoryID
 	// Поставленный файл — последнее, что известно о моде: он актуален, пока
 	// проверка не найдёт новее.
 	delete(known.Gone, modID)
@@ -414,6 +415,10 @@ type updates struct {
 	// Profiles — адрес профиля автора на Nexus; запись есть у каждого мода,
 	// о котором уже спрашивали, даже если адрес пуст.
 	Profiles map[int]string `json:"profiles"`
+	// Categories — названия категорий модов игры по номеру; ModCategory —
+	// номер категории мода по его номеру на Nexus.
+	Categories  map[int]string `json:"categories,omitempty"`
+	ModCategory map[int]int    `json:"modCategory,omitempty"`
 	// Gone — моды, которых на Nexus больше нет: страница убрана или скрыта.
 	Gone map[int]bool `json:"gone,omitempty"`
 	// Stats — одобрения и скачивания мода по его номеру на Nexus.
@@ -461,6 +466,12 @@ func (a *Manager) loadUpdates() updates {
 	}
 	if u.Gone == nil {
 		u.Gone = map[int]bool{}
+	}
+	if u.Categories == nil {
+		u.Categories = map[int]string{}
+	}
+	if u.ModCategory == nil {
+		u.ModCategory = map[int]int{}
 	}
 	return u
 }
@@ -616,8 +627,9 @@ func (a *Manager) CheckUpdates(ctx context.Context, progress func(CheckProgress)
 	wantAuthor := map[int]bool{}
 	for _, t := range targets {
 		_, known := cache.Profiles[t.nexusID]
+		_, sorted := cache.ModCategory[t.nexusID]
 		stats, counted := cache.Stats[t.nexusID]
-		if !known || !counted || started.Sub(stats.At) > statsAge {
+		if !known || !sorted || !counted || started.Sub(stats.At) > statsAge {
 			wantAuthor[t.nexusID] = true
 		}
 	}
@@ -644,6 +656,14 @@ func (a *Manager) CheckUpdates(ctx context.Context, progress func(CheckProgress)
 	}
 	progress(plan)
 	var failure error
+	// Названия категорий спрашиваем один раз: они общие для всей игры.
+	if len(cache.Categories) == 0 && len(targets) > 0 {
+		names, err := c.Categories(ctx, domain)
+		rep.Requests++
+		if err == nil {
+			cache.Categories = names
+		}
+	}
 	for i, id := range ids {
 		// Моды хранилища с этим номером на Nexus: обычно один.
 		step := CheckProgress{Done: i, Total: len(ids)}
@@ -669,6 +689,7 @@ func (a *Manager) CheckUpdates(ctx context.Context, progress func(CheckProgress)
 				cache.Gone[id] = true
 				cache.Authors[id], cache.Profiles[id] = "", ""
 				cache.Stats[id] = modStats{At: started}
+				cache.ModCategory[id] = 0
 				progress(step)
 				continue
 			}
@@ -693,12 +714,14 @@ func (a *Manager) CheckUpdates(ctx context.Context, progress func(CheckProgress)
 			case gone(err):
 				cache.Authors[id], cache.Profiles[id] = "", ""
 				cache.Stats[id] = modStats{At: started}
+				cache.ModCategory[id] = 0
 			case err != nil:
 				failure = err
 			default:
 				cache.Authors[id] = firstNonEmpty(info.Author, info.UploadedBy)
 				cache.Profiles[id] = info.AuthorPage(domain)
 				cache.Stats[id] = statsOf(info, started)
+				cache.ModCategory[id] = info.CategoryID
 			}
 			if failure != nil {
 				break

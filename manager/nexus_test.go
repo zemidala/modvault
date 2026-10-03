@@ -136,6 +136,10 @@ func (f *fakeNexus) serve(w http.ResponseWriter, r *http.Request) {
 		reply(map[string]any{"user_id": 1, "name": "zd", "is_premium": f.premium})
 		return
 	}
+	if path == "/games/"+testDomain+".json" {
+		reply(map[string]any{"categories": []map[string]any{{"category_id": 7, "name": "User Interface", "parent_category": false}}})
+		return
+	}
 	rest, ok := strings.CutPrefix(path, "/games/"+testDomain+"/mods/")
 	if !ok {
 		w.WriteHeader(http.StatusNotFound)
@@ -178,7 +182,7 @@ func (f *fakeNexus) serve(w http.ResponseWriter, r *http.Request) {
 	case len(parts) == 1:
 		reply(map[string]any{"mod_id": modID, "name": m.name, "version": "0", "author": "Автор " + m.name, "uploaded_by": "uploader",
 			"uploaded_users_profile_url": "https://www.nexusmods.com/users/" + strconv.Itoa(modID*10),
-			"endorsement_count":          modID * 100, "mod_downloads": modID * 5000, "mod_unique_downloads": modID * 3000})
+			"endorsement_count":          modID * 100, "mod_downloads": modID * 5000, "category_id": 7, "mod_unique_downloads": modID * 3000})
 	case len(parts) == 2 && parts[1] == "files":
 		updates := []map[string]int{}
 		for _, u := range m.updates {
@@ -424,12 +428,15 @@ func TestUpdates(t *testing.T) {
 	if s := steps[1]; !s.Finished || s.Done != 1 || s.Available != "1.5.0" || s.Missing {
 		t.Errorf("шаг после ответа: %+v", s)
 	}
-	// Два запроса: файлы мода и, один раз, его страница — ради автора.
-	if rep.Mods != 1 || rep.Unknown != 1 || rep.Updates != 1 || rep.Requests != 2 {
+	// Три запроса: категории игры (один раз), файлы мода и, один раз, его страница.
+	if rep.Mods != 1 || rep.Unknown != 1 || rep.Updates != 1 || rep.Requests != 3 {
 		t.Errorf("первая проверка: %+v", rep)
 	}
 	if m := findMod(t, rep.State, "score_board"); m.Author != "Автор Scoreboard" || m.AuthorURL != "https://www.nexusmods.com/users/220" {
 		t.Errorf("автор после проверки: %+v", m)
+	}
+	if m := findMod(t, rep.State, "score_board"); m.Category != "User Interface" || m.Installed.IsZero() {
+		t.Errorf("категория и время установки: %+v", m)
 	}
 	if m := findMod(t, rep.State, "score_board"); !m.HasStats || m.Endorsements != 2200 || m.Downloads != 110000 || m.UniqueDownloads != 66000 {
 		t.Errorf("статистика после проверки: %+v", m)
