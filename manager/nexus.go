@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/zemidala/modvault/core/deploy"
 	"github.com/zemidala/modvault/core/fsx"
 	"github.com/zemidala/modvault/core/store"
 	"github.com/zemidala/modvault/internal/version"
@@ -245,6 +246,7 @@ func (a *Manager) installFile(ctx context.Context, c *nexus.Client, domain strin
 	}
 	info.Name = a.nexusName(info.Name, modID, file, files)
 
+	synced := a.inSync() // до обновления: потом профиль уже отличается от игры
 	v, prev, err := a.addVersion(archive, info)
 	if err != nil {
 		if errors.Is(err, errAlreadyStored) {
@@ -257,13 +259,56 @@ func (a *Manager) installFile(ctx context.Context, c *nexus.Client, domain strin
 
 	msg := fmt.Sprintf("Установлен: %s %s", v.Name, v.Version)
 	if prev != "" {
-		msg = fmt.Sprintf("Обновлён: %s до %s. Прежняя версия осталась в хранилище", v.Name, v.Version)
-	}
-	if a.deployer != nil {
+		msg = a.deployUpdate(v, synced)
+	} else if a.deployer != nil {
 		msg += ". Чтобы он попал в игру — «Развернуть»"
 	}
 	st, err := a.state()
 	return InstallResult{State: st, Message: msg}, err
+}
+
+// inSync сообщает, что игра сейчас совпадает с профилем и развёртывать
+// в неё можно: папка выбрана и ею не управляет другой менеджер модов.
+func (a *Manager) inSync() bool {
+	if a.deployer == nil || a.deployErr != nil || len(a.managers()) > 0 {
+		return false
+	}
+	plan, err := a.plan()
+	return err == nil && plan.Empty()
+}
+
+// deployUpdate доводит обновление мода до игры, не спрашивая: включённый
+// мод остаётся включённым, значит, новая версия сразу ложится на место
+// прежней; выключенный остаётся выключенным. synced — совпадала ли игра
+// с профилем до обновления: если нет, в профиле есть и другие
+// неразвёрнутые изменения, и развёртывать их заодно без спроса нельзя.
+// Возвращает сообщение для пользователя.
+func (a *Manager) deployUpdate(v store.Version, synced bool) string {
+	msg := fmt.Sprintf("Обновлён: %s до %s", v.Name, v.Version)
+	p, _, err := a.loadProfile()
+	if err != nil {
+		return msg
+	}
+	if i := p.Index(v.ModID); i < 0 || !p.Entries[i].Enabled {
+		return msg + ". Мод выключен и остаётся выключенным"
+	}
+	if a.deployer == nil {
+		return msg
+	}
+	if !synced {
+		return msg + ". В игру он попадёт по кнопке «Развернуть»: там ждут и другие изменения"
+	}
+	plan, err := a.plan()
+	if err == nil && !plan.Empty() {
+		if _, err = a.deployer.Apply(plan); err == nil {
+			a.recovery = deploy.NothingToRecover
+			a.rememberDeployed()
+		}
+	}
+	if err != nil {
+		return msg + ". Развернуть новую версию не удалось: " + err.Error() + ". Игра осталась на прежней; нажмите «Развернуть», когда причина устранена"
+	}
+	return msg + " — новая версия уже в игре"
 }
 
 // nexusName решает, каким модом хранилища станет файл с Nexus: версией уже

@@ -495,6 +495,66 @@ func TestUpdates(t *testing.T) {
 	}
 }
 
+// Обновление не спрашивает, развёртывать ли: включённый мод остаётся в
+// игре новой версией, выключенный остаётся выключенным.
+func TestUpdateKeepsModState(t *testing.T) {
+	a, f, _ := nexusApp(t)
+	ctx := context.Background()
+	login(t, a)
+	g := a.GameDir()
+	inGame := func() string { return snapshot(t, g)["mods/Flux/Flux.mod"] }
+	planned := func() string { return state(t, a).PlanTitle }
+	for i, version := range []string{"1.0", "2.0", "3.0", "4.0"} {
+		f.add(t, 30, "Flux", fakeFile{ID: 300 + i, Version: version, Category: "MAIN"}, map[string]string{"Flux/Flux.mod": "return {} -- " + version})
+	}
+	f.add(t, 31, "Glow", fakeFile{ID: 310, Version: "1.0", Category: "MAIN"}, map[string]string{"Glow/Glow.mod": "return {}"})
+
+	// Новый мод сам в игру не идёт: его развёртывает пользователь.
+	res, err := a.InstallLink(ctx, link(30, 300), nil)
+	if err != nil || inGame() != "" || !strings.Contains(res.Message, "«Развернуть»") {
+		t.Fatalf("новый мод: %v, в игре %q, сообщение %q", err, inGame(), res.Message)
+	}
+	if _, err := a.Deploy(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Включённый и развёрнутый мод после обновления сразу в игре.
+	res, err = a.InstallLink(ctx, link(30, 301), nil)
+	if err != nil || inGame() != "return {} -- 2.0" || planned() != "" || !strings.Contains(res.Message, "уже в игре") {
+		t.Errorf("обновление включённого: %v, в игре %q, план %q, сообщение %q", err, inGame(), planned(), res.Message)
+	}
+	if m := findMod(t, res.State, "flux"); !m.Enabled || m.State != "Развёрнут" {
+		t.Errorf("после обновления: %+v", m)
+	}
+
+	// В профиле ждёт чужое изменение: без спроса его не развёртываем.
+	if _, err := a.InstallLink(ctx, link(31, 310), nil); err != nil {
+		t.Fatal(err)
+	}
+	res, err = a.InstallLink(ctx, link(30, 302), nil)
+	if err != nil || inGame() != "return {} -- 2.0" || planned() == "" || !strings.Contains(res.Message, "ждут и другие изменения") {
+		t.Errorf("обновление при чужих изменениях: %v, в игре %q, сообщение %q", err, inGame(), res.Message)
+	}
+	if _, ok := snapshot(t, g)["mods/Glow/Glow.mod"]; ok {
+		t.Error("чужое изменение развёрнуто без спроса")
+	}
+
+	// Выключенный мод остаётся выключенным, и в игре его нет.
+	if _, err := a.SetEnabled("flux", false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.Deploy(); err != nil {
+		t.Fatal(err)
+	}
+	res, err = a.InstallLink(ctx, link(30, 303), nil)
+	if err != nil || inGame() != "" || planned() != "" || !strings.Contains(res.Message, "остаётся выключенным") {
+		t.Errorf("обновление выключенного: %v, в игре %q, план %q, сообщение %q", err, inGame(), planned(), res.Message)
+	}
+	if m := findMod(t, res.State, "flux"); m.Enabled || m.Version != "4.0" {
+		t.Errorf("выключенный мод после обновления: %+v", m)
+	}
+}
+
 func TestPruneKeepsOtherProfiles(t *testing.T) {
 	a, _, _ := nexusApp(t)
 	mod := func(version string) string {
