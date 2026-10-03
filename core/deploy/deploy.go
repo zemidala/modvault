@@ -429,21 +429,24 @@ func (d *Deployer) Apply(p *Plan) (Result, error) {
 	// поймёт, что развёртывание завершилось.
 	next := manifest.New(filepath.Join(d.state, manifestFile))
 	now := time.Now().UTC().Truncate(time.Second)
-	for _, e := range p.entries {
-		if method, ok := methods[key(e.Path)]; ok {
-			e.Method, e.Deployed = method, now
+	write := func() error {
+		for _, e := range p.entries {
+			if method, ok := methods[key(e.Path)]; ok {
+				e.Method, e.Deployed = method, now
+			}
+			if err := next.Set(e); err != nil {
+				return err
+			}
 		}
-		if err := next.Set(e); err != nil {
-			return Result{}, err
+		for _, dir := range append(m.Dirs(), p.dirs...) {
+			if err := next.AddDir(dir); err != nil {
+				return err
+			}
 		}
+		next.SetGeneration(id)
+		return next.Save()
 	}
-	for _, dir := range append(m.Dirs(), p.dirs...) {
-		if err := next.AddDir(dir); err != nil {
-			return Result{}, err
-		}
-	}
-	next.SetGeneration(id)
-	if err := next.Save(); err != nil {
+	if err := write(); err != nil {
 		j.Close()
 		if rerr := d.rollback(id, h, len(p.steps)); rerr != nil {
 			return Result{}, fmt.Errorf("запись учёта: %w; откатить не удалось: %v", err, rerr)

@@ -648,6 +648,10 @@ button.busy::after,
 .bisect { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; padding: 12px 14px; border-color: var(--orange-worn); }
 .bisect .issue-text { flex: 1 1 360px; }
 .bisect-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.bisect-hint { margin-top: 6px; color: var(--muted); }
+.bisect-hint.ran { color: inherit; }
+.bisect-hint.bad { color: var(--orange-text); font-weight: 700; }
+.bisect-actions .plate.suggested { outline: 2px solid var(--parchment); outline-offset: 2px; }
 .bisect-actions .plate { padding: 0 18px; font-family: inherit; font-size: inherit; font-weight: 700; letter-spacing: 0; text-transform: none; }
 
 /* Сортировка по столбцу: название столбца нажимается. */

@@ -280,6 +280,9 @@ func (a *Manager) SetEnabled(id string, enabled bool) (State, error) {
 		return a.state()
 	}
 
+	if err := a.bisecting(); err != nil {
+		return State{}, err
+	}
 	p, _, err := a.loadProfile()
 	if err != nil {
 		return State{}, err

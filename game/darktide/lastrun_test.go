@@ -85,4 +85,13 @@ func TestLastRun(t *testing.T) {
 	if rep, _ = d.LastRun(); len(rep.Mods) != 1 || len([]rune(rep.Mods[0].First)) != maxMessage+1 {
 		t.Errorf("длинное сообщение: %d знаков", len([]rune(rep.Mods[0].First)))
 	}
+
+	// Строка на несколько мегабайт разбор не обрывает: сбой записан после неё.
+	huge := "12:00:00.000 [Lua] [MOD][big][ERROR] " + strings.Repeat("x", 6<<20) + "\n" +
+		"12:00:01.000 [Lua] [MOD][after][ERROR] после длинной строки\n" +
+		"12:00:02.000 <<Crash>>Lua error\n<<Crash type>>lua<</Crash type>>\n"
+	writeLog(t, dir, "console-huge.log", huge, now.Add(3*time.Minute))
+	if rep, _ = d.LastRun(); !rep.Crashed || rep.CrashKind != "lua" || len(rep.Mods) != 2 {
+		t.Errorf("после очень длинной строки: сбой %v %q, модов %d", rep.Crashed, rep.CrashKind, len(rep.Mods))
+	}
 }

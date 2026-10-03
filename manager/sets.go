@@ -331,6 +331,9 @@ func (a *Manager) SetEnabledMany(ids []string, enabled bool) (State, error) {
 	if real, err := a.hasMods(); err != nil || !real {
 		return State{}, errors.Join(err, errors.New("это демонстрационные моды"))
 	}
+	if err := a.bisecting(); err != nil {
+		return State{}, err
+	}
 	p, _, err := a.loadProfile()
 	if err != nil {
 		return State{}, err
@@ -351,7 +354,7 @@ func (a *Manager) SwitchSet(name string) (SetResult, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if name == BisectSet || a.profileName() == BisectSet {
-		return SetResult{}, errors.New("идёт поиск сбойного мода: сначала закончите или прервите его")
+		return SetResult{}, errBisecting
 	}
 	return a.switchSet(name)
 }
@@ -397,6 +400,9 @@ func (a *Manager) switchSet(name string) (SetResult, error) {
 // RenameSet переименовывает набор.
 func (a *Manager) RenameSet(from, to string) (State, error) {
 	to = strings.TrimSpace(to)
+	if err := a.bisectingLocked(); err != nil {
+		return State{}, err // к исходному набору поиск вернётся по названию
+	}
 	if err := a.RenameProfile(from, to); err != nil {
 		if errors.Is(err, fs.ErrExist) {
 			return State{}, fmt.Errorf("набор «%s» уже есть", to)
@@ -408,11 +414,20 @@ func (a *Manager) RenameSet(from, to string) (State, error) {
 
 // DeleteSet удаляет набор; текущий удалить нельзя. Моды остаются в хранилище.
 func (a *Manager) DeleteSet(name string) (State, error) {
+	if err := a.bisectingLocked(); err != nil {
+		return State{}, err // исходный набор нужен, чтобы вернуться к нему
+	}
 	if err := a.DeleteProfile(name); err != nil {
 		return State{}, err
 	}
 	a.note(EventSet, "Удалён набор «"+name+"»")
 	return a.State()
+}
+
+func (a *Manager) bisectingLocked() error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.bisecting()
 }
 
 // shareVersion ставит версию мода во всех остальных наборах: версия у

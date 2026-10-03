@@ -409,6 +409,9 @@ func (a *App) BisectAnswer(problem bool) (manager.BisectResult, error) {
 	return a.m.BisectAnswer(problem)
 }
 
+// BisectStatus возвращает ход поиска с подсказкой по журналу игры.
+func (a *App) BisectStatus() *manager.BisectStatus { return a.m.BisectStatus() }
+
 // CancelBisect прерывает поиск сбойного мода.
 func (a *App) CancelBisect() (manager.BisectResult, error) { return a.m.CancelBisect() }
 

@@ -1162,13 +1162,38 @@ function renderBisect() {
   $("bisect-section").hidden = !b;
   $("bisect-start").hidden = !!b || state.demo;
   if (!b) return;
-  $("bisect-title").textContent = `Шаг ${b.step} из ${b.steps}: под подозрением ${b.suspects}, сейчас включено ${b.testing.length}`;
-  $("bisect-detail").textContent = "Запустите игру и посмотрите, повторяется ли проблема. Потом ответьте здесь — программа сузит круг. Включены: " + b.testing.join(", ") + ".";
+  if (b.confirm) {
+    $("bisect-title").textContent = `Шаг ${b.step}, контрольный: в игре включён только «${b.testing.join("», «")}»`;
+    $("bisect-detail").textContent = "Он остался последним под подозрением, но в одиночку ещё не проверялся. Запустите игру: если проблема повторится — виновник он.";
+  } else {
+    $("bisect-title").textContent = `Шаг ${b.step} из ${b.steps}: под подозрением ${b.suspects}, сейчас включено ${b.testing.length}`;
+    $("bisect-detail").textContent = "Запустите игру и посмотрите, повторяется ли проблема. Потом ответьте здесь — программа сузит круг. Включены: " + b.testing.join(", ") + ".";
+  }
+  // Подсказка по журналу игры: что было в запуске после этого шага.
+  const hint = $("bisect-hint");
+  hint.textContent = b.hint + (b.suggest === "problem" ? " — похоже, проблема осталась." : b.suggest === "ok" ? " — похоже, проблемы нет." : ".");
+  hint.className = "bisect-hint" + (b.crashed ? " bad" : b.ran ? " ran" : "");
+  $("bisect-bad").classList.toggle("suggested", b.suggest === "problem");
+  $("bisect-good").classList.toggle("suggested", b.suggest === "ok");
 }
+
+// Пока идёт поиск, окно следит за журналом игры: вернулись из игры —
+// подсказка уже на месте.
+async function refreshBisect() {
+  if (!state || !state.bisect || document.hidden || busyBisect) return;
+  try {
+    const fresh = await backend().BisectStatus();
+    if (busyBisect || !state.bisect || !fresh || JSON.stringify(fresh) === JSON.stringify(state.bisect)) return;
+    state.bisect = fresh;
+    renderBisect();
+  } catch (err) { /* следующая попытка — при следующем возврате в окно */ }
+}
+let busyBisect = false;
 
 async function bisectStep(request, button) {
   button.disabled = true;
   button.classList.add("busy");
+  busyBisect = true;
   toast("Поиск сбойного мода: игра приводится к следующему шагу…", "busy", true);
   let res = null;
   try {
@@ -1181,6 +1206,11 @@ async function bisectStep(request, button) {
   } finally {
     button.disabled = false;
     button.classList.remove("busy");
+    busyBisect = false;
+  }
+  // Поиск закончен без виновника: итог не должен мелькнуть и пропасть.
+  if (res && res.done && !res.culprit) {
+    await ask({ title: "Поиск сбойного мода закончен", message: res.message });
   }
   // Виновник найден: предложить сразу выключить его в своём наборе.
   if (res && res.culprit) {
@@ -1458,6 +1488,8 @@ function wire() {
   });
   applyColumns();
   $("bisect-start").addEventListener("click", startBisect);
+  window.addEventListener("focus", refreshBisect);
+  setInterval(refreshBisect, 5000);
   $("bisect-bad").addEventListener("click", () => bisectStep(() => backend().BisectAnswer(true), $("bisect-bad")));
   $("bisect-good").addEventListener("click", () => bisectStep(() => backend().BisectAnswer(false), $("bisect-good")));
   $("bisect-cancel").addEventListener("click", () => bisectStep(() => backend().CancelBisect(), $("bisect-cancel")));

@@ -97,10 +97,19 @@ func parseLog(path string) (game.RunReport, error) {
 
 	var report game.RunReport
 	byMod := map[string]*game.ModErrors{}
-	sc := bufio.NewScanner(f)
-	sc.Buffer(make([]byte, 64<<10), 4<<20) // строки со стеком вызовов бывают длинными
-	for sc.Scan() {
-		line := sc.Text()
+	// Строки со стеком вызовов бывают очень длинными: от такой берётся
+	// начало, а хвост пропускается — разбор идёт до конца файла, где и
+	// записан сбой.
+	r := bufio.NewReaderSize(f, 64<<10)
+	for {
+		chunk, more, err := r.ReadLine()
+		if err != nil {
+			break
+		}
+		line := string(chunk)
+		for more && err == nil {
+			_, more, err = r.ReadLine()
+		}
 		if m := modErrorLine.FindStringSubmatch(line); m != nil {
 			e, ok := byMod[m[1]]
 			if !ok {
@@ -118,7 +127,6 @@ func parseLog(path string) (game.RunReport, error) {
 			report.CrashKind = strings.TrimSpace(m[1])
 		}
 	}
-	// Слишком длинная строка обрывает чтение; что успели разобрать — годится.
 	for _, e := range byMod {
 		report.Mods = append(report.Mods, *e)
 	}
