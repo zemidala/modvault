@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/zemidala/modvault/core/fsx"
+	"github.com/zemidala/modvault/i18n"
 )
 
 // Способы, которыми файл попал в игру.
@@ -101,7 +102,7 @@ func (m *Manifest) Set(e Entry) error {
 		return err
 	}
 	if e.ModID == "" {
-		return fmt.Errorf("запись %q без мода", e.Path)
+		return i18n.Errorf("запись %q без мода", e.Path)
 	}
 	e.Path = strings.ReplaceAll(e.Path, `\`, "/")
 	m.entries[key(e.Path)] = e

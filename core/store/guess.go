@@ -5,6 +5,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/zemidala/modvault/i18n"
 )
 
 // Имя файла, скачанного с Nexus: «Название-<номер мода>-<версия через дефисы>-<время>»,
@@ -27,5 +29,5 @@ func GuessInfo(archivePath string) Info {
 			NexusID: id,
 		}
 	}
-	return Info{Name: strings.TrimSpace(base), Source: "Архив с диска"}
+	return Info{Name: strings.TrimSpace(base), Source: i18n.T("Архив с диска")}
 }

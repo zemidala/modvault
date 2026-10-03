@@ -17,6 +17,7 @@ import (
 	"github.com/zemidala/modvault/core/profile"
 	"github.com/zemidala/modvault/core/store"
 	"github.com/zemidala/modvault/game"
+	"github.com/zemidala/modvault/i18n"
 	"github.com/zemidala/modvault/vortex"
 )
 
@@ -115,9 +116,9 @@ func (a *Manager) Adopt(dryRun bool) (AdoptReport, error) {
 	rep, err := a.adopt(dryRun)
 	if !dryRun {
 		if err == nil {
-			a.note(EventVortex, fmt.Sprintf("Управление перенято у Vortex: модов %d, файлов в игре %d", rep.Mods, rep.Files))
+			a.note(EventVortex, i18n.Sprintf("Управление перенято у Vortex: модов %d, файлов в игре %d", rep.Mods, rep.Files))
 		}
-		a.noteError("Перенять у Vortex", err)
+		a.noteError(i18n.T("Перенять у Vortex"), err)
 	}
 	return rep, err
 }
@@ -128,19 +129,19 @@ func (a *Manager) adopt(dryRun bool) (AdoptReport, error) {
 		return rep, a.openErr
 	}
 	if a.deployer == nil || a.deployErr != nil {
-		return rep, errors.Join(errors.New("сначала выберите папку игры"), a.deployErr)
+		return rep, errors.Join(i18n.NewError("сначала выберите папку игры"), a.deployErr)
 	}
 	gameDir := a.settings.GameDir
 	if rec, err := a.loadRecord(); err != nil || rec != nil {
-		return rep, errors.Join(err, errors.New("моды Vortex уже приняты"))
+		return rep, errors.Join(err, i18n.NewError("моды Vortex уже приняты"))
 	}
 	if m, err := a.deployer.Manifest(); err != nil || m.Len() > 0 {
-		return rep, errors.Join(err, errors.New("Modvault уже разворачивал моды в эту игру: снимите их, прежде чем принимать моды Vortex"))
+		return rep, errors.Join(err, i18n.NewError("Modvault уже разворачивал моды в эту игру: снимите их, прежде чем принимать моды Vortex"))
 	}
 
 	dep, err := vortex.ReadDeployment(gameDir)
 	if err != nil {
-		return rep, fmt.Errorf("учёт Vortex: %w", err)
+		return rep, i18n.Errorf("учёт Vortex: %w", err)
 	}
 	staging, err := vortex.FindStaging(gameDir, dep)
 	if err != nil {
@@ -206,7 +207,7 @@ func (a *Manager) adopt(dryRun bool) (AdoptReport, error) {
 	for _, f := range dep.Files {
 		m := bySource[f.Source]
 		if m == nil {
-			return rep, fmt.Errorf("Vortex развернул %s из мода %s, которого нет в его хранилище", f.RelPath, f.Source)
+			return rep, i18n.Errorf("Vortex развернул %s из мода %s, которого нет в его хранилище", f.RelPath, f.Source)
 		}
 		src := filepath.Join(staging, f.Source, filepath.FromSlash(f.RelPath))
 		gameFile := filepath.Join(gameDir, filepath.FromSlash(f.RelPath))
@@ -215,7 +216,7 @@ func (a *Manager) adopt(dryRun bool) (AdoptReport, error) {
 			return rep, err
 		}
 		if got, _, err := fsx.HashFile(gameFile); err != nil || got != want {
-			rep.Problems = append(rep.Problems, f.RelPath+": файл в игре отличается от хранилища Vortex или пропал")
+			rep.Problems = append(rep.Problems, f.RelPath+i18n.T(": файл в игре отличается от хранилища Vortex или пропал"))
 		}
 		original := gameFile + ".vortex_backup"
 		if _, err := os.Stat(original); err != nil {
@@ -382,7 +383,7 @@ func readStaging(staging string, dep *vortex.Deployment) ([]*adoptedMod, error) 
 			found = found || m.source == s
 		}
 		if !found {
-			return nil, fmt.Errorf("мода %s, развёрнутого Vortex, нет в его хранилище %s", s, staging)
+			return nil, i18n.Errorf("мода %s, развёрнутого Vortex, нет в его хранилище %s", s, staging)
 		}
 	}
 	return mods, nil
@@ -515,9 +516,9 @@ func (a *Manager) Release(dryRun bool) (ReleaseReport, error) {
 	rep, err := a.release(dryRun)
 	if !dryRun {
 		if err == nil {
-			a.note(EventVortex, "Управление возвращено Vortex")
+			a.note(EventVortex, i18n.T("Управление возвращено Vortex"))
 		}
-		a.noteError("Вернуть Vortex", err)
+		a.noteError(i18n.T("Вернуть Vortex"), err)
 	}
 	return rep, err
 }
@@ -525,14 +526,14 @@ func (a *Manager) Release(dryRun bool) (ReleaseReport, error) {
 func (a *Manager) release(dryRun bool) (ReleaseReport, error) {
 	var rep ReleaseReport
 	if a.deployer == nil || a.deployErr != nil {
-		return rep, errors.Join(errors.New("сначала выберите папку игры"), a.deployErr)
+		return rep, errors.Join(i18n.NewError("сначала выберите папку игры"), a.deployErr)
 	}
 	rec, err := a.loadRecord()
 	if err != nil {
 		return rep, err
 	}
 	if rec == nil {
-		return rep, errors.New("моды Vortex не принимались: возвращать нечего")
+		return rep, i18n.NewError("моды Vortex не принимались: возвращать нечего")
 	}
 	rep.Staging = rec.Staging
 	data, err := os.ReadFile(a.adoptedPath(vortex.DeploymentFile))
@@ -552,7 +553,7 @@ func (a *Manager) release(dryRun bool) (ReleaseReport, error) {
 		src := filepath.Join(rec.Staging, f.Source, filepath.FromSlash(f.RelPath))
 		hash, size, err := fsx.HashFile(src)
 		if err != nil {
-			return rep, fmt.Errorf("хранилище Vortex: %w", err)
+			return rep, i18n.Errorf("хранилище Vortex: %w", err)
 		}
 		i, ok := index[f.Source]
 		if !ok {
@@ -589,7 +590,7 @@ func (a *Manager) release(dryRun bool) (ReleaseReport, error) {
 		}
 	}
 	if after, err := a.deployer.Plan(sources, nil); err != nil || !after.Empty() {
-		return rep, errors.Join(err, errors.New("игра не совпала с состоянием Vortex после возврата"))
+		return rep, errors.Join(err, i18n.NewError("игра не совпала с состоянием Vortex после возврата"))
 	}
 
 	// Vortex снова видит свой учёт; Modvault забывает свой.

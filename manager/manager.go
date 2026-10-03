@@ -6,7 +6,6 @@ package manager
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -19,6 +18,7 @@ import (
 	"github.com/zemidala/modvault/core/store"
 	"github.com/zemidala/modvault/game"
 	"github.com/zemidala/modvault/game/darktide"
+	"github.com/zemidala/modvault/i18n"
 	"github.com/zemidala/modvault/nexus"
 )
 
@@ -323,15 +323,15 @@ func (a *Manager) addArchive(path string) (State, error) {
 		return State{}, err
 	}
 	if prev != "" {
-		a.note(EventInstall, fmt.Sprintf("Из архива обновлён «%s» до %s", v.Name, v.Version))
+		a.note(EventInstall, i18n.Sprintf("Из архива обновлён «%s» до %s", v.Name, v.Version))
 	} else {
-		a.note(EventInstall, fmt.Sprintf("Из архива добавлен «%s» %s", v.Name, v.Version))
+		a.note(EventInstall, i18n.Sprintf("Из архива добавлен «%s» %s", v.Name, v.Version))
 	}
 	return a.state()
 }
 
 // errAlreadyStored — такая версия мода уже лежит в хранилище.
-var errAlreadyStored = errors.New("уже есть в хранилище")
+var errAlreadyStored = i18n.NewError("уже есть в хранилище")
 
 // addVersion кладёт архив в хранилище и ставит версию в профиль. Возвращает
 // добавленную версию и ту, что стояла в профиле до неё (пусто — мод новый).
@@ -349,7 +349,7 @@ func (a *Manager) addVersion(path string, info store.Info) (store.Version, strin
 	}
 	v, err := a.store.Add(path, info)
 	if errors.Is(err, fs.ErrExist) {
-		return store.Version{}, "", fmt.Errorf("«%s» этой версии %w", info.Name, errAlreadyStored)
+		return store.Version{}, "", i18n.Errorf("«%s» этой версии %w", info.Name, errAlreadyStored)
 	}
 	if err != nil {
 		return store.Version{}, "", err
@@ -359,7 +359,7 @@ func (a *Manager) addVersion(path string, info store.Info) (store.Version, strin
 		if rerr := a.store.Remove(v.ModID, v.ID, true); rerr != nil {
 			return store.Version{}, "", errors.Join(err, rerr)
 		}
-		return store.Version{}, "", fmt.Errorf("«%s» не добавлен: %w", info.Name, err)
+		return store.Version{}, "", i18n.Errorf("«%s» не добавлен: %w", info.Name, err)
 	}
 
 	// Новая версия уже установленного мода занимает его место в профиле.
@@ -477,13 +477,13 @@ func (a *Manager) RemoveMod(id string, permanent bool) (State, error) {
 		return State{}, err
 	}
 	if !real {
-		return State{}, errors.New("это демонстрационный мод: удалять нечего")
+		return State{}, i18n.NewError("это демонстрационный мод: удалять нечего")
 	}
 	name := a.modName(id)
 	if err := a.removeMod(id, permanent); err != nil {
 		return State{}, err
 	}
-	a.note(EventRemove, "Удалён мод «"+name+"»")
+	a.note(EventRemove, i18n.Sprintf("Удалён мод «%s»", name))
 	return a.state()
 }
 
@@ -514,7 +514,7 @@ func (a *Manager) ModFiles(id string) ([]string, error) {
 		return nil, err
 	}
 	if !real {
-		return nil, errors.New("это демонстрационный мод: файлов у него нет")
+		return nil, i18n.NewError("это демонстрационный мод: файлов у него нет")
 	}
 	p, _, err := a.loadProfile()
 	if err != nil {
@@ -522,7 +522,7 @@ func (a *Manager) ModFiles(id string) ([]string, error) {
 	}
 	i := p.Index(id)
 	if i < 0 {
-		return nil, fmt.Errorf("мод %q не найден", id)
+		return nil, i18n.Errorf("мод %q не найден", id)
 	}
 	v, err := a.store.Get(id, p.Entries[i].VersionID)
 	if err != nil {
@@ -626,7 +626,7 @@ func hasVersion(m store.Mod, versionID string) bool {
 func (a *Manager) state() (State, error) {
 	real, err := a.hasMods()
 	if err != nil {
-		return State{}, fmt.Errorf("хранилище %s: %w", a.home, err)
+		return State{}, i18n.Errorf("хранилище %s: %w", a.home, err)
 	}
 	if !real {
 		return a.demoState(), nil
@@ -637,16 +637,4 @@ func (a *Manager) state() (State, error) {
 // Plural выбирает форму слова по правилам русского языка: 1 мод, 2 мода, 5 модов.
 func Plural(n int, one, few, many string) string { return plural(n, one, few, many) }
 
-func plural(n int, one, few, many string) string {
-	n %= 100
-	if n >= 11 && n <= 14 {
-		return many
-	}
-	switch n % 10 {
-	case 1:
-		return one
-	case 2, 3, 4:
-		return few
-	}
-	return many
-}
+func plural(n int, one, few, many string) string { return i18n.Plural(n, one, few, many) }

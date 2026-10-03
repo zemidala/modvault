@@ -16,6 +16,7 @@ import (
 	"github.com/zemidala/modvault/core/fsx"
 	"github.com/zemidala/modvault/core/journal"
 	"github.com/zemidala/modvault/core/manifest"
+	"github.com/zemidala/modvault/i18n"
 )
 
 // Папка состояния одной установки игры:
@@ -164,7 +165,7 @@ func Open(game, state string) (*Deployer, Recovery, error) {
 		return nil, NothingToRecover, err
 	}
 	if !info.IsDir() {
-		return nil, NothingToRecover, fmt.Errorf("%s — не папка", game)
+		return nil, NothingToRecover, i18n.Errorf("%s — не папка", game)
 	}
 	if err := os.MkdirAll(state, 0o755); err != nil {
 		return nil, NothingToRecover, err
@@ -311,7 +312,7 @@ func (d *Deployer) Plan(sources []Source, winners map[string]string) (*Plan, err
 			return nil, err
 		}
 		if exists && !info.Mode().IsRegular() {
-			return nil, fmt.Errorf("%s: на месте файла лежит папка или ссылка", rel)
+			return nil, i18n.Errorf("%s: на месте файла лежит папка или ссылка", rel)
 		}
 
 		ours := false
@@ -376,7 +377,7 @@ func (d *Deployer) Plan(sources []Source, winners map[string]string) (*Plan, err
 					return nil, err
 				}
 				if _, err := os.Lstat(b); err == nil {
-					return nil, fmt.Errorf("%s: резервная копия уже есть, а файл не учтён — разберитесь с папкой %s", t.Path, b)
+					return nil, i18n.Errorf("%s: резервная копия уже есть, а файл не учтён — разберитесь с папкой %s", t.Path, b)
 				}
 				p.steps = append(p.steps, step{Op: opBackup, Path: t.Path})
 				backup = true
@@ -465,7 +466,7 @@ func (d *Deployer) Apply(p *Plan) (Result, error) {
 	h := header{Steps: p.steps, Dirs: p.dirs}
 	j, err := journal.Begin(d.state, id, h)
 	if errors.Is(err, journal.ErrPending) {
-		return Result{}, errors.New("прошлое развёртывание не откачено до конца; перезапустите программу")
+		return Result{}, i18n.NewError("прошлое развёртывание не откачено до конца; перезапустите программу")
 	}
 	if err != nil {
 		return Result{}, err
@@ -483,12 +484,12 @@ func (d *Deployer) Apply(p *Plan) (Result, error) {
 			j.Close()
 			err = fmt.Errorf("%s: %w", s.Path, err)
 			if rerr := d.rollback(id, h, i); rerr != nil {
-				return Result{}, fmt.Errorf("%w; откатить не удалось: %v", err, rerr)
+				return Result{}, i18n.Errorf("%w; откатить не удалось: %v", err, rerr)
 			}
 			if cerr := journal.Clear(d.state); cerr != nil {
 				return Result{}, errors.Join(err, cerr)
 			}
-			return Result{}, fmt.Errorf("%w; игра возвращена в прежнее состояние", err)
+			return Result{}, i18n.Errorf("%w; игра возвращена в прежнее состояние", err)
 		}
 		if s.Op == opPlace {
 			methods[key(s.Path)] = method
@@ -519,10 +520,10 @@ func (d *Deployer) Apply(p *Plan) (Result, error) {
 	if err := write(); err != nil {
 		j.Close()
 		if rerr := d.rollback(id, h, len(p.steps)); rerr != nil {
-			return Result{}, fmt.Errorf("запись учёта: %w; откатить не удалось: %v", err, rerr)
+			return Result{}, i18n.Errorf("запись учёта: %w; откатить не удалось: %v", err, rerr)
 		}
 		journal.Clear(d.state)
-		return Result{}, fmt.Errorf("запись учёта: %w; игра возвращена в прежнее состояние", err)
+		return Result{}, i18n.Errorf("запись учёта: %w; игра возвращена в прежнее состояние", err)
 	}
 	hook("commit", len(p.steps))
 	if err := j.Finish(); err != nil {
@@ -616,7 +617,7 @@ func (d *Deployer) do(id string, s step) (string, error) {
 		}
 		return manifest.MethodCopy, fsx.CopyFile(s.Src, game)
 	}
-	return "", fmt.Errorf("неизвестный шаг %q", s.Op)
+	return "", i18n.Errorf("неизвестный шаг %q", s.Op)
 }
 
 // moveInto переносит файл из игры в папку, путь в которой даёт where.
@@ -712,11 +713,11 @@ func (d *Deployer) undo(id string, s step, unsure bool) error {
 			if unsure {
 				return nil // на месте не наш файл: шаг не успел выполниться
 			}
-			return fmt.Errorf("на месте положенного файла лежит другой")
+			return i18n.Errorf("на месте положенного файла лежит другой")
 		}
 		return os.Remove(game)
 	default:
-		return fmt.Errorf("неизвестный шаг %q", s.Op)
+		return i18n.Errorf("неизвестный шаг %q", s.Op)
 	}
 	if err != nil {
 		return err
@@ -744,7 +745,7 @@ func (d *Deployer) undo(id string, s step, unsure bool) error {
 		if unsure {
 			return os.Remove(aside) // копия между томами не успела убрать оригинал
 		}
-		return fmt.Errorf("файл уже на месте, а копия в %s осталась", aside)
+		return i18n.Errorf("файл уже на месте, а копия в %s осталась", aside)
 	}
 	if err := os.MkdirAll(filepath.Dir(from), 0o755); err != nil {
 		return err
@@ -772,10 +773,10 @@ func (d *Deployer) recover() (Recovery, error) {
 
 	var h header
 	if err := json.Unmarshal(pending.Data, &h); err != nil {
-		return NothingToRecover, fmt.Errorf("журнал развёртывания повреждён: %w", err)
+		return NothingToRecover, i18n.Errorf("журнал развёртывания повреждён: %w", err)
 	}
 	if err := d.rollback(pending.ID, h, d.executed(pending.ID, h, pending.Done)); err != nil {
-		return NothingToRecover, fmt.Errorf("откат прерванного развёртывания: %w", err)
+		return NothingToRecover, i18n.Errorf("откат прерванного развёртывания: %w", err)
 	}
 	if err := journal.Clear(d.state); err != nil {
 		return NothingToRecover, err
@@ -875,14 +876,14 @@ type AdoptEntry struct {
 // управление переходит от другого менеджера модов. Учёт должен быть пуст.
 func (d *Deployer) Adopt(generation string, entries []AdoptEntry) error {
 	if p, err := journal.Load(d.state); err != nil || p != nil {
-		return errors.Join(err, errors.New("прошлое развёртывание не завершено"))
+		return errors.Join(err, i18n.NewError("прошлое развёртывание не завершено"))
 	}
 	m, err := d.Manifest()
 	if err != nil {
 		return err
 	}
 	if m.Len() > 0 {
-		return errors.New("Modvault уже ведёт учёт файлов этой игры")
+		return i18n.NewError("Modvault уже ведёт учёт файлов этой игры")
 	}
 	// Резервные копии без учёта никому не принадлежат.
 	if err := os.RemoveAll(filepath.Join(d.state, backupsDir)); err != nil {
@@ -922,7 +923,7 @@ func (d *Deployer) Adopt(generation string, entries []AdoptEntry) error {
 // displaced с чужими правками не трогается.
 func (d *Deployer) Forget() error {
 	if p, err := journal.Load(d.state); err != nil || p != nil {
-		return errors.Join(err, errors.New("прошлое развёртывание не завершено"))
+		return errors.Join(err, i18n.NewError("прошлое развёртывание не завершено"))
 	}
 	for _, name := range []string{manifestFile} {
 		if err := os.Remove(filepath.Join(d.state, name)); err != nil && !errors.Is(err, fs.ErrNotExist) {

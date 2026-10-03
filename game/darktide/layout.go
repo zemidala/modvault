@@ -1,17 +1,16 @@
 package darktide
 
 import (
-	"errors"
-	"fmt"
 	"path"
 	"sort"
 	"strings"
 
 	"github.com/zemidala/modvault/game"
+	"github.com/zemidala/modvault/i18n"
 )
 
 // ErrLayout — архив не похож ни на одну известную раскладку мода.
-var ErrLayout = errors.New("не удалось понять, как разложить архив")
+var ErrLayout = i18n.NewError("не удалось понять, как разложить архив")
 
 // Папки и файлы корня игры: если они есть в архиве, архив повторяет корень.
 var rootMarkers = map[string]bool{
@@ -42,7 +41,7 @@ func Layout(files []string) (game.Layout, error) {
 		clean = append(clean, strings.Trim(strings.ReplaceAll(f, `\`, "/"), "/"))
 	}
 	if len(clean) == 0 {
-		return game.Layout{}, fmt.Errorf("%w: архив пуст", ErrLayout)
+		return game.Layout{}, i18n.Errorf("%w: архив пуст", ErrLayout)
 	}
 
 	prefix := ""
@@ -60,7 +59,7 @@ func Layout(files []string) (game.Layout, error) {
 			prefix += top[0].name + "/"
 			continue
 		}
-		return game.Layout{}, fmt.Errorf("%w: в архиве не найден файл .mod", ErrLayout)
+		return game.Layout{}, i18n.Errorf("%w: в архиве не найден файл .mod", ErrLayout)
 	}
 }
 
@@ -110,7 +109,7 @@ func hasRootMarker(top []entry) bool {
 
 // overlay кладёт архив в корень игры как есть.
 func overlay(files []string, prefix string) (game.Layout, error) {
-	l := game.Layout{Kind: "архив повторяет корень игры", Paths: map[string]string{}}
+	l := game.Layout{Kind: i18n.T("архив повторяет корень игры"), Paths: map[string]string{}}
 	folders := map[string]bool{}
 	for _, f := range files {
 		if !strings.HasPrefix(f, prefix) {
@@ -162,11 +161,11 @@ func modFolders(files []string, prefix string) (game.Layout, bool, error) {
 		}
 	}
 	if len(rootMods) > 1 {
-		return game.Layout{}, false, fmt.Errorf("%w: в одной папке несколько файлов .mod: %s", ErrLayout, strings.Join(rootMods, ", "))
+		return game.Layout{}, false, i18n.Errorf("%w: в одной папке несколько файлов .mod: %s", ErrLayout, strings.Join(rootMods, ", "))
 	}
 	if len(rootMods) == 1 {
 		name := strings.TrimSuffix(rootMods[0], path.Ext(rootMods[0]))
-		l := game.Layout{Kind: "обычный мод", Paths: map[string]string{}, Folders: []string{name}}
+		l := game.Layout{Kind: i18n.T("обычный мод"), Paths: map[string]string{}, Folders: []string{name}}
 		for _, f := range files {
 			r := strings.TrimPrefix(f, prefix)
 			if !strings.HasPrefix(f, prefix) || (!strings.Contains(r, "/") && isDoc(r)) {
@@ -185,7 +184,7 @@ func modFolders(files []string, prefix string) (game.Layout, bool, error) {
 		parts := strings.Split(f, "/")
 		if len(parts) == 2 && strings.EqualFold(path.Ext(parts[1]), ".mod") {
 			if prev, dup := modName[parts[0]]; dup {
-				return game.Layout{}, false, fmt.Errorf("%w: в папке %s несколько файлов .mod: %s, %s", ErrLayout, parts[0], prev, parts[1])
+				return game.Layout{}, false, i18n.Errorf("%w: в папке %s несколько файлов .mod: %s, %s", ErrLayout, parts[0], prev, parts[1])
 			}
 			modName[parts[0]] = strings.TrimSuffix(parts[1], path.Ext(parts[1]))
 		}
@@ -194,9 +193,9 @@ func modFolders(files []string, prefix string) (game.Layout, bool, error) {
 		return game.Layout{}, false, nil
 	}
 
-	l := game.Layout{Kind: "обычный мод", Paths: map[string]string{}}
+	l := game.Layout{Kind: i18n.T("обычный мод"), Paths: map[string]string{}}
 	if len(modName) > 1 {
-		l.Kind = "несколько модов в одном архиве"
+		l.Kind = i18n.T("несколько модов в одном архиве")
 	}
 	for _, f := range files {
 		r := strings.TrimPrefix(f, prefix)
@@ -206,7 +205,7 @@ func modFolders(files []string, prefix string) (game.Layout, bool, error) {
 				l.Ignored = append(l.Ignored, f)
 				continue
 			}
-			return game.Layout{}, false, fmt.Errorf("%w: файл %s лежит вне папки мода", ErrLayout, r)
+			return game.Layout{}, false, i18n.Errorf("%w: файл %s лежит вне папки мода", ErrLayout, r)
 		}
 		name, ok := modName[dir]
 		if !ok {
@@ -214,10 +213,10 @@ func modFolders(files []string, prefix string) (game.Layout, bool, error) {
 				l.Ignored = append(l.Ignored, f)
 				continue
 			}
-			return game.Layout{}, false, fmt.Errorf("%w: в папке %s нет файла .mod", ErrLayout, dir)
+			return game.Layout{}, false, i18n.Errorf("%w: в папке %s нет файла .mod", ErrLayout, dir)
 		}
-		if name != dir && l.Kind == "обычный мод" {
-			l.Kind = "обычный мод, папка переименована по файлу .mod"
+		if name != dir && l.Kind == i18n.T("обычный мод") {
+			l.Kind = i18n.T("обычный мод, папка переименована по файлу .mod")
 		}
 		l.Paths[f] = "mods/" + name + "/" + rest
 	}
@@ -252,7 +251,7 @@ func role(l game.Layout) game.Role {
 // Describe описывает файлы, уже разложенные как в игре: пути остаются
 // прежними, папки модов и роль определяются по ним.
 func Describe(files []string) game.Layout {
-	l := game.Layout{Kind: "файлы уже разложены как в игре", Paths: make(map[string]string, len(files))}
+	l := game.Layout{Kind: i18n.T("файлы уже разложены как в игре"), Paths: make(map[string]string, len(files))}
 	folders := map[string]bool{}
 	for _, f := range files {
 		rel := strings.Trim(strings.ReplaceAll(f, `\`, "/"), "/")

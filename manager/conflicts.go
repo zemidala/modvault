@@ -1,7 +1,6 @@
 package manager
 
 import (
-	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -9,6 +8,7 @@ import (
 	"github.com/zemidala/modvault/core/deploy"
 	"github.com/zemidala/modvault/core/fsx"
 	"github.com/zemidala/modvault/core/profile"
+	"github.com/zemidala/modvault/i18n"
 	"github.com/zemidala/modvault/rules"
 )
 
@@ -160,7 +160,7 @@ func (a *Manager) conflicts(plan *deploy.Plan, p profile.Profile) []ConflictInfo
 
 // advise определяет вид конфликта и составляет совет.
 func (a *Manager) advise(info *ConflictInfo, identical bool, folders map[string][]string, modRules []rules.Rule) {
-	quote := func(m ConflictMod) string { return "«" + m.Name + "»" }
+	quote := func(m ConflictMod) string { return i18n.Quote(m.Name) }
 	var winner ConflictMod
 	for _, m := range info.Mods {
 		if m.Winner {
@@ -171,14 +171,14 @@ func (a *Manager) advise(info *ConflictInfo, identical bool, folders map[string]
 
 	if identical {
 		info.Kind = ConflictIdentical
-		info.Advice = "Файлы у модов одинаковые, байт в байт. Конфликт безвреден: чей бы файл ни остался, игра получит одно и то же. Делать ничего не нужно."
+		info.Advice = i18n.T("Файлы у модов одинаковые, байт в байт. Конфликт безвреден: чей бы файл ни остался, игра получит одно и то же. Делать ничего не нужно.")
 		return
 	}
 
 	// Моды ставятся в одну и ту же папку — это варианты одного мода.
 	if folder := sharedFolder(info.Mods, folders); folder != "" {
 		info.Kind = ConflictDuplicate
-		info.Advice = fmt.Sprintf("Эти моды ставятся в одну папку «%s» — похоже, это два варианта одного и того же мода (разные версии или переделка). Вместе они не работают: в игре окажется смесь файлов. Оставьте один, второй выключите.", folder)
+		info.Advice = i18n.Sprintf("Эти моды ставятся в одну папку «%s» — похоже, это два варианта одного и того же мода (разные версии или переделка). Вместе они не работают: в игре окажется смесь файлов. Оставьте один, второй выключите.", folder)
 		for _, m := range info.Mods {
 			if !m.Winner {
 				info.Disable = m.ID
@@ -193,9 +193,9 @@ func (a *Manager) advise(info *ConflictInfo, identical bool, folders map[string]
 	if later, earlier, ok := ruleOrder(info.Mods, folders, modRules); ok {
 		info.Kind = ConflictOrdered
 		info.Suggested = later.ID
-		info.Advice = fmt.Sprintf("Автор указал, что %s грузится после %s — значит, он рассчитан на то, чтобы перекрывать его файлы. Победителем стоит выбрать %s.", quote(later), quote(earlier), quote(later))
+		info.Advice = i18n.Sprintf("Автор указал, что %s грузится после %s — значит, он рассчитан на то, чтобы перекрывать его файлы. Победителем стоит выбрать %s.", quote(later), quote(earlier), quote(later))
 		if later.Winner {
-			info.Advice += " Сейчас так и есть: достаточно подтвердить."
+			info.Advice += i18n.T(" Сейчас так и есть: достаточно подтвердить.")
 		}
 		return
 	}
@@ -204,7 +204,7 @@ func (a *Manager) advise(info *ConflictInfo, identical bool, folders map[string]
 		if m.Covered {
 			info.Kind = ConflictCovered
 			info.Disable = m.ID
-			info.Advice = fmt.Sprintf("%s перекрыт целиком: все его файлы (%d) заменяет %s, в игре от него ничего не остаётся. Если нужен %s — выберите его победителем; если нет — его можно выключить, ничего не изменится.",
+			info.Advice = i18n.Sprintf("%s перекрыт целиком: все его файлы (%d) заменяет %s, в игре от него ничего не остаётся. Если нужен %s — выберите его победителем; если нет — его можно выключить, ничего не изменится.",
 				quote(m), m.Files, quote(winner), quote(m))
 			return
 		}
@@ -213,9 +213,9 @@ func (a *Manager) advise(info *ConflictInfo, identical bool, folders map[string]
 	info.Kind = ConflictOverlap
 	var shares []string
 	for _, m := range info.Mods {
-		shares = append(shares, fmt.Sprintf("%s — %d из %d", quote(m), m.Shared, m.Files))
+		shares = append(shares, i18n.Sprintf("%s — %d из %d", quote(m), m.Shared, m.Files))
 	}
-	info.Advice = fmt.Sprintf("Моды меняют %s (%s). Остальные их файлы не пересекаются, оба мода продолжат работать, но в спорных файлах останется вариант победителя. Обычно победить должен мод, который дополняет или исправляет другой (патч, перевод, надстройка); если не знаете — оставьте по порядку загрузки и проверьте в игре.",
+	info.Advice = i18n.Sprintf("Моды меняют %s (%s). Остальные их файлы не пересекаются, оба мода продолжат работать, но в спорных файлах останется вариант победителя. Обычно победить должен мод, который дополняет или исправляет другой (патч, перевод, надстройка); если не знаете — оставьте по порядку загрузки и проверьте в игре.",
 		files, strings.Join(shares, ", "))
 }
 
@@ -299,7 +299,7 @@ func (a *Manager) Conflict(key string) (ConflictInfo, error) {
 			return c, nil
 		}
 	}
-	return ConflictInfo{}, errors.New("этого конфликта больше нет")
+	return ConflictInfo{}, i18n.NewError("этого конфликта больше нет")
 }
 
 // conflictIssues — замечания о конфликтах, которые ждут решения. Решённые
@@ -316,9 +316,9 @@ func conflictIssues(list []ConflictInfo) []Issue {
 			modNames[i] = m.Name
 		}
 		out = append(out, Issue{
-			Title:  fmt.Sprintf("%s меняют одни и те же файлы (%d)", strings.Join(modNames, " и "), c.Total),
+			Title:  i18n.Sprintf("%s меняют одни и те же файлы (%d)", strings.Join(modNames, i18n.T(" и ")), c.Total),
 			Detail: c.Advice,
-			Level:  LevelWarn, Action: "Разобрать конфликт", Command: "ChooseWinner", Arg: c.Key,
+			Level:  LevelWarn, Action: i18n.T("Разобрать конфликт"), Command: "ChooseWinner", Arg: c.Key,
 		})
 	}
 	return out
@@ -335,9 +335,9 @@ func conflictStatus(list []ConflictInfo) (StatusItem, bool) {
 			open++
 		}
 	}
-	item := StatusItem{Label: "Конфликты", Value: fmt.Sprintf("%d · все разобраны", len(list)), Level: LevelOK, Command: "ShowConflicts"}
+	item := StatusItem{Label: i18n.T("Конфликты"), Value: i18n.Sprintf("%d · все разобраны", len(list)), Level: LevelOK, Command: "ShowConflicts"}
 	if open > 0 {
-		item.Value, item.Level = fmt.Sprintf("%d · ждут решения: %d", len(list), open), LevelWarn
+		item.Value, item.Level = i18n.Sprintf("%d · ждут решения: %d", len(list), open), LevelWarn
 	}
 	return item, true
 }
@@ -353,7 +353,7 @@ func (a *Manager) UnpinWinner(key string) (State, error) {
 	}
 	conflicts := conflictsOf(plan, key)
 	if len(conflicts) == 0 {
-		return State{}, errors.New("этого конфликта больше нет")
+		return State{}, i18n.NewError("этого конфликта больше нет")
 	}
 	p, _, err := a.loadProfile()
 	if err != nil {

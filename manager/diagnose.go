@@ -1,12 +1,12 @@
 package manager
 
 import (
-	"fmt"
 	"sort"
 	"strings"
 
 	"github.com/zemidala/modvault/core/profile"
 	"github.com/zemidala/modvault/game"
+	"github.com/zemidala/modvault/i18n"
 )
 
 // Диагностика после игры: игра сама пишет в журнал, какой мод выдал ошибку
@@ -34,7 +34,7 @@ func (a *Manager) runDiagnosis(p profile.Profile) (map[string]runTrouble, []Issu
 	var issues []Issue
 	if rep.Crashed {
 		issues = append(issues, Issue{
-			Title:  "Прошлый запуск игры закончился сбоем (" + when + ")",
+			Title:  i18n.T("Прошлый запуск игры закончился сбоем (") + when + ")",
 			Detail: crashReason(rep),
 			Level:  LevelWarn,
 		})
@@ -85,19 +85,19 @@ func (a *Manager) runDiagnosis(p profile.Profile) (map[string]runTrouble, []Issu
 		if i == maxRunIssues {
 			rest := len(order) - maxRunIssues
 			issues = append(issues, Issue{
-				Title:  fmt.Sprintf("Ещё %d %s с ошибками в прошлом запуске игры", rest, plural(rest, "мод", "мода", "модов")),
-				Detail: "Они отмечены значком ⚠ в списке; текст ошибки — в подсказке к значку",
+				Title:  i18n.Sprintf("Ещё %d %s с ошибками в прошлом запуске игры", rest, plural(rest, "мод", "мода", "модов")),
+				Detail: i18n.T("Они отмечены значком ⚠ в списке; текст ошибки — в подсказке к значку"),
 				Level:  LevelWarn,
 			})
 			break
 		}
 		t := troubles[id]
 		issues = append(issues, Issue{
-			Title: fmt.Sprintf("«%s» выдал %d %s в прошлом запуске игры", names[id], t.count,
+			Title: i18n.Sprintf("«%s» выдал %d %s в прошлом запуске игры", names[id], t.count,
 				plural(t.count, "ошибку", "ошибки", "ошибок")),
-			Detail: "Запуск " + when + ". Первая: " + t.first,
+			Detail: i18n.T("Запуск ") + when + i18n.T(". Первая: ") + t.first,
 			Level:  LevelWarn,
-			Action: "Выключить «" + names[id] + "»", Command: "DisableMod", Arg: id,
+			Action: i18n.Sprintf("Выключить «%s»", names[id]), Command: "DisableMod", Arg: id,
 		})
 	}
 	return troubles, issues
@@ -107,13 +107,13 @@ func (a *Manager) runDiagnosis(p profile.Profile) (map[string]runTrouble, []Issu
 func crashReason(rep game.RunReport) string {
 	text := rep.CrashText
 	if text == "" {
-		text = "причина в журнале не названа"
+		text = i18n.T("причина в журнале не названа")
 	}
 	switch strings.ToLower(rep.CrashKind) {
 	case "memory":
-		return "Игре не хватило памяти — это не ошибка мода. По журналу игры: " + text
+		return i18n.T("Игре не хватило памяти — это не ошибка мода. По журналу игры: ") + text
 	case "":
-		return "По журналу игры: " + text
+		return i18n.T("По журналу игры: ") + text
 	}
-	return fmt.Sprintf("Вид сбоя по журналу игры: %s. %s", rep.CrashKind, text)
+	return i18n.Sprintf("Вид сбоя по журналу игры: %s. %s", rep.CrashKind, text)
 }

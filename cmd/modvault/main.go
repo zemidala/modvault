@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/zemidala/modvault/i18n"
 	"github.com/zemidala/modvault/internal/version"
 	"github.com/zemidala/modvault/manager"
 )
@@ -32,7 +33,7 @@ const (
 var stdin io.Reader = os.Stdin
 
 // errUsage — команда вызвана неправильно; справка уже выведена.
-var errUsage = errors.New("неверный вызов")
+var errUsage = i18n.NewError("неверный вызов")
 
 type cli struct {
 	out, errOut io.Writer
@@ -86,7 +87,7 @@ func run(args []string, stdout, stderr io.Writer, open func() *manager.Manager) 
 	}
 	f, ok := commands[cmd]
 	if !ok {
-		fmt.Fprintf(stderr, "неизвестная команда: %s\n\n", cmd)
+		i18n.Fprintf(stderr, "неизвестная команда: %s\n\n", cmd)
 		usage(stderr)
 		return exitUsage
 	}
@@ -94,14 +95,14 @@ func run(args []string, stdout, stderr io.Writer, open func() *manager.Manager) 
 		if errors.Is(err, errUsage) {
 			return exitUsage
 		}
-		fmt.Fprintln(stderr, "ошибка:", err)
+		fmt.Fprintln(stderr, i18n.T("ошибка:"), err)
 		return exitError
 	}
 	return exitOK
 }
 
 func usage(w io.Writer) {
-	fmt.Fprintf(w, `%s — менеджер модов
+	i18n.Fprintf(w, `%s — менеджер модов
 
 Использование:
   modvault <команда> [аргументы]
@@ -176,7 +177,7 @@ func (c *cli) flags(name string, args []string, def func(*flag.FlagSet)) ([]stri
 
 func (c *cli) need(cmd string, args []string, n int, what string) error {
 	if len(args) < n {
-		fmt.Fprintf(c.errOut, "использование: modvault %s %s\n", cmd, what)
+		i18n.Fprintf(c.errOut, "использование: modvault %s %s\n", cmd, what)
 		return errUsage
 	}
 	return nil
@@ -197,15 +198,15 @@ func (c *cli) resolve(s manager.State, ref string) (manager.Mod, error) {
 	case 1:
 		return byName[0], nil
 	case 0:
-		return manager.Mod{}, fmt.Errorf("мод «%s» не найден; список — modvault list", ref)
+		return manager.Mod{}, i18n.Errorf("мод «%s» не найден; список — modvault list", ref)
 	}
-	return manager.Mod{}, fmt.Errorf("модов с названием «%s» несколько: укажите идентификатор", ref)
+	return manager.Mod{}, i18n.Errorf("модов с названием «%s» несколько: укажите идентификатор", ref)
 }
 
 func (c *cli) state() (manager.State, error) {
 	s, err := c.manager().State()
 	if err == nil && s.Demo {
-		return s, errors.New("игра не выбрана: modvault game <папка>")
+		return s, i18n.NewError("игра не выбрана: modvault game <папка>")
 	}
 	return s, err
 }
@@ -219,12 +220,12 @@ func (c *cli) status(args []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(c.out, "%s · профиль «%s»\n", s.Version, s.Profile)
+	i18n.Fprintf(c.out, "%s · профиль «%s»\n", s.Version, s.Profile)
 	for _, item := range s.Status {
 		fmt.Fprintf(c.out, "%s %s: %s\n", levelMark[item.Level], item.Label, item.Value)
 	}
 	if len(s.Issues) > 0 {
-		fmt.Fprintln(c.out, "\nТребуют внимания:")
+		fmt.Fprintln(c.out, i18n.T("\nТребуют внимания:"))
 		for _, i := range s.Issues {
 			fmt.Fprintf(c.out, "%s %s\n   %s\n", levelMark[i.Level], i.Title, i.Detail)
 		}
@@ -234,7 +235,7 @@ func (c *cli) status(args []string) error {
 		for _, line := range s.Plan {
 			fmt.Fprintf(c.out, "   %s\n", line)
 		}
-		fmt.Fprintln(c.out, "Подробно: modvault deploy --dry-run")
+		fmt.Fprintln(c.out, i18n.T("Подробно: modvault deploy --dry-run"))
 	}
 	return nil
 }
@@ -245,7 +246,7 @@ func (c *cli) list(args []string) error {
 		return err
 	}
 	if len(s.Mods) == 0 {
-		fmt.Fprintln(c.out, "В профиле нет модов: modvault add <архив>")
+		fmt.Fprintln(c.out, i18n.T("В профиле нет модов: modvault add <архив>"))
 		return nil
 	}
 	for i, m := range s.Mods {
@@ -259,7 +260,7 @@ func (c *cli) list(args []string) error {
 }
 
 func (c *cli) add(args []string) error {
-	if err := c.need("add", args, 1, "<архив>..."); err != nil {
+	if err := c.need("add", args, 1, i18n.T("<архив>...")); err != nil {
 		return err
 	}
 	var failed int
@@ -271,10 +272,10 @@ func (c *cli) add(args []string) error {
 			continue
 		}
 		after, _ := c.manager().State()
-		fmt.Fprintf(c.out, "добавлен: %s\n", newMod(before, after))
+		i18n.Fprintf(c.out, "добавлен: %s\n", newMod(before, after))
 	}
 	if failed > 0 {
-		return fmt.Errorf("не добавлено архивов: %d", failed)
+		return i18n.Errorf("не добавлено архивов: %d", failed)
 	}
 	return nil
 }
@@ -296,12 +297,12 @@ func newMod(before, after manager.State) string {
 func (c *cli) remove(args []string) error {
 	var permanent bool
 	rest, err := c.flags("remove", args, func(fs *flag.FlagSet) {
-		fs.BoolVar(&permanent, "permanent", false, "удалить насовсем, минуя Корзину")
+		fs.BoolVar(&permanent, "permanent", false, i18n.T("удалить насовсем, минуя Корзину"))
 	})
 	if err != nil {
 		return err
 	}
-	if err := c.need("remove", rest, 1, "<мод> [--permanent]"); err != nil {
+	if err := c.need("remove", rest, 1, i18n.T("<мод> [--permanent]")); err != nil {
 		return err
 	}
 	s, err := c.state()
@@ -315,13 +316,13 @@ func (c *cli) remove(args []string) error {
 	if _, err := c.manager().RemoveMod(m.ID, permanent); err != nil {
 		return err
 	}
-	fmt.Fprintf(c.out, "удалён: %s. Если он был развёрнут, его файлы уберёт следующий deploy\n", m.Name)
+	i18n.Fprintf(c.out, "удалён: %s. Если он был развёрнут, его файлы уберёт следующий deploy\n", m.Name)
 	return nil
 }
 
 func (c *cli) setEnabled(args []string, enabled bool) error {
 	verb := map[bool]string{true: "enable", false: "disable"}[enabled]
-	if err := c.need(verb, args, 1, "<мод>..."); err != nil {
+	if err := c.need(verb, args, 1, i18n.T("<мод>...")); err != nil {
 		return err
 	}
 	s, err := c.state()
@@ -336,18 +337,18 @@ func (c *cli) setEnabled(args []string, enabled bool) error {
 		if s, err = c.manager().SetEnabled(m.ID, enabled); err != nil {
 			return err
 		}
-		fmt.Fprintf(c.out, "%s: %s\n", map[bool]string{true: "включён", false: "выключен"}[enabled], m.Name)
+		fmt.Fprintf(c.out, "%s: %s\n", map[bool]string{true: i18n.T("включён"), false: i18n.T("выключен")}[enabled], m.Name)
 	}
 	return nil
 }
 
 func (c *cli) move(args []string) error {
-	if err := c.need("move", args, 2, "<мод> <место>"); err != nil {
+	if err := c.need("move", args, 2, i18n.T("<мод> <место>")); err != nil {
 		return err
 	}
 	pos, err := strconv.Atoi(args[1])
 	if err != nil || pos < 1 {
-		fmt.Fprintln(c.errOut, "место — номер в порядке загрузки, начиная с 1")
+		fmt.Fprintln(c.errOut, i18n.T("место — номер в порядке загрузки, начиная с 1"))
 		return errUsage
 	}
 	s, err := c.state()
@@ -361,14 +362,14 @@ func (c *cli) move(args []string) error {
 	if _, err := c.manager().Move(m.ID, pos-1); err != nil {
 		return err
 	}
-	fmt.Fprintf(c.out, "%s теперь на месте %d\n", m.Name, pos)
+	i18n.Fprintf(c.out, "%s теперь на месте %d\n", m.Name, pos)
 	return nil
 }
 
 func dryRunFlag(c *cli, name string, args []string) (bool, error) {
 	var dry bool
 	_, err := c.flags(name, args, func(fs *flag.FlagSet) {
-		fs.BoolVar(&dry, "dry-run", false, "показать, что будет сделано, ничего не меняя")
+		fs.BoolVar(&dry, "dry-run", false, i18n.T("показать, что будет сделано, ничего не меняя"))
 	})
 	return dry, err
 }
@@ -387,13 +388,13 @@ func (c *cli) deploy(args []string) error {
 			return err
 		}
 		if len(lines) == 0 {
-			fmt.Fprintln(c.out, "Игра уже совпадает с профилем")
+			fmt.Fprintln(c.out, i18n.T("Игра уже совпадает с профилем"))
 			return nil
 		}
 		for _, line := range lines {
 			fmt.Fprintln(c.out, line)
 		}
-		fmt.Fprintf(c.out, "\nИзменений: %d. Ничего не изменено (--dry-run)\n", len(lines))
+		i18n.Fprintf(c.out, "\nИзменений: %d. Ничего не изменено (--dry-run)\n", len(lines))
 		return nil
 	}
 	res, err := c.manager().Deploy()
@@ -417,9 +418,9 @@ func (c *cli) verify(args []string) error {
 		}
 	}
 	if bad > 0 {
-		return fmt.Errorf("найдено проблем: %d", bad)
+		return i18n.Errorf("найдено проблем: %d", bad)
 	}
-	fmt.Fprintln(c.out, "Проблем не найдено")
+	fmt.Fprintln(c.out, i18n.T("Проблем не найдено"))
 	return nil
 }
 
@@ -429,7 +430,7 @@ func (c *cli) check(args []string) error {
 		return err
 	}
 	if len(s.Issues) == 0 {
-		fmt.Fprintln(c.out, "Замечаний нет")
+		fmt.Fprintln(c.out, i18n.T("Замечаний нет"))
 	}
 	bad := 0
 	for _, i := range s.Issues {
@@ -442,7 +443,7 @@ func (c *cli) check(args []string) error {
 		fmt.Fprintf(c.out, "\n%s\n", s.OrderNote)
 	}
 	if bad > 0 {
-		return fmt.Errorf("найдено проблем: %d", bad)
+		return i18n.Errorf("найдено проблем: %d", bad)
 	}
 	return nil
 }
@@ -460,26 +461,26 @@ func (c *cli) sort(args []string) error {
 		return err
 	}
 	if plan.Auto {
-		fmt.Fprintln(c.out, "Загрузчик модов сам расставляет их при запуске игры; список встанет как при последнем запуске")
+		fmt.Fprintln(c.out, i18n.T("Загрузчик модов сам расставляет их при запуске игры; список встанет как при последнем запуске"))
 	}
 	for _, cyc := range plan.Cycles {
-		fmt.Fprintf(c.out, "!  правила противоречат друг другу: %s\n", strings.Join(cyc, ", "))
+		i18n.Fprintf(c.out, "!  правила противоречат друг другу: %s\n", strings.Join(cyc, ", "))
 	}
 	if len(plan.Moves) == 0 {
-		fmt.Fprintln(c.out, "Передвигать нечего: порядок уже такой")
+		fmt.Fprintln(c.out, i18n.T("Передвигать нечего: порядок уже такой"))
 		return nil
 	}
 	for _, m := range plan.Moves {
 		fmt.Fprintln(c.out, m)
 	}
 	if dry {
-		fmt.Fprintf(c.out, "\nПередвинется модов: %d. Ничего не изменено (--dry-run)\n", len(plan.Moves))
+		i18n.Fprintf(c.out, "\nПередвинется модов: %d. Ничего не изменено (--dry-run)\n", len(plan.Moves))
 		return nil
 	}
 	if _, err := c.manager().Sort(); err != nil {
 		return err
 	}
-	fmt.Fprintf(c.out, "\nПередвинуто модов: %d. Чтобы порядок попал в игру — modvault deploy\n", len(plan.Moves))
+	i18n.Fprintf(c.out, "\nПередвинуто модов: %d. Чтобы порядок попал в игру — modvault deploy\n", len(plan.Moves))
 	return nil
 }
 
@@ -516,16 +517,16 @@ func (c *cli) profile(args []string) error {
 		}
 		return nil
 	case "use":
-		if err := c.need("profile use", args[1:], 1, "<имя>"); err != nil {
+		if err := c.need("profile use", args[1:], 1, i18n.T("<имя>")); err != nil {
 			return err
 		}
 		if err := m.UseProfile(args[1]); err != nil {
 			return err
 		}
-		fmt.Fprintf(c.out, "текущий профиль: %s. Чтобы игра совпала с ним — modvault deploy\n", args[1])
+		i18n.Fprintf(c.out, "текущий профиль: %s. Чтобы игра совпала с ним — modvault deploy\n", args[1])
 		return nil
 	case "new":
-		if err := c.need("profile new", args[1:], 1, "<имя> [мод...]"); err != nil {
+		if err := c.need("profile new", args[1:], 1, i18n.T("<имя> [мод...]")); err != nil {
 			return err
 		}
 		var ids []string
@@ -549,7 +550,7 @@ func (c *cli) profile(args []string) error {
 		fmt.Fprintln(c.out, res.Message)
 		return nil
 	case "switch":
-		if err := c.need("profile switch", args[1:], 1, "<имя>"); err != nil {
+		if err := c.need("profile switch", args[1:], 1, i18n.T("<имя>")); err != nil {
 			return err
 		}
 		res, err := m.SwitchSet(args[1])
@@ -559,7 +560,7 @@ func (c *cli) profile(args []string) error {
 		fmt.Fprintln(c.out, res.Message)
 		return nil
 	case "copy", "rename":
-		if err := c.need("profile "+args[0], args[1:], 2, "<из> <в>"); err != nil {
+		if err := c.need("profile "+args[0], args[1:], 2, i18n.T("<из> <в>")); err != nil {
 			return err
 		}
 		if args[0] == "copy" {
@@ -567,12 +568,12 @@ func (c *cli) profile(args []string) error {
 		}
 		return m.RenameProfile(args[1], args[2])
 	case "delete":
-		if err := c.need("profile delete", args[1:], 1, "<имя>"); err != nil {
+		if err := c.need("profile delete", args[1:], 1, i18n.T("<имя>")); err != nil {
 			return err
 		}
 		return m.DeleteProfile(args[1])
 	}
-	fmt.Fprintf(c.errOut, "неизвестная команда профилей: %s\n", args[0])
+	i18n.Fprintf(c.errOut, "неизвестная команда профилей: %s\n", args[0])
 	return errUsage
 }
 
@@ -580,7 +581,7 @@ func (c *cli) game(args []string) error {
 	if len(args) == 0 {
 		dir := c.manager().GameDir()
 		if dir == "" {
-			fmt.Fprintln(c.out, "игра не выбрана: modvault game <папка>")
+			fmt.Fprintln(c.out, i18n.T("игра не выбрана: modvault game <папка>"))
 		} else {
 			fmt.Fprintln(c.out, dir)
 		}
@@ -589,7 +590,7 @@ func (c *cli) game(args []string) error {
 	if _, err := c.manager().SetGame(args[0]); err != nil {
 		return err
 	}
-	fmt.Fprintf(c.out, "папка игры: %s\n", c.manager().GameDir())
+	i18n.Fprintf(c.out, "папка игры: %s\n", c.manager().GameDir())
 	return nil
 }
 
@@ -602,20 +603,20 @@ func (c *cli) adopt(args []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(c.out, "Хранилище Vortex: %s\n", rep.Staging)
-	fmt.Fprintf(c.out, "Модов: %d, развёрнуто: %d, файлов в игре: %d\n", rep.Mods, rep.Enabled, rep.Files)
-	fmt.Fprintf(c.out, "Победителей конфликтов, закреплённых как у Vortex: %d\n", rep.Pinned)
-	fmt.Fprintf(c.out, "Сохранённых оригиналов файлов игры: %d\n", rep.Originals)
+	i18n.Fprintf(c.out, "Хранилище Vortex: %s\n", rep.Staging)
+	i18n.Fprintf(c.out, "Модов: %d, развёрнуто: %d, файлов в игре: %d\n", rep.Mods, rep.Enabled, rep.Files)
+	i18n.Fprintf(c.out, "Победителей конфликтов, закреплённых как у Vortex: %d\n", rep.Pinned)
+	i18n.Fprintf(c.out, "Сохранённых оригиналов файлов игры: %d\n", rep.Originals)
 	if len(rep.Others) > 0 {
-		fmt.Fprintf(c.out, "Перестанут учитываться: %s\n", strings.Join(rep.Others, ", "))
+		i18n.Fprintf(c.out, "Перестанут учитываться: %s\n", strings.Join(rep.Others, ", "))
 	}
 	for _, p := range rep.Problems {
 		fmt.Fprintf(c.out, "!  %s\n", p)
 	}
 	if dry {
-		fmt.Fprintln(c.out, "\nНичего не изменено (--dry-run). Файлы игры при усыновлении не меняются.")
+		fmt.Fprintln(c.out, i18n.T("\nНичего не изменено (--dry-run). Файлы игры при усыновлении не меняются."))
 	} else {
-		fmt.Fprintln(c.out, "\nУправление перенято. Вернуть Vortex: modvault release")
+		fmt.Fprintln(c.out, i18n.T("\nУправление перенято. Вернуть Vortex: modvault release"))
 	}
 	return nil
 }
@@ -630,10 +631,10 @@ func (c *cli) release(args []string) error {
 		return err
 	}
 	if dry {
-		fmt.Fprintf(c.out, "Изменится файлов в игре: %d. Ничего не изменено (--dry-run)\n", rep.Changes)
+		i18n.Fprintf(c.out, "Изменится файлов в игре: %d. Ничего не изменено (--dry-run)\n", rep.Changes)
 		return nil
 	}
-	fmt.Fprintf(c.out, "Управление возвращено Vortex (хранилище %s). Моды остались в хранилище Modvault\n", rep.Staging)
+	i18n.Fprintf(c.out, "Управление возвращено Vortex (хранилище %s). Моды остались в хранилище Modvault\n", rep.Staging)
 	return nil
 }
 
@@ -641,7 +642,7 @@ func (c *cli) play(args []string) error {
 	if err := c.manager().Play(); err != nil {
 		return err
 	}
-	fmt.Fprintln(c.out, "игра запускается")
+	fmt.Fprintln(c.out, i18n.T("игра запускается"))
 	return nil
 }
 
@@ -654,34 +655,34 @@ func (c *cli) nexus(args []string) error {
 	switch args[0] {
 	case "status":
 		if user := m.NexusUser(); user != "" {
-			fmt.Fprintf(c.out, "ключ Nexus сохранён: %s\n", user)
+			i18n.Fprintf(c.out, "ключ Nexus сохранён: %s\n", user)
 		} else {
-			fmt.Fprintln(c.out, "ключ Nexus не задан: modvault nexus login")
+			fmt.Fprintln(c.out, i18n.T("ключ Nexus не задан: modvault nexus login"))
 		}
 		return nil
 	case "login":
-		fmt.Fprint(c.out, "Ключ API (nexusmods.com → Site preferences → API Access → Personal API Key): ")
+		fmt.Fprint(c.out, i18n.T("Ключ API (nexusmods.com → Site preferences → API Access → Personal API Key): "))
 		key, err := bufio.NewReader(stdin).ReadString('\n')
 		if err != nil && key == "" {
-			return errors.New("ключ не введён")
+			return i18n.NewError("ключ не введён")
 		}
 		if _, err := m.NexusLogin(ctx, key); err != nil {
 			return err
 		}
-		fmt.Fprintf(c.out, "ключ принят и сохранён: %s\n", m.NexusUser())
+		i18n.Fprintf(c.out, "ключ принят и сохранён: %s\n", m.NexusUser())
 		return nil
 	case "logout":
 		if _, err := m.NexusLogout(); err != nil {
 			return err
 		}
-		fmt.Fprintln(c.out, "ключ Nexus забыт")
+		fmt.Fprintln(c.out, i18n.T("ключ Nexus забыт"))
 		return nil
 	case "check":
 		rep, err := m.CheckUpdates(ctx, func(p manager.CheckProgress) {
 			done, total := p.Done, p.Total
 			// Строка на каждые 20 модов: видно, что проверка идёт.
 			if p.Finished && done%20 == 0 && done < total {
-				fmt.Fprintf(c.out, "проверено %d из %d…\n", done, total)
+				i18n.Fprintf(c.out, "проверено %d из %d…\n", done, total)
 			}
 		})
 		if err != nil {
@@ -695,7 +696,7 @@ func (c *cli) nexus(args []string) error {
 		fmt.Fprintln(c.out, rep.Message)
 		return nil
 	case "get":
-		if err := c.need("nexus get", args[1:], 1, "<ссылка nxm>"); err != nil {
+		if err := c.need("nexus get", args[1:], 1, i18n.T("<ссылка nxm>")); err != nil {
 			return err
 		}
 		shown := int64(-1)
@@ -726,10 +727,10 @@ func (c *cli) nexus(args []string) error {
 				n++
 			}
 		}
-		fmt.Fprintf(c.out, "одобрено модов: %d (список обновляет modvault nexus check)\n", n)
+		i18n.Fprintf(c.out, "одобрено модов: %d (список обновляет modvault nexus check)\n", n)
 		return nil
 	case "collection":
-		if err := c.need("nexus collection", args[1:], 1, "<ссылка или код>"); err != nil {
+		if err := c.need("nexus collection", args[1:], 1, i18n.T("<ссылка или код>")); err != nil {
 			return err
 		}
 		res, err := m.ImportCollection(ctx, args[1])
@@ -738,11 +739,11 @@ func (c *cli) nexus(args []string) error {
 		}
 		fmt.Fprintln(c.out, res.Message)
 		for _, miss := range res.Missing {
-			fmt.Fprintf(c.out, "  нет: %s %s  %s\n", miss.Name, miss.Version, miss.URL)
+			i18n.Fprintf(c.out, "  нет: %s %s  %s\n", miss.Name, miss.Version, miss.URL)
 		}
 		return nil
 	case "endorse", "abstain":
-		if err := c.need("nexus "+args[0], args[1:], 1, "<мод>"); err != nil {
+		if err := c.need("nexus "+args[0], args[1:], 1, i18n.T("<мод>")); err != nil {
 			return err
 		}
 		res, err := m.Endorse(ctx, args[1], args[0] == "endorse")
@@ -752,6 +753,6 @@ func (c *cli) nexus(args []string) error {
 		fmt.Fprintln(c.out, res.Message)
 		return nil
 	}
-	fmt.Fprintf(c.errOut, "неизвестная команда Nexus: %s\n", args[0])
+	i18n.Fprintf(c.errOut, "неизвестная команда Nexus: %s\n", args[0])
 	return errUsage
 }

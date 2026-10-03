@@ -15,6 +15,7 @@ import (
 
 	"github.com/zemidala/modvault/core/archive"
 	"github.com/zemidala/modvault/core/fsx"
+	"github.com/zemidala/modvault/i18n"
 )
 
 // Раскладка хранилища:
@@ -34,7 +35,7 @@ const (
 )
 
 // ErrInvalidID — идентификатор мода или версии не годится в имя папки.
-var ErrInvalidID = errors.New("недопустимый идентификатор")
+var ErrInvalidID = i18n.NewError("недопустимый идентификатор")
 
 // File — файл версии мода.
 type File struct {
@@ -159,7 +160,7 @@ func (s *Store) FilesDir(modID, versionID string) string {
 func (s *Store) Add(archivePath string, info Info) (Version, error) {
 	modID := Slug(info.Name)
 	if err := checkID(modID); err != nil {
-		return Version{}, fmt.Errorf("название мода %q: %w", info.Name, err)
+		return Version{}, i18n.Errorf("название мода %q: %w", info.Name, err)
 	}
 	format, err := archive.Detect(archivePath)
 	if err != nil {
@@ -176,11 +177,11 @@ func (s *Store) Add(archivePath string, info Info) (Version, error) {
 		versionID = strings.TrimPrefix(archiveHash.String(), "sha256:")[:12]
 	}
 	if err := checkID(versionID); err != nil {
-		return Version{}, fmt.Errorf("версия %q: %w", info.Version, err)
+		return Version{}, i18n.Errorf("версия %q: %w", info.Version, err)
 	}
 	final := s.versionDir(modID, versionID)
 	if _, err := os.Stat(final); err == nil {
-		return Version{}, fmt.Errorf("%s версии %s: %w", info.Name, versionID, fs.ErrExist)
+		return Version{}, i18n.Errorf("%s версии %s: %w", info.Name, versionID, fs.ErrExist)
 	}
 
 	stage, err := os.MkdirTemp(filepath.Join(s.root, tmpDir), "add-")
@@ -204,7 +205,7 @@ func (s *Store) Add(archivePath string, info Info) (Version, error) {
 		return Version{}, err
 	}
 	if len(entries) == 0 {
-		return Version{}, fmt.Errorf("%s: в архиве нет файлов", filepath.Base(archivePath))
+		return Version{}, i18n.Errorf("%s: в архиве нет файлов", filepath.Base(archivePath))
 	}
 	paths := make([]string, len(entries))
 	for i, e := range entries {
@@ -250,10 +251,10 @@ func (s *Store) finish(stage, final string, v Version, paths []string) (Version,
 func (s *Store) AddFiles(root string, files []string, info Info) (Version, error) {
 	modID := Slug(info.Name)
 	if err := checkID(modID); err != nil {
-		return Version{}, fmt.Errorf("название мода %q: %w", info.Name, err)
+		return Version{}, i18n.Errorf("название мода %q: %w", info.Name, err)
 	}
 	if len(files) == 0 {
-		return Version{}, fmt.Errorf("%s: нет файлов", info.Name)
+		return Version{}, i18n.Errorf("%s: нет файлов", info.Name)
 	}
 	sorted := append([]string(nil), files...)
 	sort.Strings(sorted)
@@ -277,12 +278,12 @@ func (s *Store) AddFiles(root string, files []string, info Info) (Version, error
 		versionID = strings.TrimPrefix(fingerprint.String(), "sha256:")[:12]
 	}
 	if err := checkID(versionID); err != nil {
-		return Version{}, fmt.Errorf("версия %q: %w", info.Version, err)
+		return Version{}, i18n.Errorf("версия %q: %w", info.Version, err)
 	}
 	final := s.versionDir(modID, versionID)
 	if _, err := os.Stat(final); err == nil {
 		// Вызывающему нужно знать, какая версия уже есть.
-		return Version{ModID: modID, ID: versionID}, fmt.Errorf("%s версии %s: %w", info.Name, versionID, fs.ErrExist)
+		return Version{ModID: modID, ID: versionID}, i18n.Errorf("%s версии %s: %w", info.Name, versionID, fs.ErrExist)
 	}
 
 	stage, err := os.MkdirTemp(filepath.Join(s.root, tmpDir), "add-")
@@ -338,7 +339,7 @@ func (s *Store) readMeta(modID, versionID string) (Version, error) {
 		return Version{}, fmt.Errorf("%s: %w", path, err)
 	}
 	if v.ModID != modID || v.ID != versionID {
-		return Version{}, fmt.Errorf("%s: описание относится к %s/%s", path, v.ModID, v.ID)
+		return Version{}, i18n.Errorf("%s: описание относится к %s/%s", path, v.ModID, v.ID)
 	}
 	// Только что записанное описание не запоминается: правка в тот же миг
 	// не изменила бы ни времени, ни размера.
@@ -462,11 +463,11 @@ func (s *Store) Verify(modID, versionID string) ([]Problem, error) {
 		hash, _, err := fsx.HashFile(filepath.Join(root, filepath.FromSlash(f.Path)))
 		switch {
 		case errors.Is(err, fs.ErrNotExist):
-			problems = append(problems, Problem{f.Path, "пропал"})
+			problems = append(problems, Problem{f.Path, i18n.T("пропал")})
 		case err != nil:
 			return nil, err
 		case hash != f.Hash:
-			problems = append(problems, Problem{f.Path, "изменён"})
+			problems = append(problems, Problem{f.Path, i18n.T("изменён")})
 		}
 	}
 
@@ -479,7 +480,7 @@ func (s *Store) Verify(modID, versionID string) ([]Problem, error) {
 			return err
 		}
 		if rel = filepath.ToSlash(rel); !known[rel] {
-			problems = append(problems, Problem{rel, "лишний"})
+			problems = append(problems, Problem{rel, i18n.T("лишний")})
 		}
 		return nil
 	})

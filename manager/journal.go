@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/zemidala/modvault/core/fsx"
+	"github.com/zemidala/modvault/i18n"
 )
 
 // Журнал действий: что программа сделала с модами и игрой и что не
@@ -178,7 +179,7 @@ func (a *Manager) startDownload(modID, fileID int) *Download {
 	a.downloadSeq++
 	d := &Download{
 		Seq: a.downloadSeq, ModID: modID, FileID: fileID,
-		Name: "Мод " + itoa(modID), State: DownloadActive, Started: time.Now().UTC(),
+		Name: i18n.T("Мод ") + itoa(modID), State: DownloadActive, Started: time.Now().UTC(),
 	}
 	a.downloads = append(a.downloads, d)
 	if len(a.downloads) > maxDownloads {
@@ -217,7 +218,7 @@ func (a *Manager) finishDownload(d *Download, message string, err error) {
 	d.Speed = 0
 	if err != nil {
 		d.State, d.Message = DownloadFailed, err.Error()
-		a.noteError("Загрузка «"+d.Name+"»", err)
+		a.noteError(i18n.Sprintf("Загрузка «%s»", d.Name), err)
 		return
 	}
 	d.State, d.Message = DownloadDone, message

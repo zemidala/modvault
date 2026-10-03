@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/zemidala/modvault/core/fsx"
 	"github.com/zemidala/modvault/game"
+	"github.com/zemidala/modvault/i18n"
 )
 
 const (
@@ -56,8 +56,8 @@ func InspectBundle(data []byte) PatchState {
 // или пусто, если класть её не нужно.
 func (d *Darktide) bundle(ctx game.Context) (string, *game.Notice, error) {
 	if autopatch(ctx) {
-		return "", &game.Notice{Level: game.Info, Title: "Базу бандлов патчит автопатчер DML",
-			Detail: "Modvault её не трогает"}, nil
+		return "", &game.Notice{Level: game.Info, Title: i18n.T("Базу бандлов патчит автопатчер DML"),
+			Detail: i18n.T("Modvault её не трогает")}, nil
 	}
 
 	original, err := ctx.Original(bundleDBPath)
@@ -70,11 +70,11 @@ func (d *Darktide) bundle(ctx game.Context) (string, *game.Notice, error) {
 	}
 	switch InspectBundle(data) {
 	case PatchedDtkit, PatchedAuto:
-		return "", &game.Notice{Level: game.Warn, Title: "База бандлов уже пропатчена другим инструментом",
-			Detail: "Modvault оставит её как есть. Чтобы патчем управлял Modvault, снимите чужой патч (toggle_darktide_mods.bat)"}, nil
+		return "", &game.Notice{Level: game.Warn, Title: i18n.T("База бандлов уже пропатчена другим инструментом"),
+			Detail: i18n.T("Modvault оставит её как есть. Чтобы патчем управлял Modvault, снимите чужой патч (toggle_darktide_mods.bat)")}, nil
 	case UnknownFormat:
-		return "", &game.Notice{Level: game.Error, Title: "Не удалось пропатчить базу бандлов",
-			Detail: "В ней нет ожидаемой записи — вероятно, игра обновилась и формат изменился. Моды не загрузятся, пока DML не выпустит обновление"}, nil
+		return "", &game.Notice{Level: game.Error, Title: i18n.T("Не удалось пропатчить базу бандлов"),
+			Detail: i18n.T("В ней нет ожидаемой записи — вероятно, игра обновилась и формат изменился. Моды не загрузятся, пока DML не выпустит обновление")}, nil
 	}
 
 	// Пропатченная копия зависит только от оригинала: собираем её один раз.
@@ -98,15 +98,15 @@ func (d *Darktide) bundle(ctx game.Context) (string, *game.Notice, error) {
 		patch = dtkitPatch
 	}
 	if err := patch(ctx.Dir, work); err != nil {
-		return "", &game.Notice{Level: game.Error, Title: "Не удалось пропатчить базу бандлов", Detail: err.Error()}, nil
+		return "", &game.Notice{Level: game.Error, Title: i18n.T("Не удалось пропатчить базу бандлов"), Detail: err.Error()}, nil
 	}
 	result, err := os.ReadFile(target)
 	if err != nil {
 		return "", nil, err
 	}
 	if InspectBundle(result) != PatchedDtkit {
-		return "", &game.Notice{Level: game.Error, Title: "Не удалось пропатчить базу бандлов",
-			Detail: "Патчер отработал, но патча в файле нет"}, nil
+		return "", &game.Notice{Level: game.Error, Title: i18n.T("Не удалось пропатчить базу бандлов"),
+			Detail: i18n.T("Патчер отработал, но патча в файле нет")}, nil
 	}
 	if err := fsx.WriteFile(out, result); err != nil {
 		return "", nil, err
@@ -137,7 +137,7 @@ func autopatch(ctx game.Context) bool {
 func dtkitPatch(gameDir, dir string) error {
 	exe := filepath.Join(gameDir, filepath.FromSlash(dtkitPath))
 	if _, err := os.Stat(exe); err != nil {
-		return errors.New("в игре нет tools/dtkit-patch.exe: он приходит вместе с DML, разверните DML")
+		return i18n.NewError("в игре нет tools/dtkit-patch.exe: он приходит вместе с DML, разверните DML")
 	}
 	cmd := exec.Command(exe, "--patch", dir)
 	cmd.SysProcAttr = hiddenWindow()

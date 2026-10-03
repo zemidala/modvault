@@ -14,6 +14,7 @@ import (
 	"github.com/zemidala/modvault/core/fsx"
 	"github.com/zemidala/modvault/core/profile"
 	"github.com/zemidala/modvault/game"
+	"github.com/zemidala/modvault/i18n"
 	"github.com/zemidala/modvault/rules"
 )
 
@@ -205,7 +206,7 @@ func (a *Manager) bisectStatus() *BisectStatus {
 
 // errBisecting — пока идёт поиск, набором модов распоряжается он: ручная
 // правка сделала бы ответы пользователя ответами о других модах.
-var errBisecting = errors.New("идёт поиск сбойного мода: сначала закончите или прервите его")
+var errBisecting = i18n.NewError("идёт поиск сбойного мода: сначала закончите или прервите его")
 
 // bisecting возвращает errBisecting, если поиск идёт.
 func (a *Manager) bisecting() error {
@@ -230,26 +231,26 @@ func (a *Manager) BisectStatus() *BisectStatus {
 func (a *Manager) bisectHint(b *bisect, st *BisectStatus) {
 	rep, ok := a.game.LastRun()
 	if b.Since.IsZero() || !ok || !rep.Time.After(b.Since) {
-		st.Hint = "После этого шага игра ещё не запускалась"
+		st.Hint = i18n.T("После этого шага игра ещё не запускалась")
 		return
 	}
 	st.Ran, st.Crashed = true, rep.Crashed
 	if rep.Crashed {
-		st.Hint = "По журналу игры запуск после этого шага закончился сбоем. " + crashReason(rep)
+		st.Hint = i18n.T("По журналу игры запуск после этого шага закончился сбоем. ") + crashReason(rep)
 		// Нехватка памяти от набора модов не зависит: ответ не подсказываем.
 		if !strings.EqualFold(rep.CrashKind, "memory") {
 			st.Suggest = "problem"
 		}
 		return
 	}
-	st.Hint = "По журналу игры сбоя после этого шага не было"
+	st.Hint = i18n.T("По журналу игры сбоя после этого шага не было")
 	p, _, err := a.loadProfile()
 	if err != nil {
 		return
 	}
 	troubles, _ := a.runDiagnosis(p)
 	if len(troubles) == 0 {
-		st.Hint += ", ошибок включённых модов тоже нет"
+		st.Hint += i18n.T(", ошибок включённых модов тоже нет")
 		st.Suggest = "ok"
 		return
 	}
@@ -259,7 +260,7 @@ func (a *Manager) bisectHint(b *bisect, st *BisectStatus) {
 		noisy = append(noisy, fmt.Sprintf("«%s» — %d", names(id), t.count))
 	}
 	sort.Strings(noisy)
-	st.Hint += ", но моды выдали ошибки: " + strings.Join(noisy, ", ")
+	st.Hint += i18n.T(", но моды выдали ошибки: ") + strings.Join(noisy, ", ")
 }
 
 // StartBisect начинает поиск среди включённых модов текущего набора.
@@ -267,17 +268,17 @@ func (a *Manager) StartBisect() (BisectResult, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if a.deployer == nil || a.deployErr != nil {
-		return BisectResult{}, errors.Join(errors.New("сначала выберите папку игры"), a.deployErr)
+		return BisectResult{}, errors.Join(i18n.NewError("сначала выберите папку игры"), a.deployErr)
 	}
 	if managers := a.managers(); len(managers) > 0 {
-		return BisectResult{}, fmt.Errorf("игрой управляет %s: Modvault не может включать и выключать моды в игре", strings.Join(managers, " и "))
+		return BisectResult{}, i18n.Errorf("игрой управляет %s: Modvault не может включать и выключать моды в игре", strings.Join(managers, i18n.T(" и ")))
 	}
 	p, _, err := a.loadProfile()
 	if err != nil {
 		return BisectResult{}, err
 	}
 	if p.Name == BisectSet {
-		return BisectResult{}, errors.New("поиск уже идёт: ответьте, осталась ли проблема, или прервите его")
+		return BisectResult{}, i18n.NewError("поиск уже идёт: ответьте, осталась ли проблема, или прервите его")
 	}
 	var suspects []string
 	for _, e := range p.Entries {
@@ -294,7 +295,7 @@ func (a *Manager) StartBisect() (BisectResult, error) {
 		}
 	}
 	if len(suspects) < 2 {
-		return BisectResult{}, errors.New("в наборе меньше двух включённых модов: искать не из чего")
+		return BisectResult{}, i18n.NewError("в наборе меньше двух включённых модов: искать не из чего")
 	}
 	if suspects, err = a.requiredFirst(p, suspects); err != nil {
 		return BisectResult{}, err
@@ -302,7 +303,7 @@ func (a *Manager) StartBisect() (BisectResult, error) {
 	if err := a.profiles.Save(p); err != nil { // к этому набору вернёмся в конце
 		return BisectResult{}, err
 	}
-	a.note(EventSet, fmt.Sprintf("Начат поиск сбойного мода в наборе «%s»: подозреваемых %d", p.Name, len(suspects)))
+	a.note(EventSet, i18n.Sprintf("Начат поиск сбойного мода в наборе «%s»: подозреваемых %d", p.Name, len(suspects)))
 	return a.bisectNext(&bisect{Origin: p.Name, Suspects: suspects, Pool: suspects, Kind: bisectBase, Known: map[string]bool{}})
 }
 
@@ -385,7 +386,7 @@ func testKey(tested []string) string {
 func (a *Manager) bisectNext(b *bisect) (BisectResult, error) {
 	origin, err := a.profiles.Load(b.Origin)
 	if err != nil {
-		return BisectResult{}, fmt.Errorf("набор «%s», с которого начат поиск, не найден", b.Origin)
+		return BisectResult{}, i18n.Errorf("набор «%s», с которого начат поиск, не найден", b.Origin)
 	}
 	names := a.modNames()
 	for {
@@ -394,13 +395,13 @@ func (a *Manager) bisectNext(b *bisect) (BisectResult, error) {
 		switch b.Kind {
 		case bisectBase:
 			enable = b.Found
-			msg = "моды набора выключены, в игре только загрузчик модов и фреймворк"
+			msg = i18n.T("моды набора выключены, в игре только загрузчик модов и фреймворк")
 			if len(b.Found) > 0 {
-				msg = "контрольный — включены только " + quoteNames(names, b.Found)
+				msg = i18n.T("контрольный — включены только ") + quoteNames(names, b.Found)
 			}
 		case bisectVerify:
 			enable = b.Suspects
-			msg = "включены все моды набора — проверка, что проблема повторяется"
+			msg = i18n.T("включены все моды набора — проверка, что проблема повторяется")
 		default:
 			if b.Hi-b.Lo <= 1 && !b.Proven {
 				// Проблема ни разу не повторилась на глазах у поиска, и
@@ -420,7 +421,7 @@ func (a *Manager) bisectNext(b *bisect) (BisectResult, error) {
 			}
 			mid := (b.Lo + b.Hi) / 2
 			enable = append(append([]string(nil), b.Found...), b.Pool[:mid]...)
-			msg = fmt.Sprintf("включено %d из %d подозреваемых", mid, len(b.Pool))
+			msg = i18n.Sprintf("включено %d из %d подозреваемых", mid, len(b.Pool))
 		}
 		next, tested, err := a.half(origin, b.Suspects, enable)
 		if err != nil {
@@ -432,7 +433,7 @@ func (a *Manager) bisectNext(b *bisect) (BisectResult, error) {
 			}
 			continue
 		}
-		msg = fmt.Sprintf("Шаг %d: %s. Запустите игру, проверьте и ответьте, осталась ли проблема", b.Step+1, msg)
+		msg = i18n.Sprintf("Шаг %d: %s. Запустите игру, проверьте и ответьте, осталась ли проблема", b.Step+1, msg)
 		return a.bisectDeploy(b, next, tested, msg)
 	}
 }
@@ -505,7 +506,7 @@ func (a *Manager) BisectAnswer(problem bool) (BisectResult, error) {
 		return BisectResult{}, err
 	}
 	if b == nil || a.profileName() != BisectSet {
-		return BisectResult{}, errors.New("поиск сбойного мода не идёт")
+		return BisectResult{}, i18n.NewError("поиск сбойного мода не идёт")
 	}
 	b.Known[testKey(b.Testing)] = problem
 	if outcome := b.answer(problem); outcome != "" {
@@ -523,11 +524,11 @@ func (a *Manager) CancelBisect() (BisectResult, error) {
 		return BisectResult{}, err
 	}
 	if b == nil {
-		return BisectResult{}, errors.New("поиск сбойного мода не идёт")
+		return BisectResult{}, i18n.NewError("поиск сбойного мода не идёт")
 	}
 	res, err := a.endBisect(b)
 	res.Done = false // прерван, а не закончен: итога нет
-	res.Message = fmt.Sprintf("Поиск прерван. Возвращён набор «%s»", b.Origin)
+	res.Message = i18n.Sprintf("Поиск прерван. Возвращён набор «%s»", b.Origin)
 	a.note(EventSet, res.Message)
 	return res, err
 }
@@ -548,7 +549,7 @@ func (a *Manager) endBisect(b *bisect) (BisectResult, error) {
 func quoteNames(names func(string) string, ids []string) string {
 	list := make([]string, len(ids))
 	for i, id := range ids {
-		list[i] = "«" + names(id) + "»"
+		list[i] = i18n.Quote(names(id))
 	}
 	return strings.Join(list, ", ")
 }
@@ -562,14 +563,14 @@ func (a *Manager) finishBisect(b *bisect, outcome string) (BisectResult, error) 
 	}
 	switch outcome {
 	case outcomeNotMods:
-		res.Message = "Проблема осталась и без модов набора: в игре были только загрузчик модов и фреймворк. " +
-			"Дело не в модах набора — в самой игре, загрузчике или фреймворке."
+		res.Message = i18n.T("Проблема осталась и без модов набора: в игре были только загрузчик модов и фреймворк. " +
+			"Дело не в модах набора — в самой игре, загрузчике или фреймворке.")
 	case outcomeUnstable:
-		res.Message = "Проблема повторяется не каждый раз: с одним и тем же составом модов она то есть, то нет. " +
-			"Делением такую не найти — поиск остановлен, никто не обвинён."
+		res.Message = i18n.T("Проблема повторяется не каждый раз: с одним и тем же составом модов она то есть, то нет. " +
+			"Делением такую не найти — поиск остановлен, никто не обвинён.")
 		if !b.Proven {
-			res.Message = "С полным набором модов проблема не повторилась. Она проявляется не каждый раз, " +
-				"и делением такую не найти — поиск остановлен, никто не обвинён."
+			res.Message = i18n.T("С полным набором модов проблема не повторилась. Она проявляется не каждый раз, " +
+				"и делением такую не найти — поиск остановлен, никто не обвинён.")
 		}
 	default:
 		for _, id := range b.Found {
@@ -577,13 +578,13 @@ func (a *Manager) finishBisect(b *bisect, outcome string) (BisectResult, error) 
 		}
 		if len(b.Found) == 1 {
 			res.Culprit, res.CulpritName = b.Found[0], names(b.Found[0])
-			res.Message = fmt.Sprintf("Найден сбойный мод: «%s» (шагов: %d).", res.CulpritName, b.Step)
+			res.Message = i18n.Sprintf("Найден сбойный мод: «%s» (шагов: %d).", res.CulpritName, b.Step)
 		} else {
-			res.Message = fmt.Sprintf("Проблему вызывает сочетание модов: %s (шагов: %d). Она повторяется, когда включены только они, и пропадает без любого из них.",
+			res.Message = i18n.Sprintf("Проблему вызывает сочетание модов: %s (шагов: %d). Она повторяется, когда включены только они, и пропадает без любого из них.",
 				quoteNames(names, b.Found), b.Step)
 		}
 	}
-	res.Message += fmt.Sprintf(" Возвращён набор «%s»", b.Origin)
+	res.Message += i18n.Sprintf(" Возвращён набор «%s»", b.Origin)
 	a.note(EventSet, res.Message)
 	return res, nil
 }

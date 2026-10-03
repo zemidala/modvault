@@ -2,9 +2,9 @@
 
 package nexus
 
-import "errors"
+import "github.com/zemidala/modvault/i18n"
 
-var errUnsupported = errors.New("поддерживается только в Windows")
+var errUnsupported = i18n.NewError("поддерживается только в Windows")
 
 type credential struct{ target string }
 

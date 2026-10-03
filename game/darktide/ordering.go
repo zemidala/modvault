@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/zemidala/modvault/game"
+	"github.com/zemidala/modvault/i18n"
 	"github.com/zemidala/modvault/rules"
 )
 
@@ -59,7 +60,7 @@ func ParseModRules(folder string, modFile []byte) []rules.Rule {
 	var out []rules.Rule
 	for _, m := range modRuleField.FindAllStringSubmatch(stripLuaComments(modFile), -1) {
 		for _, other := range luaStrings(m[2]) {
-			out = append(out, rules.Rule{Kind: ruleKinds[m[1]], Mod: folder, Other: other, Source: "файл " + folder + ".mod"})
+			out = append(out, rules.Rule{Kind: ruleKinds[m[1]], Mod: folder, Other: other, Source: i18n.T("файл ") + folder + ".mod"})
 		}
 	}
 	return out
@@ -86,7 +87,7 @@ func ParseLoaderPresets(script []byte) []rules.Rule {
 				others = lists[e[4]]
 			}
 			for _, other := range others {
-				out = append(out, rules.Rule{Kind: kind, Mod: mod, Other: other, Source: "загрузчик модов"})
+				out = append(out, rules.Rule{Kind: kind, Mod: mod, Other: other, Source: i18n.T("загрузчик модов")})
 			}
 		}
 	}

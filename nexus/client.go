@@ -13,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/zemidala/modvault/i18n"
 )
 
 // Адреса, заголовки и поля ответов сверены с официальным клиентом Nexus
@@ -29,16 +31,16 @@ const DefaultGraph = "https://api.nexusmods.com/v2/graphql"
 
 var (
 	// ErrNoKey — ключ API не задан.
-	ErrNoKey = errors.New("ключ Nexus не задан")
+	ErrNoKey = i18n.NewError("ключ Nexus не задан")
 	// ErrUnauthorized — Nexus не принял ключ.
-	ErrUnauthorized = errors.New("Nexus не принял ключ")
+	ErrUnauthorized = i18n.NewError("Nexus не принял ключ")
 	// ErrForbidden — действие недоступно этой учётной записи (например,
 	// прямая загрузка без Premium) или ссылка с сайта устарела.
-	ErrForbidden = errors.New("Nexus отказал")
+	ErrForbidden = i18n.NewError("Nexus отказал")
 	// ErrNotFound — такого мода или файла на Nexus нет.
-	ErrNotFound = errors.New("на Nexus не найдено")
+	ErrNotFound = i18n.NewError("на Nexus не найдено")
 	// ErrRateLimited — исчерпан лимит запросов.
-	ErrRateLimited = errors.New("лимит запросов к Nexus исчерпан")
+	ErrRateLimited = i18n.NewError("лимит запросов к Nexus исчерпан")
 )
 
 // Limits — сколько запросов осталось, по заголовкам последнего ответа.
@@ -131,18 +133,18 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 		if errors.As(err, &uerr) {
 			err = uerr.Err
 		}
-		return fmt.Errorf("Nexus недоступен: %w", err)
+		return i18n.Errorf("Nexus недоступен: %w", err)
 	}
 	defer resp.Body.Close()
 	c.remember(resp.Header)
 
 	answer, err := io.ReadAll(io.LimitReader(resp.Body, 32<<20))
 	if err != nil {
-		return fmt.Errorf("Nexus недоступен: %w", err)
+		return i18n.Errorf("Nexus недоступен: %w", err)
 	}
 	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusCreated {
 		if err := json.Unmarshal(answer, out); err != nil {
-			return fmt.Errorf("непонятный ответ Nexus: %w", err)
+			return i18n.Errorf("непонятный ответ Nexus: %w", err)
 		}
 		return nil
 	}
@@ -167,7 +169,7 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 	case http.StatusTooManyRequests:
 		return ErrRateLimited
 	}
-	return detail(fmt.Errorf("Nexus ответил %s", resp.Status))
+	return detail(i18n.Errorf("Nexus ответил %s", resp.Status))
 }
 
 // User — владелец ключа.
@@ -251,12 +253,12 @@ func (c *Client) graph(ctx context.Context, query string, vars map[string]any, o
 		if errors.As(err, &uerr) {
 			err = uerr.Err
 		}
-		return fmt.Errorf("Nexus недоступен: %w", err)
+		return i18n.Errorf("Nexus недоступен: %w", err)
 	}
 	defer resp.Body.Close()
 	answer, err := io.ReadAll(io.LimitReader(resp.Body, 32<<20))
 	if err != nil {
-		return fmt.Errorf("Nexus недоступен: %w", err)
+		return i18n.Errorf("Nexus недоступен: %w", err)
 	}
 	switch resp.StatusCode {
 	case http.StatusOK:
@@ -265,7 +267,7 @@ func (c *Client) graph(ctx context.Context, query string, vars map[string]any, o
 	case http.StatusTooManyRequests:
 		return ErrRateLimited
 	default:
-		return fmt.Errorf("Nexus ответил %s", resp.Status)
+		return i18n.Errorf("Nexus ответил %s", resp.Status)
 	}
 	var reply struct {
 		Data   json.RawMessage `json:"data"`
@@ -277,7 +279,7 @@ func (c *Client) graph(ctx context.Context, query string, vars map[string]any, o
 		} `json:"errors"`
 	}
 	if err := json.Unmarshal(answer, &reply); err != nil {
-		return fmt.Errorf("непонятный ответ Nexus: %w", err)
+		return i18n.Errorf("непонятный ответ Nexus: %w", err)
 	}
 	if len(reply.Errors) > 0 {
 		if reply.Errors[0].Extensions.Code == "NOT_FOUND" {
@@ -286,7 +288,7 @@ func (c *Client) graph(ctx context.Context, query string, vars map[string]any, o
 		return fmt.Errorf("%w: %s", ErrForbidden, reply.Errors[0].Message)
 	}
 	if err := json.Unmarshal(reply.Data, out); err != nil {
-		return fmt.Errorf("непонятный ответ Nexus: %w", err)
+		return i18n.Errorf("непонятный ответ Nexus: %w", err)
 	}
 	return nil
 }
@@ -308,7 +310,7 @@ func (c *Client) SendMessage(ctx context.Context, to int, title, body string) er
 		return err
 	}
 	if !out.CreateMessage.Success {
-		return errors.New("Nexus не принял сообщение")
+		return i18n.NewError("Nexus не принял сообщение")
 	}
 	return nil
 }
@@ -451,7 +453,7 @@ func (c *Client) DownloadLinks(ctx context.Context, game string, modID, fileID i
 		}
 	}
 	if len(out) == 0 {
-		return nil, errors.New("Nexus не дал ссылок на файл")
+		return nil, i18n.NewError("Nexus не дал ссылок на файл")
 	}
 	return out, nil
 }

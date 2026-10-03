@@ -14,6 +14,7 @@ import (
 	"github.com/zemidala/modvault/core/deploy"
 	"github.com/zemidala/modvault/core/fsx"
 	"github.com/zemidala/modvault/core/store"
+	"github.com/zemidala/modvault/i18n"
 	"github.com/zemidala/modvault/internal/version"
 	"github.com/zemidala/modvault/nexus"
 )
@@ -29,7 +30,7 @@ const (
 )
 
 // errNoNexusKey — ключ ещё не введён.
-var errNoNexusKey = errors.New("ключ Nexus не задан: щёлкните «Nexus» в строке состояния или выполните modvault nexus login")
+var errNoNexusKey = i18n.NewError("ключ Nexus не задан: щёлкните «Nexus» в строке состояния или выполните modvault nexus login")
 
 // client возвращает клиента Nexus с сохранённым ключом.
 func (a *Manager) client() (*nexus.Client, error) {
@@ -38,7 +39,7 @@ func (a *Manager) client() (*nexus.Client, error) {
 	}
 	key, err := a.keys.Load()
 	if err != nil {
-		return nil, fmt.Errorf("ключ Nexus не прочитан: %w", err)
+		return nil, i18n.Errorf("ключ Nexus не прочитан: %w", err)
 	}
 	if key == "" {
 		return nil, errNoNexusKey
@@ -62,7 +63,7 @@ func newClient(base, key string) *nexus.Client {
 func (a *Manager) domain() (string, error) {
 	d := a.game.NexusDomain()
 	if d == "" {
-		return "", fmt.Errorf("модов %s на Nexus нет", a.game.Name())
+		return "", i18n.Errorf("модов %s на Nexus нет", a.game.Name())
 	}
 	return d, nil
 }
@@ -78,7 +79,7 @@ func (a *Manager) NexusUser() string {
 func (a *Manager) NexusLogin(ctx context.Context, key string) (State, error) {
 	key = strings.TrimSpace(key)
 	if key == "" {
-		return State{}, errors.New("ключ пуст")
+		return State{}, i18n.NewError("ключ пуст")
 	}
 	a.mu.Lock()
 	base := a.nexusBase
@@ -96,7 +97,7 @@ func (a *Manager) NexusLogin(ctx context.Context, key string) (State, error) {
 		return State{}, a.openErr
 	}
 	if err := a.keys.Save(key); err != nil {
-		return State{}, fmt.Errorf("ключ не сохранён в учётных данных Windows: %w", err)
+		return State{}, i18n.Errorf("ключ не сохранён в учётных данных Windows: %w", err)
 	}
 	a.nexus = c
 	a.settings.NexusUser, a.settings.NexusPremium = user.Name, user.Premium
@@ -148,7 +149,7 @@ func (a *Manager) InstallLink(ctx context.Context, raw string, progress func(Pro
 		}
 		msg := res.Message
 		if len(res.Missing) > 0 {
-			msg += ". Список недостающих — в меню «Набор» → «Загрузить коллекцию Nexus…»"
+			msg += i18n.T(". Список недостающих — в меню «Набор» → «Загрузить коллекцию Nexus…»")
 		}
 		return InstallResult{State: res.State, Message: msg}, nil
 	}
@@ -164,7 +165,7 @@ func (a *Manager) InstallLink(ctx context.Context, raw string, progress func(Pro
 		return InstallResult{}, err
 	}
 	if link.Game != domain {
-		return InstallResult{}, fmt.Errorf("ссылка для другой игры (%s), а Modvault ведёт %s", link.Game, a.game.Name())
+		return InstallResult{}, i18n.Errorf("ссылка для другой игры (%s), а Modvault ведёт %s", link.Game, a.game.Name())
 	}
 	return a.installFile(ctx, c, domain, link.ModID, link.FileID, link.Key, link.Expires, progress)
 }
@@ -186,7 +187,7 @@ func (a *Manager) installFile(ctx context.Context, c *nexus.Client, domain strin
 	}
 	a.mu.Unlock()
 	if busy {
-		return InstallResult{}, errors.New("этот файл уже скачивается")
+		return InstallResult{}, i18n.NewError("этот файл уже скачивается")
 	}
 	defer func() {
 		a.mu.Lock()
@@ -200,25 +201,25 @@ func (a *Manager) installFile(ctx context.Context, c *nexus.Client, domain strin
 
 	files, err := c.Files(ctx, domain, modID)
 	if err != nil {
-		return InstallResult{}, fmt.Errorf("мод %d: %w", modID, err)
+		return InstallResult{}, i18n.Errorf("мод %d: %w", modID, err)
 	}
 	file, ok := files.Find(fileID)
 	if !ok {
 		// Файл скрыт со страницы, но по прямой ссылке ещё отдаётся.
 		if file, err = c.File(ctx, domain, modID, fileID); err != nil {
-			return InstallResult{}, fmt.Errorf("файл %d мода %d: %w", fileID, modID, err)
+			return InstallResult{}, i18n.Errorf("файл %d мода %d: %w", fileID, modID, err)
 		}
 	}
 	mod, err := c.Mod(ctx, domain, modID)
 	if err != nil {
-		return InstallResult{}, fmt.Errorf("мод %d: %w", modID, err)
+		return InstallResult{}, i18n.Errorf("мод %d: %w", modID, err)
 	}
 	urls, err := c.DownloadLinks(ctx, domain, modID, fileID, key, expires)
 	if errors.Is(err, nexus.ErrForbidden) {
 		if key == "" {
-			return InstallResult{}, fmt.Errorf("без Premium файл скачивается только кнопкой «Mod Manager Download» на сайте: %w", err)
+			return InstallResult{}, i18n.Errorf("без Premium файл скачивается только кнопкой «Mod Manager Download» на сайте: %w", err)
 		}
-		return InstallResult{}, fmt.Errorf("ссылка с сайта устарела — нажмите кнопку загрузки ещё раз: %w", err)
+		return InstallResult{}, i18n.Errorf("ссылка с сайта устарела — нажмите кнопку загрузки ещё раз: %w", err)
 	}
 	if err != nil {
 		return InstallResult{}, err
@@ -249,7 +250,7 @@ func (a *Manager) installFile(ctx context.Context, c *nexus.Client, domain strin
 	if sum, err := nexus.MD5File(part); err == nil {
 		if match, found, err := c.KnownMD5(ctx, domain, sum, modID, fileID); err == nil && found && !match {
 			os.Remove(part)
-			return InstallResult{}, fmt.Errorf("«%s»: скачанный файл не совпал с тем, что лежит на Nexus; он удалён, попробуйте ещё раз", title)
+			return InstallResult{}, i18n.Errorf("«%s»: скачанный файл не совпал с тем, что лежит на Nexus; он удалён, попробуйте ещё раз", title)
 		}
 	}
 	// Номер файла и в имени архива: два файла с одним именем, скачанные
@@ -294,15 +295,15 @@ func (a *Manager) installFile(ctx context.Context, c *nexus.Client, domain strin
 			os.Remove(archive)
 			return InstallResult{}, err
 		}
-		return InstallResult{}, fmt.Errorf("%w (скачанный архив остался: %s)", err, archive)
+		return InstallResult{}, i18n.Errorf("%w (скачанный архив остался: %s)", err, archive)
 	}
 	os.Remove(archive) // копия архива теперь лежит в хранилище
 
-	msg := fmt.Sprintf("Установлен: %s %s", v.Name, v.Version)
+	msg := i18n.Sprintf("Установлен: %s %s", v.Name, v.Version)
 	if prev != "" {
-		msg = a.deployUpdate(v, synced)
+		msg = a.deployUpdate(i18n.Sprintf("Обновлён: %s до %s", v.Name, v.Version), v, synced)
 	} else if a.deployer != nil {
-		msg += ". Чтобы он попал в игру — «Развернуть»"
+		msg += i18n.T(". Чтобы он попал в игру — «Развернуть»")
 	}
 	st, err := a.state()
 	return InstallResult{State: st, Message: msg}, err
@@ -347,23 +348,22 @@ func (a *Manager) inSync() bool {
 // с профилем до обновления: если нет, в профиле есть и другие
 // неразвёрнутые изменения, и развёртывать их заодно без спроса нельзя.
 // Возвращает сообщение для пользователя.
-func (a *Manager) deployUpdate(v store.Version, synced bool) string {
-	msg := fmt.Sprintf("Обновлён: %s до %s", v.Name, v.Version)
+func (a *Manager) deployUpdate(msg string, v store.Version, synced bool) string {
 	p, _, err := a.loadProfile()
 	if err != nil {
 		return msg
 	}
 	if i := p.Index(v.ModID); i < 0 || !p.Entries[i].Enabled {
-		return msg + ". Мод выключен и остаётся выключенным"
+		return msg + i18n.T(". Мод выключен и остаётся выключенным")
 	}
 	if a.deployer == nil {
 		return msg
 	}
 	if a.settings.ManualUpdates {
-		return msg + ". В игру он попадёт по кнопке «Развернуть»"
+		return msg + i18n.T(". В игру он попадёт по кнопке «Развернуть»")
 	}
 	if !synced {
-		return msg + ". В игру он попадёт по кнопке «Развернуть»: там ждут и другие изменения"
+		return msg + i18n.T(". В игру он попадёт по кнопке «Развернуть»: там ждут и другие изменения")
 	}
 	plan, err := a.plan()
 	if err == nil && !plan.Empty() {
@@ -373,9 +373,9 @@ func (a *Manager) deployUpdate(v store.Version, synced bool) string {
 		}
 	}
 	if err != nil {
-		return msg + ". Развернуть новую версию не удалось: " + err.Error() + ". Игра осталась на прежней; нажмите «Развернуть», когда причина устранена"
+		return msg + i18n.T(". Развернуть новую версию не удалось: ") + err.Error() + i18n.T(". Игра осталась на прежней; нажмите «Развернуть», когда причина устранена")
 	}
-	return msg + " — новая версия уже в игре"
+	return msg + i18n.T(" — новая версия уже в игре")
 }
 
 // nexusName решает, каким модом хранилища станет файл с Nexus: версией уже
@@ -812,8 +812,8 @@ func (a *Manager) CheckUpdates(ctx context.Context, progress func(CheckProgress)
 		return rep, errors.Join(failure, err)
 	}
 	if failure != nil {
-		a.noteError("Проверка обновлений прервана", failure)
-		return rep, fmt.Errorf("проверка обновлений прервана: %w", failure)
+		a.noteError(i18n.T("Проверка обновлений прервана"), failure)
+		return rep, i18n.Errorf("проверка обновлений прервана: %w", failure)
 	}
 	if rep.State, err = a.state(); err != nil {
 		return rep, err
@@ -823,18 +823,18 @@ func (a *Manager) CheckUpdates(ctx context.Context, progress func(CheckProgress)
 			rep.Updates++
 		}
 	}
-	rep.Message = "Обновлений нет"
+	rep.Message = i18n.T("Обновлений нет")
 	if rep.Updates > 0 {
 		rep.Message = fmt.Sprintf("%s: %d", plural(rep.Updates, "Есть обновление", "Есть обновления", "Есть обновления"), rep.Updates)
 	}
-	rep.Message += fmt.Sprintf(" · проверено модов: %d", rep.Mods)
+	rep.Message += i18n.Sprintf(" · проверено модов: %d", rep.Mods)
 	if rep.Unknown > 0 {
-		rep.Message += fmt.Sprintf(", без номера на Nexus: %d", rep.Unknown)
+		rep.Message += i18n.Sprintf(", без номера на Nexus: %d", rep.Unknown)
 	}
 	if l := c.Limits(); l.Known {
-		rep.Message += fmt.Sprintf(" · запросов сегодня осталось: %d", l.Daily)
+		rep.Message += i18n.Sprintf(" · запросов сегодня осталось: %d", l.Daily)
 	}
-	a.note(EventNexus, "Проверка обновлений: "+rep.Message)
+	a.note(EventNexus, i18n.T("Проверка обновлений: ")+rep.Message)
 	return rep, nil
 }
 
@@ -860,16 +860,16 @@ func (a *Manager) UpdateMod(ctx context.Context, id string, progress func(Progre
 		return UpdateResult{}, err
 	}
 	if !known || !found.newerThan(v) {
-		return UpdateResult{}, fmt.Errorf("для «%s» обновление не найдено: проверьте обновления ещё раз", v.Name)
+		return UpdateResult{}, i18n.Errorf("для «%s» обновление не найдено: проверьте обновления ещё раз", v.Name)
 	}
 	if premium {
 		res, err := a.installFile(ctx, c, domain, v.NexusID, found.FileID, "", "", progress)
 		return UpdateResult{State: res.State, Message: res.Message}, err
 	}
 	res := UpdateResult{URL: nexus.DownloadPage(domain, v.NexusID, found.FileID)}
-	res.Message = fmt.Sprintf("Открыта страница загрузки «%s» %s: нажмите на ней кнопку загрузки", v.Name, found.Version)
+	res.Message = i18n.Sprintf("Открыта страница загрузки «%s» %s: нажмите на ней кнопку загрузки", v.Name, found.Version)
 	if !ours {
-		res.Message = fmt.Sprintf("Открыта страница загрузки «%s». Ссылки с сайта сейчас открывает не Modvault: включите их щелчком по «Ссылки nxm» в строке состояния или скачайте архив вручную и добавьте его кнопкой «Добавить мод»", v.Name)
+		res.Message = i18n.Sprintf("Открыта страница загрузки «%s». Ссылки с сайта сейчас открывает не Modvault: включите их щелчком по «Ссылки nxm» в строке состояния или скачайте архив вручную и добавьте его кнопкой «Добавить мод»", v.Name)
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -891,13 +891,13 @@ func (a *Manager) MessageAuthor(ctx context.Context, id, title, body string) (st
 	title, body = strings.TrimSpace(title), strings.TrimSpace(body)
 	switch {
 	case title == "":
-		return "", errors.New("введите тему сообщения")
+		return "", i18n.NewError("введите тему сообщения")
 	case body == "":
-		return "", errors.New("введите текст сообщения")
+		return "", i18n.NewError("введите текст сообщения")
 	case len([]rune(title)) > maxMessageTitle:
-		return "", fmt.Errorf("тема длиннее %d знаков", maxMessageTitle)
+		return "", i18n.Errorf("тема длиннее %d знаков", maxMessageTitle)
 	case len([]rune(body)) > maxMessageBody:
-		return "", fmt.Errorf("текст длиннее %d знаков", maxMessageBody)
+		return "", i18n.Errorf("текст длиннее %d знаков", maxMessageBody)
 	}
 	a.mu.Lock()
 	v, err := a.profileVersion(id)
@@ -912,15 +912,15 @@ func (a *Manager) MessageAuthor(ctx context.Context, id, title, body string) (st
 		return "", fmt.Errorf("«%s»: %w", v.Name, err)
 	}
 	if info.Uploader.ID == 0 {
-		return "", fmt.Errorf("Nexus не назвал, кто выложил «%s»: написать некому", v.Name)
+		return "", i18n.Errorf("Nexus не назвал, кто выложил «%s»: написать некому", v.Name)
 	}
 	if err := c.SendMessage(ctx, info.Uploader.ID, title, body); err != nil {
-		return "", fmt.Errorf("сообщение автору «%s» не отправлено: %w", v.Name, err)
+		return "", i18n.Errorf("сообщение автору «%s» не отправлено: %w", v.Name, err)
 	}
-	who := firstNonEmpty(info.UploadedBy, info.Author, "автору")
-	msg := fmt.Sprintf("Сообщение отправлено: %s («%s»). Ответ придёт в личные сообщения на сайте Nexus", who, v.Name)
+	who := firstNonEmpty(info.UploadedBy, info.Author, i18n.T("автору"))
+	msg := i18n.Sprintf("Сообщение отправлено: %s («%s»). Ответ придёт в личные сообщения на сайте Nexus", who, v.Name)
 	a.mu.Lock()
-	a.note(EventNexus, fmt.Sprintf("Отправлено сообщение %s о моде «%s»: %s", who, v.Name, title))
+	a.note(EventNexus, i18n.Sprintf("Отправлено сообщение %s о моде «%s»: %s", who, v.Name, title))
 	a.mu.Unlock()
 	return msg, nil
 }
@@ -945,17 +945,17 @@ func (a *Manager) Endorse(ctx context.Context, id string, endorse bool) (Endorse
 	}
 	status, err := c.Endorse(ctx, domain, v.NexusID, v.Version, endorse)
 	if err != nil {
-		what := "одобрение"
+		what := i18n.T("одобрение")
 		if !endorse {
-			what = "снятие одобрения"
+			what = i18n.T("снятие одобрения")
 		}
 		// Отказ, проверенный на живом Nexus: одобрять можно только то, что
 		// скачано с сайта под этой же учётной записью.
 		if strings.Contains(err.Error(), "NOT_DOWNLOADED_MOD") {
-			return EndorseResult{}, fmt.Errorf("Nexus не принял %s «%s»: по его данным вы этот мод с сайта не скачивали (NOT_DOWNLOADED_MOD). "+
+			return EndorseResult{}, i18n.Errorf("Nexus не принял %s «%s»: по его данным вы этот мод с сайта не скачивали (NOT_DOWNLOADED_MOD). "+
 				"Одобрять можно только моды, скачанные под своей учётной записью — кнопкой на сайте или через программу с вашим ключом", what, v.Name)
 		}
-		return EndorseResult{}, fmt.Errorf("Nexus не принял %s «%s»: %w", what, v.Name, err)
+		return EndorseResult{}, i18n.Errorf("Nexus не принял %s «%s»: %w", what, v.Name, err)
 	}
 
 	a.mu.Lock()
@@ -976,9 +976,9 @@ func (a *Manager) Endorse(ctx context.Context, id string, endorse bool) (Endorse
 	if err := a.saveUpdates(cache); err != nil {
 		return EndorseResult{}, err
 	}
-	msg := fmt.Sprintf("«%s» одобрен на Nexus", v.Name)
+	msg := i18n.Sprintf("«%s» одобрен на Nexus", v.Name)
 	if !now {
-		msg = fmt.Sprintf("Одобрение «%s» на Nexus снято", v.Name)
+		msg = i18n.Sprintf("Одобрение «%s» на Nexus снято", v.Name)
 	}
 	a.note(EventNexus, msg)
 	st, err := a.state()
@@ -1010,7 +1010,7 @@ func (a *Manager) AuthorPage(id string) (string, error) {
 	}
 	page := a.loadUpdates().Profiles[v.NexusID]
 	if page == "" {
-		return "", fmt.Errorf("профиль автора «%s» неизвестен: проверьте обновления", v.Name)
+		return "", i18n.Errorf("профиль автора «%s» неизвестен: проверьте обновления", v.Name)
 	}
 	return page, nil
 }
@@ -1019,7 +1019,7 @@ func (a *Manager) AuthorPage(id string) (string, error) {
 // известен номер на Nexus.
 func (a *Manager) profileVersion(id string) (store.Version, error) {
 	if real, err := a.hasMods(); err != nil || !real {
-		return store.Version{}, errors.Join(err, errors.New("это демонстрационный мод: на Nexus его нет"))
+		return store.Version{}, errors.Join(err, i18n.NewError("это демонстрационный мод: на Nexus его нет"))
 	}
 	p, _, err := a.loadProfile()
 	if err != nil {
@@ -1027,14 +1027,14 @@ func (a *Manager) profileVersion(id string) (store.Version, error) {
 	}
 	i := p.Index(id)
 	if i < 0 {
-		return store.Version{}, fmt.Errorf("мод %q не найден", id)
+		return store.Version{}, i18n.Errorf("мод %q не найден", id)
 	}
 	v, err := a.store.Get(id, p.Entries[i].VersionID)
 	if err != nil {
 		return store.Version{}, err
 	}
 	if v.NexusID == 0 {
-		return store.Version{}, fmt.Errorf("у «%s» неизвестен номер на Nexus", v.Name)
+		return store.Version{}, i18n.Errorf("у «%s» неизвестен номер на Nexus", v.Name)
 	}
 	return v, nil
 }
@@ -1047,15 +1047,15 @@ func (a *Manager) nxmOwner() (owner string, ours bool) {
 	cmd, err := a.protocol.Command()
 	switch {
 	case err != nil:
-		return "не удалось узнать", false
+		return i18n.T("не удалось узнать"), false
 	case cmd == "":
-		return "никто", false
+		return i18n.T("никто"), false
 	case cmd == a.settings.NxmCommand:
 		return "Modvault", true
 	case strings.Contains(strings.ToLower(cmd), "vortex"):
 		return "Vortex", false
 	}
-	return "другая программа", false
+	return i18n.T("другая программа"), false
 }
 
 // NxmOwner сообщает, кто открывает ссылки nxm:// с сайта Nexus.
@@ -1071,7 +1071,7 @@ func (a *Manager) ToggleNxm(exe string) (State, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if a.protocol == nil || a.openErr != nil {
-		return State{}, errors.Join(errors.New("ссылками nxm:// управляет только окно программы"), a.openErr)
+		return State{}, errors.Join(i18n.NewError("ссылками nxm:// управляет только окно программы"), a.openErr)
 	}
 	if _, ours := a.nxmOwner(); ours {
 		if err := a.protocol.SetCommand(a.settings.NxmPrevious); err != nil {
@@ -1112,12 +1112,12 @@ func (a *Manager) returnNxm() {
 // nxmLabel — подпись пункта «Ссылки nxm» для владельца из nxmOwner.
 func nxmLabel(owner string) string {
 	switch owner {
-	case "никто":
-		return "никто не открывает"
-	case "не удалось узнать":
+	case i18n.T("никто"):
+		return i18n.T("никто не открывает")
+	case i18n.T("не удалось узнать"):
 		return owner
 	}
-	return "открывает " + owner
+	return i18n.T("открывает ") + owner
 }
 
 // nexusStatus — пункты строки состояния о Nexus.
@@ -1125,7 +1125,7 @@ func (a *Manager) nexusStatus() []StatusItem {
 	if a.game.NexusDomain() == "" {
 		return nil
 	}
-	item := StatusItem{Label: "Nexus", Value: "ключ не задан", Level: LevelOff, Command: "NexusKey"}
+	item := StatusItem{Label: "Nexus", Value: i18n.T("ключ не задан"), Level: LevelOff, Command: "NexusKey"}
 	if a.settings.NexusUser != "" {
 		item.Value, item.Level = a.settings.NexusUser, LevelOK
 		if a.settings.NexusPremium {
@@ -1138,7 +1138,7 @@ func (a *Manager) nexusStatus() []StatusItem {
 		if ours {
 			level = LevelOK
 		}
-		items = append(items, StatusItem{Label: "Ссылки nxm", Value: nxmLabel(owner), Level: level, Command: "ToggleNxm"})
+		items = append(items, StatusItem{Label: i18n.T("Ссылки nxm"), Value: nxmLabel(owner), Level: level, Command: "ToggleNxm"})
 	}
 	return items
 }

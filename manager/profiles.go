@@ -3,12 +3,12 @@ package manager
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 
 	"github.com/zemidala/modvault/core/fsx"
 	"github.com/zemidala/modvault/core/profile"
+	"github.com/zemidala/modvault/i18n"
 )
 
 func (a *Manager) profileName() string {
@@ -88,7 +88,7 @@ func (a *Manager) DeleteProfile(name string) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if name == a.profileName() {
-		return fmt.Errorf("«%s» — текущий профиль: сначала переключитесь на другой", name)
+		return i18n.Errorf("«%s» — текущий профиль: сначала переключитесь на другой", name)
 	}
 	return a.profiles.Delete(name)
 }
@@ -117,7 +117,7 @@ func (a *Manager) MoveMods(ids []string, target string, after bool) (SetResult, 
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if real, err := a.hasMods(); err != nil || !real {
-		return SetResult{}, errors.Join(err, errors.New("это демонстрационные моды"))
+		return SetResult{}, errors.Join(err, i18n.NewError("это демонстрационные моды"))
 	}
 	if err := a.bisecting(); err != nil {
 		return SetResult{}, err
@@ -129,12 +129,12 @@ func (a *Manager) MoveMods(ids []string, target string, after bool) (SetResult, 
 	moving := map[string]bool{}
 	for _, id := range ids {
 		if p.Index(id) < 0 {
-			return SetResult{}, fmt.Errorf("мод %q не найден", id)
+			return SetResult{}, i18n.Errorf("мод %q не найден", id)
 		}
 		moving[id] = true
 	}
 	if len(moving) == 0 || moving[target] || p.Index(target) < 0 {
-		return SetResult{}, errors.New("мод нужно бросить выше или ниже другого мода")
+		return SetResult{}, i18n.NewError("мод нужно бросить выше или ниже другого мода")
 	}
 	var moved, rest []profile.Entry
 	for _, e := range p.Entries {
@@ -159,19 +159,19 @@ func (a *Manager) MoveMods(ids []string, target string, after bool) (SetResult, 
 	}
 
 	names := a.modNames()
-	where := "перед"
+	where := i18n.T("перед")
 	if after {
-		where = "после"
+		where = i18n.T("после")
 	}
-	msg := fmt.Sprintf("«%s» теперь стоит %s «%s»", names(moved[0].ModID), where, names(target))
+	msg := i18n.Sprintf("«%s» теперь стоит %s «%s»", names(moved[0].ModID), where, names(target))
 	if len(moved) > 1 {
-		msg = fmt.Sprintf("%d %s теперь стоят %s «%s»", len(moved), plural(len(moved), "мод", "мода", "модов"), where, names(target))
+		msg = i18n.Sprintf("%d %s теперь стоят %s «%s»", len(moved), plural(len(moved), "мод", "мода", "модов"), where, names(target))
 	}
 	// Что это меняет, зависит от загрузчика модов.
 	if _, ord, err := a.orderInfo(p); err == nil && ord.Auto {
-		msg += ". Порядок загрузки в игре задаёт загрузчик модов; порядок в списке решает, чей файл побеждает при конфликте"
+		msg += i18n.T(". Порядок загрузки в игре задаёт загрузчик модов; порядок в списке решает, чей файл побеждает при конфликте")
 	} else if a.deployer != nil {
-		msg += ". В игру новый порядок попадёт по кнопке «Развернуть»"
+		msg += i18n.T(". В игру новый порядок попадёт по кнопке «Развернуть»")
 	}
 	st, err := a.state()
 	return SetResult{State: st, Message: msg}, err
@@ -207,7 +207,7 @@ func (a *Manager) Rollback(dryRun bool) (DeployResult, error) {
 	if err != nil {
 		a.mu.Unlock()
 		if errors.Is(err, os.ErrNotExist) {
-			return DeployResult{}, errors.New("откатывать некуда: развёртываний было меньше двух")
+			return DeployResult{}, i18n.NewError("откатывать некуда: развёртываний было меньше двух")
 		}
 		return DeployResult{}, err
 	}
@@ -218,7 +218,7 @@ func (a *Manager) Rollback(dryRun bool) (DeployResult, error) {
 	}
 	if dryRun {
 		a.mu.Unlock()
-		return DeployResult{Message: fmt.Sprintf("Профиль «%s» вернётся к прошлому развёртыванию: %d модов", prev.Name, len(prev.Entries))}, nil
+		return DeployResult{Message: i18n.Sprintf("Профиль «%s» вернётся к прошлому развёртыванию: %d модов", prev.Name, len(prev.Entries))}, nil
 	}
 	prev.Name = a.profileName()
 	err = a.profiles.Save(prev)

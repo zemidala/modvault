@@ -11,6 +11,8 @@ import (
 	"unsafe"
 
 	"golang.org/x/sys/windows"
+
+	"github.com/zemidala/modvault/i18n"
 )
 
 // Корзина работает через COM-интерфейс IFileOperation. Старая функция
@@ -206,7 +208,7 @@ func trash(path string) error {
 	syscall.SyscallN(method(op, vtGetAnyOperationsAborted), uintptr(op), uintptr(unsafe.Pointer(&aborted)))
 
 	if sinkNuke {
-		return fmt.Errorf("%w: %s: для этого диска Корзина отключена или файл в неё не помещается", ErrTrashUnavailable, path)
+		return i18n.Errorf("%w: %s: для этого диска Корзина отключена или файл в неё не помещается", ErrTrashUnavailable, path)
 	}
 	if _, err := os.Lstat(path); errors.Is(err, fs.ErrNotExist) {
 		return nil

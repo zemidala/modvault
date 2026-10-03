@@ -16,13 +16,14 @@ import (
 	"github.com/nwaples/rardecode/v2"
 
 	"github.com/zemidala/modvault/core/fsx"
+	"github.com/zemidala/modvault/i18n"
 )
 
 var (
 	// ErrFormat — файл не является архивом известного формата.
-	ErrFormat = errors.New("неизвестный формат архива")
+	ErrFormat = i18n.NewError("неизвестный формат архива")
 	// ErrTooLarge — архив превышает лимиты распаковки.
-	ErrTooLarge = errors.New("архив превышает допустимый размер")
+	ErrTooLarge = i18n.NewError("архив превышает допустимый размер")
 )
 
 // Format — формат архива, определённый по содержимому, а не по расширению.
@@ -98,7 +99,7 @@ func Extract(path, dest string, lim Limits) ([]Entry, error) {
 		err = x.rar(path)
 	}
 	if err != nil {
-		return nil, fmt.Errorf("распаковка %s: %w", filepath.Base(path), err)
+		return nil, i18n.Errorf("распаковка %s: %w", filepath.Base(path), err)
 	}
 	return x.entries, nil
 }
@@ -170,10 +171,10 @@ func (x *extractor) add(name string, mode fs.FileMode, open func() (io.ReadClose
 		return os.MkdirAll(target, 0o755)
 	}
 	if !mode.IsRegular() {
-		return fmt.Errorf("%q: ссылки и особые файлы в архиве не поддерживаются", name)
+		return i18n.Errorf("%q: ссылки и особые файлы в архиве не поддерживаются", name)
 	}
 	if len(x.entries) >= x.lim.MaxFiles {
-		return fmt.Errorf("%w: больше %d файлов", ErrTooLarge, x.lim.MaxFiles)
+		return i18n.Errorf("%w: больше %d файлов", ErrTooLarge, x.lim.MaxFiles)
 	}
 
 	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
@@ -188,7 +189,7 @@ func (x *extractor) add(name string, mode fs.FileMode, open func() (io.ReadClose
 	// O_EXCL ловит повторы имён, в том числе отличающиеся только регистром.
 	out, err := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 	if errors.Is(err, fs.ErrExist) {
-		return fmt.Errorf("%q: имя встречается в архиве дважды", name)
+		return i18n.Errorf("%q: имя встречается в архиве дважды", name)
 	}
 	if err != nil {
 		return err

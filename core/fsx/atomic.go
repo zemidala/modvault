@@ -1,10 +1,11 @@
 package fsx
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/zemidala/modvault/i18n"
 )
 
 // Временные файлы лежат рядом с целевым: переименование атомарно только
@@ -48,7 +49,7 @@ func (w *Writer) Write(p []byte) (int, error) {
 // временный удалён. Если целевой файл занят — ErrBusy.
 func (w *Writer) Commit() error {
 	if w.done {
-		return errors.New("fsx: запись уже завершена")
+		return i18n.NewError("fsx: запись уже завершена")
 	}
 	w.done = true
 

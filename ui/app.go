@@ -6,7 +6,6 @@ import (
 	"context"
 	"embed"
 	"errors"
-	"fmt"
 	"io/fs"
 	"net/url"
 	"os"
@@ -18,6 +17,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
 	"github.com/zemidala/modvault/core/fsx"
+	"github.com/zemidala/modvault/i18n"
 	"github.com/zemidala/modvault/manager"
 	"github.com/zemidala/modvault/nexus"
 )
@@ -71,8 +71,8 @@ func (a *App) Play() error                           { return a.m.Play() }
 // пользователь отказался, состояние возвращается прежним.
 func (a *App) AddMod() (manager.State, error) {
 	path, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
-		Title:   "Добавить мод из архива",
-		Filters: []runtime.FileFilter{{DisplayName: "Архивы модов (*.zip, *.7z, *.rar)", Pattern: "*.zip;*.7z;*.rar"}},
+		Title:   i18n.T("Добавить мод из архива"),
+		Filters: []runtime.FileFilter{{DisplayName: i18n.T("Архивы модов (*.zip, *.7z, *.rar)"), Pattern: "*.zip;*.7z;*.rar"}},
 	})
 	if err != nil {
 		return manager.State{}, err
@@ -86,7 +86,7 @@ func (a *App) AddMod() (manager.State, error) {
 // ChooseGame спрашивает у пользователя папку игры.
 func (a *App) ChooseGame() (manager.State, error) {
 	dir, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
-		Title:            "Папка игры",
+		Title:            i18n.T("Папка игры"),
 		DefaultDirectory: a.m.GameDir(),
 	})
 	if err != nil {
@@ -127,10 +127,10 @@ type Choice struct {
 // RemoveAsk — вопрос перед удалением мода.
 func (a *App) RemoveAsk(id string) Ask {
 	return Ask{
-		Title: "Удалить мод",
-		Message: fmt.Sprintf("Удалить «%s» из хранилища?\n\nВсе его версии уйдут в Корзину. Если мод развёрнут, его файлы уберутся из игры при следующем развёртывании.",
+		Title: i18n.T("Удалить мод"),
+		Message: i18n.Sprintf("Удалить «%s» из хранилища?\n\nВсе его версии уйдут в Корзину. Если мод развёрнут, его файлы уберутся из игры при следующем развёртывании.",
 			a.m.ModName(id)),
-		OK: "Удалить",
+		OK: i18n.T("Удалить"),
 	}
 }
 
@@ -148,9 +148,9 @@ func (a *App) RemoveMod(id string, permanent bool) (RemoveResult, error) {
 	if errors.Is(err, fsx.ErrTrashUnavailable) {
 		s, err = a.m.State()
 		return RemoveResult{State: s, TrashUnavailable: true, Ask: &Ask{
-			Title:   "Корзина недоступна",
-			Message: "Положить мод в Корзину не удалось.\n\nУдалить его насовсем? Вернуть его будет нельзя.",
-			OK:      "Удалить насовсем",
+			Title:   i18n.T("Корзина недоступна"),
+			Message: i18n.T("Положить мод в Корзину не удалось.\n\nУдалить его насовсем? Вернуть его будет нельзя."),
+			OK:      i18n.T("Удалить насовсем"),
 			Danger:  true,
 		}}, err
 	}
@@ -163,20 +163,20 @@ func (a *App) AdoptAsk() (Ask, error) {
 	if err != nil {
 		return Ask{}, err
 	}
-	msg := fmt.Sprintf("Modvault примет у Vortex %d %s (развёрнуто %d) и %d %s в игре.\n\n"+
+	msg := i18n.Sprintf("Modvault примет у Vortex %d %s (развёрнуто %d) и %d %s в игре.\n\n"+
 		"Файлы игры не изменятся. Vortex будет отсоединён: его учёт развёртывания перейдёт к Modvault, "+
 		"а хранилище %s останется нетронутым.\n\n"+
 		"Вернуть всё как было можно в любой момент — щелчком по «Vortex: отсоединён · вернуть» в строке состояния.",
 		rep.Mods, plural(rep.Mods, "мод", "мода", "модов"), rep.Enabled,
 		rep.Files, plural(rep.Files, "файл", "файла", "файлов"), rep.Staging)
 	if len(rep.Others) > 0 {
-		msg += "\n\nТакже перестанут учитываться: " + strings.Join(rep.Others, ", ") + ". Не пользуйтесь ими для этой игры."
+		msg += i18n.T("\n\nТакже перестанут учитываться: ") + strings.Join(rep.Others, ", ") + i18n.T(". Не пользуйтесь ими для этой игры.")
 	}
 	if len(rep.Problems) > 0 {
-		msg += fmt.Sprintf("\n\nВнимание: %d %s в игре отличаются от хранилища Vortex — после усыновления они будут показаны как изменённые вне программы.",
+		msg += i18n.Sprintf("\n\nВнимание: %d %s в игре отличаются от хранилища Vortex — после усыновления они будут показаны как изменённые вне программы.",
 			len(rep.Problems), plural(len(rep.Problems), "файл", "файла", "файлов"))
 	}
-	return Ask{Title: "Перенять управление у Vortex", Message: msg, OK: "Перенять"}, nil
+	return Ask{Title: i18n.T("Перенять управление у Vortex"), Message: msg, OK: i18n.T("Перенять")}, nil
 }
 
 // Adopt перенимает управление у Vortex.
@@ -193,13 +193,13 @@ func (a *App) ReleaseAsk() (Ask, error) {
 	if err != nil {
 		return Ask{}, err
 	}
-	msg := "Игра станет такой, какой её оставил Vortex: файлы модов снова будут ссылками на " + rep.Staging +
-		", порядок загрузки и база бандлов — как были.\n\n"
+	msg := i18n.T("Игра станет такой, какой её оставил Vortex: файлы модов снова будут ссылками на ") + rep.Staging +
+		i18n.T(", порядок загрузки и база бандлов — как были.\n\n")
 	if rep.Changes > 0 {
-		msg += fmt.Sprintf("Изменится %d %s в игре. ", rep.Changes, plural(rep.Changes, "файл", "файла", "файлов"))
+		msg += i18n.Sprintf("Изменится %d %s в игре. ", rep.Changes, plural(rep.Changes, "файл", "файла", "файлов"))
 	}
-	msg += "Моды останутся в хранилище Modvault, и перенять управление можно будет снова."
-	return Ask{Title: "Вернуть управление Vortex", Message: msg, OK: "Вернуть Vortex"}, nil
+	msg += i18n.T("Моды останутся в хранилище Modvault, и перенять управление можно будет снова.")
+	return Ask{Title: i18n.T("Вернуть управление Vortex"), Message: msg, OK: i18n.T("Вернуть Vortex")}, nil
 }
 
 // Release возвращает управление Vortex.
@@ -213,9 +213,9 @@ func (a *App) Release() (manager.State, error) {
 // IgnoreManagersAsk — вопрос перед тем, как перестать учитывать другие менеджеры.
 func (a *App) IgnoreManagersAsk() Ask {
 	return Ask{
-		Title:   "Не учитывать другие программы",
-		Message: "Modvault перестанет обращать внимание на другие менеджеры модов в папке игры (кроме Vortex).\n\nПодтвердите, что не пользуетесь ими для этой игры: две программы испортят друг другу учёт.",
-		OK:      "Не учитывать",
+		Title:   i18n.T("Не учитывать другие программы"),
+		Message: i18n.T("Modvault перестанет обращать внимание на другие менеджеры модов в папке игры (кроме Vortex).\n\nПодтвердите, что не пользуетесь ими для этой игры: две программы испортят друг другу учёт."),
+		OK:      i18n.T("Не учитывать"),
 	}
 }
 
@@ -231,23 +231,23 @@ func (a *App) SortAsk() (Ask, error) {
 	if err != nil {
 		return Ask{}, err
 	}
-	ask := Ask{Title: "Отсортировать по правилам"}
-	intro := "Моды встанут так, как требуют правила их авторов."
+	ask := Ask{Title: i18n.T("Отсортировать по правилам")}
+	intro := i18n.T("Моды встанут так, как требуют правила их авторов.")
 	if plan.Auto {
-		intro = "Ваш загрузчик модов сам расставляет их при запуске игры. Список встанет в том порядке, в каком игра загрузила моды в последний раз; на саму игру это не повлияет."
+		intro = i18n.T("Ваш загрузчик модов сам расставляет их при запуске игры. Список встанет в том порядке, в каком игра загрузила моды в последний раз; на саму игру это не повлияет.")
 	}
 	if len(plan.Moves) == 0 {
-		ask.Message = intro + "\n\nПередвигать нечего: порядок уже такой."
+		ask.Message = intro + i18n.T("\n\nПередвигать нечего: порядок уже такой.")
 		return ask, nil // без кнопки действия: только сообщить
 	}
 	const show = 14
 	lines := plan.Moves
 	if len(lines) > show {
-		lines = append(append([]string(nil), lines[:show]...), fmt.Sprintf("…и ещё %d", len(plan.Moves)-show))
+		lines = append(append([]string(nil), lines[:show]...), i18n.Sprintf("…и ещё %d", len(plan.Moves)-show))
 	}
-	ask.Message = fmt.Sprintf("%s\n\nПередвинется %d %s:\n%s", intro, len(plan.Moves),
+	ask.Message = i18n.Sprintf("%s\n\nПередвинется %d %s:\n%s", intro, len(plan.Moves),
 		plural(len(plan.Moves), "мод", "мода", "модов"), strings.Join(lines, "\n"))
-	ask.OK = "Отсортировать"
+	ask.OK = i18n.T("Отсортировать")
 	return ask, nil
 }
 
@@ -265,12 +265,12 @@ func (a *App) Sets() ([]manager.SetInfo, error) { return a.m.Sets() }
 // NewSetAsk — вопрос о названии нового набора; count — сколько модов
 // выделено (0 — набор повторит текущий).
 func (a *App) NewSetAsk(count int) Ask {
-	ask := Ask{Title: "Новый набор", OK: "Создать", Input: true, Placeholder: "Название набора"}
+	ask := Ask{Title: i18n.T("Новый набор"), OK: i18n.T("Создать"), Input: true, Placeholder: i18n.T("Название набора")}
 	if count == 0 {
-		ask.Message = "Новый набор повторит текущий: те же моды включены, тот же порядок. Дальше его можно менять отдельно.\n\nТекущий набор останется выбранным."
+		ask.Message = i18n.T("Новый набор повторит текущий: те же моды включены, тот же порядок. Дальше его можно менять отдельно.\n\nТекущий набор останется выбранным.")
 		return ask
 	}
-	ask.Message = fmt.Sprintf("В новом наборе будут включены %d %s и то, без чего они не заработают: загрузчик модов, Darktide Mod Framework и моды, которых они требуют. Остальные моды в нём выключены.\n\nТекущий набор не изменится и останется выбранным.",
+	ask.Message = i18n.Sprintf("В новом наборе будут включены %d %s и то, без чего они не заработают: загрузчик модов, Darktide Mod Framework и моды, которых они требуют. Остальные моды в нём выключены.\n\nТекущий набор не изменится и останется выбранным.",
 		count, plural(count, "выделенный мод", "выделенных мода", "выделенных модов"))
 	return ask
 }
@@ -278,7 +278,7 @@ func (a *App) NewSetAsk(count int) Ask {
 // CreateSet создаёт набор из модов ids; без них — копию текущего.
 func (a *App) CreateSet(name string, ids []string) (manager.SetResult, error) {
 	if strings.TrimSpace(name) == "" {
-		return manager.SetResult{}, errors.New("введите название набора")
+		return manager.SetResult{}, i18n.NewError("введите название набора")
 	}
 	return a.m.CreateSet(name, ids)
 }
@@ -309,15 +309,15 @@ func (a *App) SwitchSet(name string) (manager.SetResult, error) { return a.m.Swi
 // RenameSetAsk — вопрос о новом названии набора.
 func (a *App) RenameSetAsk(name string) Ask {
 	return Ask{
-		Title: "Переименовать набор", OK: "Переименовать", Input: true,
-		Message: fmt.Sprintf("Новое название для набора «%s».", name), Placeholder: "Название набора", Value: name,
+		Title: i18n.T("Переименовать набор"), OK: i18n.T("Переименовать"), Input: true,
+		Message: i18n.Sprintf("Новое название для набора «%s».", name), Placeholder: i18n.T("Название набора"), Value: name,
 	}
 }
 
 // RenameSet переименовывает набор.
 func (a *App) RenameSet(from, to string) (manager.State, error) {
 	if strings.TrimSpace(to) == "" {
-		return manager.State{}, errors.New("введите название набора")
+		return manager.State{}, i18n.NewError("введите название набора")
 	}
 	return a.m.RenameSet(from, to)
 }
@@ -325,9 +325,9 @@ func (a *App) RenameSet(from, to string) (manager.State, error) {
 // DeleteSetAsk — вопрос перед удалением набора.
 func (a *App) DeleteSetAsk(name string) Ask {
 	return Ask{
-		Title:   "Удалить набор",
-		Message: fmt.Sprintf("Удалить набор «%s»?\n\nМоды останутся в хранилище и в других наборах; пропадёт только этот список включённых модов.", name),
-		OK:      "Удалить",
+		Title:   i18n.T("Удалить набор"),
+		Message: i18n.Sprintf("Удалить набор «%s»?\n\nМоды останутся в хранилище и в других наборах; пропадёт только этот список включённых модов.", name),
+		OK:      i18n.T("Удалить"),
 	}
 }
 
@@ -336,12 +336,12 @@ func (a *App) DeleteSet(name string) (manager.State, error) { return a.m.DeleteS
 
 // NexusKeyAsk — вопрос с полем для ключа Nexus.
 func (a *App) NexusKeyAsk() Ask {
-	ask := Ask{Title: "Ключ Nexus Mods", OK: "Сохранить", Input: true, Secret: true, Placeholder: "Personal API Key"}
-	ask.Message = "Ключ нужен, чтобы ставить моды кнопкой «Mod Manager Download» на сайте и проверять обновления.\n\n" +
+	ask := Ask{Title: i18n.T("Ключ Nexus Mods"), OK: i18n.T("Сохранить"), Input: true, Secret: true, Placeholder: "Personal API Key"}
+	ask.Message = i18n.T("Ключ нужен, чтобы ставить моды кнопкой «Mod Manager Download» на сайте и проверять обновления.\n\n" +
 		"Где взять: nexusmods.com → настройки сайта (Site preferences) → страница API Access → Personal API Key.\n\n" +
-		"Ключ хранится в учётных данных Windows; в файлы программы он не попадает."
+		"Ключ хранится в учётных данных Windows; в файлы программы он не попадает.")
 	if user := a.m.NexusUser(); user != "" {
-		ask.Message = fmt.Sprintf("Сейчас сохранён ключ пользователя %s.\n\nВведите другой ключ, чтобы заменить его, или оставьте поле пустым, чтобы программа забыла ключ.", user)
+		ask.Message = i18n.Sprintf("Сейчас сохранён ключ пользователя %s.\n\nВведите другой ключ, чтобы заменить его, или оставьте поле пустым, чтобы программа забыла ключ.", user)
 	}
 	return ask
 }
@@ -397,13 +397,13 @@ func (a *App) OpenNexus(id string) error {
 // BisectAsk объясняет, как идёт поиск сбойного мода, и спрашивает согласия.
 func (a *App) BisectAsk() Ask {
 	return Ask{
-		Title: "Найти сбойный мод",
-		Message: "Если игра падает или ведёт себя странно, а в «Требуют внимания» виновника нет, программа найдёт его делением пополам.\n\n" +
-			"Первый запуск — без модов набора: если проблема осталась, дело не в них. Дальше программа включает часть модов и просит запустить игру. " +
-			"Вы отвечаете, осталась ли проблема, — и круг сужается вдвое. Для 140 модов это около 10 запусков игры вместо 140.\n\n" +
-			"Виновник называется, только когда проблема повторилась с ним одним. Если её вызывают несколько модов вместе, программа найдёт всё сочетание — это дольше.\n\n" +
-			"Поиск идёт во временном наборе «" + manager.BisectSet + "»: ваш набор не меняется, и в конце программа вернёт игру к нему. Прервать поиск можно в любой момент.",
-		OK: "Начать поиск",
+		Title: i18n.T("Найти сбойный мод"),
+		Message: i18n.Sprintf("Если игра падает или ведёт себя странно, а в «Требуют внимания» виновника нет, программа найдёт его делением пополам.\n\n"+
+			"Первый запуск — без модов набора: если проблема осталась, дело не в них. Дальше программа включает часть модов и просит запустить игру. "+
+			"Вы отвечаете, осталась ли проблема, — и круг сужается вдвое. Для 140 модов это около 10 запусков игры вместо 140.\n\n"+
+			"Виновник называется, только когда проблема повторилась с ним одним. Если её вызывают несколько модов вместе, программа найдёт всё сочетание — это дольше.\n\n"+
+			"Поиск идёт во временном наборе «%s»: ваш набор не меняется, и в конце программа вернёт игру к нему. Прервать поиск можно в любой момент.", manager.BisectSet),
+		OK: i18n.T("Начать поиск"),
 	}
 }
 
@@ -467,44 +467,44 @@ func (a *App) WinnerAsk(key string) (Ask, error) {
 	}
 	var b strings.Builder
 	b.WriteString(c.Advice)
-	b.WriteString("\n\nКто что кладёт в игру:\n")
+	b.WriteString(i18n.T("\n\nКто что кладёт в игру:\n"))
 	for _, m := range c.Mods {
-		line := fmt.Sprintf("• %s — файлов %d, спорных %d", m.Name, m.Files, m.Shared)
+		line := i18n.Sprintf("• %s — файлов %d, спорных %d", m.Name, m.Files, m.Shared)
 		switch {
 		case m.Covered:
-			line += ", все достаются другому"
+			line += i18n.T(", все достаются другому")
 		case m.Lost == 0:
-			line += ", все остаются за ним"
+			line += i18n.T(", все остаются за ним")
 		default:
-			line += fmt.Sprintf(", из них теряет %d", m.Lost)
+			line += i18n.Sprintf(", из них теряет %d", m.Lost)
 		}
 		b.WriteString(line + "\n")
 	}
-	fmt.Fprintf(&b, "\nСпорные файлы (%d):\n", c.Total)
+	i18n.Fprintf(&b, "\nСпорные файлы (%d):\n", c.Total)
 	const show = 8
 	for i, f := range c.Files {
 		if i == show {
-			fmt.Fprintf(&b, "…и ещё %d\n", c.Total-show)
+			i18n.Fprintf(&b, "…и ещё %d\n", c.Total-show)
 			break
 		}
 		b.WriteString(f + "\n")
 	}
 	if c.Pinned {
-		b.WriteString("\nПобедитель выбран вами: конфликт считается решённым.")
+		b.WriteString(i18n.T("\nПобедитель выбран вами: конфликт считается решённым."))
 	}
 
-	ask := Ask{Title: "Конфликт файлов", Message: strings.TrimSpace(b.String())}
+	ask := Ask{Title: i18n.T("Конфликт файлов"), Message: strings.TrimSpace(b.String())}
 	for _, m := range c.Mods {
-		label := "Побеждает «" + m.Name + "»"
+		label := i18n.Sprintf("Побеждает «%s»", m.Name)
 		var notes []string
 		if m.ID == c.Suggested {
-			notes = append(notes, "рекомендуется")
+			notes = append(notes, i18n.T("рекомендуется"))
 		}
 		if m.Winner {
-			notes = append(notes, "сейчас")
+			notes = append(notes, i18n.T("сейчас"))
 		}
 		if m.Default {
-			notes = append(notes, "по порядку загрузки")
+			notes = append(notes, i18n.T("по порядку загрузки"))
 		}
 		if len(notes) > 0 {
 			label += " — " + strings.Join(notes, ", ")
@@ -513,11 +513,11 @@ func (a *App) WinnerAsk(key string) (Ask, error) {
 	}
 	for _, m := range c.Mods {
 		if m.ID == c.Disable {
-			ask.Choices = append(ask.Choices, Choice{Label: "Выключить «" + m.Name + "» — конфликт исчезнет", Value: choiceDisable + m.ID})
+			ask.Choices = append(ask.Choices, Choice{Label: i18n.Sprintf("Выключить «%s» — конфликт исчезнет", m.Name), Value: choiceDisable + m.ID})
 		}
 	}
 	if c.Pinned {
-		ask.Choices = append(ask.Choices, Choice{Label: "Снять выбор: пусть решает порядок загрузки", Value: choiceUnpin})
+		ask.Choices = append(ask.Choices, Choice{Label: i18n.T("Снять выбор: пусть решает порядок загрузки"), Value: choiceUnpin})
 	}
 	return ask, nil
 }
@@ -555,13 +555,13 @@ func (a *App) AddDropped(paths []string) (DropResult, error) {
 	st, err := a.m.State()
 	res := DropResult{State: st, Failed: len(problems) > 0}
 	if added > 0 {
-		res.Message = fmt.Sprintf("Добавлено модов: %d", added)
+		res.Message = i18n.Sprintf("Добавлено модов: %d", added)
 	}
 	if len(problems) > 0 {
 		if res.Message != "" {
 			res.Message += ". "
 		}
-		res.Message += "Не добавлено: " + strings.Join(problems, "; ")
+		res.Message += i18n.T("Не добавлено: ") + strings.Join(problems, "; ")
 	}
 	return res, err
 }
@@ -584,7 +584,7 @@ func (a *App) UseVersion(id, versionID string) (manager.SetResult, error) {
 }
 
 // setFilter — файлы наборов в окнах выбора файла.
-var setFilter = []runtime.FileFilter{{DisplayName: "Набор Modvault (*.modvault-set.json)", Pattern: "*.modvault-set.json;*.json"}}
+var setFilter = []runtime.FileFilter{{DisplayName: i18n.T("Набор Modvault (*.modvault-set.json)"), Pattern: "*.modvault-set.json;*.json"}}
 
 // ExportSet спрашивает, куда сохранить текущий набор, и записывает его в файл.
 func (a *App) ExportSet() (manager.SetResult, error) {
@@ -593,7 +593,7 @@ func (a *App) ExportSet() (manager.SetResult, error) {
 		return manager.SetResult{}, err
 	}
 	path, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
-		Title:           "Сохранить набор в файл",
+		Title:           i18n.T("Сохранить набор в файл"),
 		DefaultFilename: st.Profile + ".modvault-set.json",
 		Filters:         setFilter,
 	})
@@ -606,7 +606,7 @@ func (a *App) ExportSet() (manager.SetResult, error) {
 
 // ImportSet спрашивает файл набора и создаёт набор по нему.
 func (a *App) ImportSet() (manager.ImportResult, error) {
-	path, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{Title: "Загрузить набор из файла", Filters: setFilter})
+	path, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{Title: i18n.T("Загрузить набор из файла"), Filters: setFilter})
 	if err != nil || path == "" {
 		return manager.ImportResult{Missing: []manager.MissingMod{}}, err
 	}
@@ -616,16 +616,16 @@ func (a *App) ImportSet() (manager.ImportResult, error) {
 // CollectionAsk — вопрос со ссылкой на коллекцию Nexus.
 func (a *App) CollectionAsk() Ask {
 	return Ask{
-		Title: "Загрузить коллекцию Nexus", OK: "Создать набор", Input: true, Placeholder: "Адрес страницы коллекции или её код",
-		Message: "Программа создаст набор по коллекции: включит в нём её моды, которые у вас уже есть, и покажет, каких не хватает, со ссылками на загрузку.\n\n" +
-			"Мод узнаётся по номеру на Nexus. Если у вас версия новее, чем в коллекции, она и останется. Текущий набор не изменится.",
+		Title: i18n.T("Загрузить коллекцию Nexus"), OK: i18n.T("Создать набор"), Input: true, Placeholder: i18n.T("Адрес страницы коллекции или её код"),
+		Message: i18n.T("Программа создаст набор по коллекции: включит в нём её моды, которые у вас уже есть, и покажет, каких не хватает, со ссылками на загрузку.\n\n" +
+			"Мод узнаётся по номеру на Nexus. Если у вас версия новее, чем в коллекции, она и останется. Текущий набор не изменится."),
 	}
 }
 
 // ImportCollection создаёт набор по коллекции Nexus.
 func (a *App) ImportCollection(link string) (manager.ImportResult, error) {
 	if strings.TrimSpace(link) == "" {
-		return manager.ImportResult{Missing: []manager.MissingMod{}}, errors.New("вставьте адрес страницы коллекции")
+		return manager.ImportResult{Missing: []manager.MissingMod{}}, i18n.NewError("вставьте адрес страницы коллекции")
 	}
 	return a.m.ImportCollection(a.ctx, link)
 }
@@ -649,7 +649,7 @@ func (a *App) OpenPages(urls []string) error {
 		opened++
 	}
 	if opened == 0 {
-		return errors.New("открывать нечего: у этих модов нет страниц на Nexus")
+		return i18n.NewError("открывать нечего: у этих модов нет страниц на Nexus")
 	}
 	return nil
 }
@@ -661,7 +661,7 @@ func (a *App) Folders() map[string]string { return a.m.Folders() }
 func (a *App) OpenFolder(kind string) error {
 	path, ok := a.m.Folders()[kind]
 	if !ok {
-		return errors.New("такой папки нет")
+		return i18n.NewError("такой папки нет")
 	}
 	runtime.BrowserOpenURL(a.ctx, path)
 	return nil
@@ -687,22 +687,22 @@ func (a *App) NxmAsk() Ask {
 	owner, ours := a.m.NxmOwner()
 	if ours {
 		return Ask{
-			Title:   "Ссылки с сайта Nexus",
-			Message: "Сейчас кнопку «Mod Manager Download» на сайте обслуживает Modvault.\n\nВернуть её программе, которая обслуживала раньше? Если такой не было, кнопка перестанет работать.",
-			OK:      "Вернуть",
+			Title:   i18n.T("Ссылки с сайта Nexus"),
+			Message: i18n.T("Сейчас кнопку «Mod Manager Download» на сайте обслуживает Modvault.\n\nВернуть её программе, которая обслуживала раньше? Если такой не было, кнопка перестанет работать."),
+			OK:      i18n.T("Вернуть"),
 		}
 	}
-	who := "Сейчас её обслуживает другая программа; вернуть ей кнопку можно тем же щелчком."
+	who := i18n.T("Сейчас её обслуживает другая программа; вернуть ей кнопку можно тем же щелчком.")
 	switch owner {
-	case "никто":
-		who = "Сейчас её никто не обслуживает."
+	case i18n.T("никто"):
+		who = i18n.T("Сейчас её никто не обслуживает.")
 	case "Vortex":
-		who = "Сейчас её обслуживает Vortex; вернуть ему кнопку можно тем же щелчком."
+		who = i18n.T("Сейчас её обслуживает Vortex; вернуть ему кнопку можно тем же щелчком.")
 	}
 	return Ask{
-		Title:   "Ссылки с сайта Nexus",
-		Message: "Modvault будет скачивать и ставить моды по кнопке «Mod Manager Download» на сайте Nexus.\n\n" + who + "\n\n«Вернуть Vortex» возвращает и кнопку.",
-		OK:      "Открывать в Modvault",
+		Title:   i18n.T("Ссылки с сайта Nexus"),
+		Message: i18n.T("Modvault будет скачивать и ставить моды по кнопке «Mod Manager Download» на сайте Nexus.\n\n") + who + i18n.T("\n\n«Вернуть Vortex» возвращает и кнопку."),
+		OK:      i18n.T("Открывать в Modvault"),
 	}
 }
 

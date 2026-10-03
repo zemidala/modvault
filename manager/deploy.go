@@ -16,6 +16,7 @@ import (
 	"github.com/zemidala/modvault/core/profile"
 	"github.com/zemidala/modvault/core/store"
 	"github.com/zemidala/modvault/game"
+	"github.com/zemidala/modvault/i18n"
 	"github.com/zemidala/modvault/internal/version"
 	"github.com/zemidala/modvault/nexus"
 )
@@ -90,7 +91,7 @@ func (a *Manager) gameState(game string) string {
 func (a *Manager) openDeployer() {
 	a.deployer, a.recovery, a.deployErr = deploy.Open(a.settings.GameDir, a.gameState(a.settings.GameDir))
 	if a.deployErr != nil && errors.Is(a.deployErr, fs.ErrNotExist) {
-		a.deployErr = fmt.Errorf("папка %s не найдена", a.settings.GameDir)
+		a.deployErr = i18n.Errorf("папка %s не найдена", a.settings.GameDir)
 	}
 }
 
@@ -145,7 +146,7 @@ func (a *Manager) Play() error {
 	inst := game.Install{Dir: a.settings.GameDir, Store: a.settings.GameStore, ViaLauncher: a.settings.LaunchViaLauncher}
 	a.mu.Unlock()
 	if inst.Dir == "" {
-		return errors.New("сначала выберите папку игры")
+		return i18n.NewError("сначала выберите папку игры")
 	}
 	return a.game.Launch(inst)
 }
@@ -178,17 +179,17 @@ func (a *Manager) Deploy() (DeployResult, error) {
 		return DeployResult{}, err
 	}
 	if !real {
-		return DeployResult{}, errors.New("сейчас показаны демонстрационные данные: добавьте мод, чтобы было что развернуть")
+		return DeployResult{}, i18n.NewError("сейчас показаны демонстрационные данные: добавьте мод, чтобы было что развернуть")
 	}
 	if managers := a.managers(); len(managers) > 0 {
-		return DeployResult{}, fmt.Errorf("игрой управляет %s; Modvault не развёртывает поверх другого менеджера модов", strings.Join(managers, " и "))
+		return DeployResult{}, i18n.Errorf("игрой управляет %s; Modvault не развёртывает поверх другого менеджера модов", strings.Join(managers, i18n.T(" и ")))
 	}
 	plan, err := a.plan()
 	if err != nil {
 		return DeployResult{}, err
 	}
 
-	msg := "Игра уже совпадает с профилем"
+	msg := i18n.T("Игра уже совпадает с профилем")
 	if !plan.Empty() {
 		res, err := a.deployer.Apply(plan)
 		if err != nil {
@@ -196,11 +197,11 @@ func (a *Manager) Deploy() (DeployResult, error) {
 		}
 		a.recovery = deploy.NothingToRecover
 		a.rememberDeployed()
-		msg = fmt.Sprintf("Развёрнуто: %d %s", res.Changes, plural(res.Changes, "изменение", "изменения", "изменений"))
+		msg = i18n.Sprintf("Развёрнуто: %d %s", res.Changes, plural(res.Changes, "изменение", "изменения", "изменений"))
 		if res.Displaced != "" {
-			msg += ". Файлы, изменённые вне программы, сохранены в " + res.Displaced
+			msg += i18n.T(". Файлы, изменённые вне программы, сохранены в ") + res.Displaced
 		}
-		a.note(EventDeploy, fmt.Sprintf("Набор «%s»: %s", a.profileName(), msg))
+		a.note(EventDeploy, i18n.Sprintf("Набор «%s»: %s", a.profileName(), msg))
 	}
 	st, err := a.state()
 	return DeployResult{State: st, Message: msg}, err
@@ -237,7 +238,7 @@ func (a *Manager) PlanFiles() ([]string, error) {
 // plan рассчитывает развёртывание для основного профиля.
 func (a *Manager) plan() (*deploy.Plan, error) {
 	if a.deployer == nil && a.deployErr == nil {
-		return nil, errors.New("сначала выберите папку игры")
+		return nil, i18n.NewError("сначала выберите папку игры")
 	}
 	if a.deployErr != nil {
 		return nil, a.deployErr
@@ -249,7 +250,7 @@ func (a *Manager) plan() (*deploy.Plan, error) {
 // planWithNotices рассчитывает развёртывание и возвращает замечания игры.
 func (a *Manager) planWithNotices() (*deploy.Plan, []game.Notice, error) {
 	if a.deployer == nil && a.deployErr == nil {
-		return nil, nil, errors.New("сначала выберите папку игры")
+		return nil, nil, i18n.NewError("сначала выберите папку игры")
 	}
 	if a.deployErr != nil {
 		return nil, nil, a.deployErr
@@ -283,7 +284,7 @@ func (a *Manager) sources(p profile.Profile) ([]deploy.Source, []game.Notice, er
 		}
 		l, err := a.layout(v)
 		if err != nil {
-			notices = append(notices, game.Notice{Level: game.Error, Title: fmt.Sprintf("«%s» не развёртывается", v.Name), Detail: err.Error()})
+			notices = append(notices, game.Notice{Level: game.Error, Title: i18n.Sprintf("«%s» не развёртывается", v.Name), Detail: err.Error()})
 			continue
 		}
 		infos = append(infos, game.ModInfo{ModID: e.ModID, Enabled: e.Enabled, Layout: l})
@@ -334,7 +335,7 @@ func (a *Manager) modNames() func(string) string {
 			names[m.ID] = m.Latest().Name
 		}
 	}
-	names[generatedMod] = "Modvault (служебные файлы)"
+	names[generatedMod] = i18n.T("Modvault (служебные файлы)")
 	return func(id string) string {
 		if name, ok := names[id]; ok {
 			return name
@@ -429,15 +430,15 @@ func (a *Manager) realState() (State, error) {
 		}
 		switch {
 		case e.Enabled && plan == nil:
-			row.State, row.Level = "В хранилище", LevelOK
+			row.State, row.Level = i18n.T("В хранилище"), LevelOK
 		case e.Enabled && pending[e.ModID]:
-			row.State, row.Level = "Ждёт развёртывания", LevelWarn
+			row.State, row.Level = i18n.T("Ждёт развёртывания"), LevelWarn
 		case e.Enabled:
-			row.State, row.Level = "Развёрнут", LevelOK
+			row.State, row.Level = i18n.T("Развёрнут"), LevelOK
 		case pending[e.ModID]:
-			row.State, row.Level = "Выключен, ждёт развёртывания", LevelOff
+			row.State, row.Level = i18n.T("Выключен, ждёт развёртывания"), LevelOff
 		default:
-			row.State, row.Level = "Выключен", LevelOff
+			row.State, row.Level = i18n.T("Выключен"), LevelOff
 		}
 		s.Mods = append(s.Mods, row)
 	}
@@ -445,44 +446,44 @@ func (a *Manager) realState() (State, error) {
 	// Замечания: сначала то, что мешает работать, потом то, что стоит знать.
 	if a.recovery == deploy.RolledBack {
 		s.Issues = append(s.Issues, Issue{
-			Title:  "Прошлое развёртывание было прервано",
-			Detail: "Игра возвращена в состояние до него; его можно повторить",
+			Title:  i18n.T("Прошлое развёртывание было прервано"),
+			Detail: i18n.T("Игра возвращена в состояние до него; его можно повторить"),
 			Level:  LevelWarn,
 		})
 	}
 	switch {
 	case a.settings.GameDir == "":
 		s.Issues = append(s.Issues, Issue{
-			Title:  "Папка игры не выбрана",
-			Detail: "Находить Darktide программа научится на этапе 4. Пока укажите папку вручную; для пробы подойдёт пустая",
-			Level:  LevelWarn, Action: "Выбрать папку", Command: "ChooseGame",
+			Title:  i18n.T("Папка игры не выбрана"),
+			Detail: i18n.T("Находить Darktide программа научится на этапе 4. Пока укажите папку вручную; для пробы подойдёт пустая"),
+			Level:  LevelWarn, Action: i18n.T("Выбрать папку"), Command: "ChooseGame",
 		})
 	case a.deployErr != nil:
 		s.Issues = append(s.Issues, Issue{
-			Title: "Развёртывание недоступно", Detail: a.deployErr.Error(),
-			Level: LevelError, Action: "Выбрать папку", Command: "ChooseGame",
+			Title: i18n.T("Развёртывание недоступно"), Detail: a.deployErr.Error(),
+			Level: LevelError, Action: i18n.T("Выбрать папку"), Command: "ChooseGame",
 		})
 	case planErr != nil:
-		s.Issues = append(s.Issues, Issue{Title: "Не удалось рассчитать развёртывание", Detail: planErr.Error(), Level: LevelError})
+		s.Issues = append(s.Issues, Issue{Title: i18n.T("Не удалось рассчитать развёртывание"), Detail: planErr.Error(), Level: LevelError})
 	}
 	if a.settings.GameDir != "" && a.deployErr == nil {
 		for _, m := range a.managers() {
 			if m == "Vortex" {
 				s.Issues = append(s.Issues, Issue{
-					Title:  "Игрой управляет Vortex",
-					Detail: "Modvault может перенять его моды без переустановки: файлы игры не изменятся, а вернуть всё Vortex можно в любой момент",
-					Level:  LevelWarn, Action: "Перенять у Vortex", Command: "Adopt",
+					Title:  i18n.T("Игрой управляет Vortex"),
+					Detail: i18n.T("Modvault может перенять его моды без переустановки: файлы игры не изменятся, а вернуть всё Vortex можно в любой момент"),
+					Level:  LevelWarn, Action: i18n.T("Перенять у Vortex"), Command: "Adopt",
 				})
 				continue
 			}
 			s.Issues = append(s.Issues, Issue{
-				Title:  "В папке игры лежит " + m,
-				Detail: "Пока он есть, Modvault не развёртывает: две программы испортят друг другу учёт. Если вы им для этой игры не пользуетесь, его можно не учитывать",
-				Level:  LevelError, Action: "Не учитывать", Command: "IgnoreManagers",
+				Title:  i18n.T("В папке игры лежит ") + m,
+				Detail: i18n.T("Пока он есть, Modvault не развёртывает: две программы испортят друг другу учёт. Если вы им для этой игры не пользуетесь, его можно не учитывать"),
+				Level:  LevelError, Action: i18n.T("Не учитывать"), Command: "IgnoreManagers",
 			})
 		}
 		if err := a.game.Validate(a.settings.GameDir); err != nil {
-			s.Issues = append(s.Issues, Issue{Title: "Похоже, это не папка " + a.game.Name(), Detail: err.Error(), Level: LevelWarn, Action: "Выбрать папку", Command: "ChooseGame"})
+			s.Issues = append(s.Issues, Issue{Title: i18n.T("Похоже, это не папка ") + a.game.Name(), Detail: err.Error(), Level: LevelWarn, Action: i18n.T("Выбрать папку"), Command: "ChooseGame"})
 		}
 	}
 	for _, n := range notices {
@@ -496,7 +497,7 @@ func (a *Manager) realState() (State, error) {
 		s.Issues = append(s.Issues, Issue{Title: n.Title, Detail: n.Detail, Level: level})
 	}
 	for _, problem := range problems {
-		s.Issues = append(s.Issues, Issue{Title: "Запись в хранилище повреждена", Detail: problem.Error(), Level: LevelError})
+		s.Issues = append(s.Issues, Issue{Title: i18n.T("Запись в хранилище повреждена"), Detail: problem.Error(), Level: LevelError})
 	}
 	troubles, runIssues := a.runDiagnosis(p)
 	s.Issues = append(s.Issues, runIssues...)
@@ -546,15 +547,15 @@ func driftIssues(plan *deploy.Plan) []Issue {
 	var out []Issue
 	if changed > 0 {
 		out = append(out, Issue{
-			Title:  fmt.Sprintf("%d %s вне программы", changed, plural(changed, "файл мода изменён", "файла модов изменены", "файлов модов изменены")),
-			Detail: "При развёртывании они будут сохранены в отдельную папку, а на их место лягут файлы модов",
+			Title:  i18n.Sprintf("%d %s вне программы", changed, plural(changed, "файл мода изменён", "файла модов изменены", "файлов модов изменены")),
+			Detail: i18n.T("При развёртывании они будут сохранены в отдельную папку, а на их место лягут файлы модов"),
 			Level:  LevelError,
 		})
 	}
 	if missing > 0 {
 		out = append(out, Issue{
-			Title:  fmt.Sprintf("%d %s из игры", missing, plural(missing, "файл мода пропал", "файла модов пропали", "файлов модов пропали")),
-			Detail: "Например, после проверки файлов в Steam. При развёртывании они лягут заново",
+			Title:  i18n.Sprintf("%d %s из игры", missing, plural(missing, "файл мода пропал", "файла модов пропали", "файлов модов пропали")),
+			Detail: i18n.T("Например, после проверки файлов в Steam. При развёртывании они лягут заново"),
 			Level:  LevelWarn,
 		})
 	}
@@ -596,22 +597,22 @@ func planLines(plan *deploy.Plan, names func(string) string) ([]string, string) 
 		c := byMod[id]
 		var parts []string
 		if c.add > 0 {
-			parts = append(parts, "положить "+files(c.add))
+			parts = append(parts, i18n.T("положить ")+files(c.add))
 		}
 		if c.replace > 0 {
-			parts = append(parts, "заменить "+files(c.replace))
+			parts = append(parts, i18n.T("заменить ")+files(c.replace))
 		}
 		if c.remove > 0 {
-			parts = append(parts, "убрать "+files(c.remove))
+			parts = append(parts, i18n.T("убрать ")+files(c.remove))
 		}
 		lines = append(lines, names(id)+" — "+strings.Join(parts, ", "))
 	}
 	n := len(plan.Changes)
-	return lines, fmt.Sprintf("План развёртывания: %d %s", n, plural(n, "изменение", "изменения", "изменений"))
+	return lines, i18n.Sprintf("План развёртывания: %d %s", n, plural(n, "изменение", "изменения", "изменений"))
 }
 
 func (a *Manager) status(s State, mods int, plan *deploy.Plan) []StatusItem {
-	game := StatusItem{Label: "Игра", Value: "папка не выбрана", Level: LevelWarn, Command: "ChooseGame"}
+	game := StatusItem{Label: i18n.T("Игра"), Value: i18n.T("папка не выбрана"), Level: LevelWarn, Command: "ChooseGame"}
 	if a.settings.GameDir != "" {
 		game.Value, game.Level = a.settings.GameDir, LevelOK
 		if a.settings.GameStore != "" && a.settings.GameStore != "вручную" {
@@ -622,21 +623,21 @@ func (a *Manager) status(s State, mods int, plan *deploy.Plan) []StatusItem {
 		}
 	}
 
-	files := StatusItem{Label: "Файлы в игре", Value: "—", Level: LevelOff, Command: "ShowFiles"}
+	files := StatusItem{Label: i18n.T("Файлы в игре"), Value: "—", Level: LevelOff, Command: "ShowFiles"}
 	if plan != nil {
-		files.Value, files.Level = "совпадают с профилем", LevelOK
+		files.Value, files.Level = i18n.T("совпадают с профилем"), LevelOK
 		if !plan.Empty() {
-			files.Value, files.Level = "ждут развёртывания", LevelWarn
+			files.Value, files.Level = i18n.T("ждут развёртывания"), LevelWarn
 		}
 		for _, d := range plan.Drift {
 			if !d.Missing {
-				files.Value, files.Level = "изменены вне программы", LevelError
+				files.Value, files.Level = i18n.T("изменены вне программы"), LevelError
 				break
 			}
 		}
 	}
 
-	checks := StatusItem{Label: "Проверки", Value: "замечаний нет", Level: LevelOK, Command: "ShowIssues"}
+	checks := StatusItem{Label: i18n.T("Проверки"), Value: i18n.T("замечаний нет"), Level: LevelOK, Command: "ShowIssues"}
 	if n := len(s.Issues); n > 0 {
 		checks.Value = fmt.Sprintf("%d %s", n, plural(n, "замечание", "замечания", "замечаний"))
 		checks.Level = LevelWarn
@@ -648,12 +649,12 @@ func (a *Manager) status(s State, mods int, plan *deploy.Plan) []StatusItem {
 	}
 	items := []StatusItem{
 		game,
-		{Label: "Хранилище", Value: fmt.Sprintf("%d %s", mods, plural(mods, "мод", "мода", "модов")), Level: LevelOK, Command: "OpenStore"},
+		{Label: i18n.T("Хранилище"), Value: fmt.Sprintf("%d %s", mods, plural(mods, "мод", "мода", "модов")), Level: LevelOK, Command: "OpenStore"},
 		files,
 		checks,
 	}
 	if rec, err := a.loadRecord(); err == nil && rec != nil {
-		items = append(items, StatusItem{Label: "Vortex", Value: "отсоединён · вернуть", Level: LevelOff, Command: "Release"})
+		items = append(items, StatusItem{Label: "Vortex", Value: i18n.T("отсоединён · вернуть"), Level: LevelOff, Command: "Release"})
 	}
 	return append(items, a.nexusStatus()...)
 }

@@ -4,7 +4,6 @@ package vortex
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/zemidala/modvault/core/store"
+	"github.com/zemidala/modvault/i18n"
 )
 
 // DeploymentFile — файл учёта Vortex в корне папки игры.
@@ -54,7 +54,7 @@ func ParseDeployment(data []byte) (*Deployment, error) {
 	}
 	for i, f := range d.Files {
 		if f.RelPath == "" || f.Source == "" {
-			return nil, fmt.Errorf("%s: запись без пути или мода", DeploymentFile)
+			return nil, i18n.Errorf("%s: запись без пути или мода", DeploymentFile)
 		}
 		d.Files[i].RelPath = strings.ReplaceAll(f.RelPath, `\`, "/")
 	}
@@ -93,7 +93,7 @@ func FindStaging(gameDir string, d *Deployment) (string, error) {
 			}
 		}
 	}
-	return "", errors.New("не найдена папка, где Vortex хранит моды: файлы в игре не ссылаются на неё")
+	return "", i18n.NewError("не найдена папка, где Vortex хранит моды: файлы в игре не ссылаются на неё")
 }
 
 // IsStaging сообщает, что папка помечена Vortex как хранилище модов.

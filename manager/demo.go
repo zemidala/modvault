@@ -3,6 +3,7 @@ package manager
 import (
 	"fmt"
 
+	"github.com/zemidala/modvault/i18n"
 	"github.com/zemidala/modvault/internal/version"
 )
 
@@ -31,7 +32,7 @@ func demoMods() []demoMod {
 		{id: "scoreboard", name: "Scoreboard", version: "1.4.0", available: "1.5.0", source: "Nexus Mods", files: 14, versions: 2, dependsOn: dmf, enabled: true, deployed: true},
 		{id: "numeric_ui", name: "Numeric UI", version: "2.1.0", source: "Nexus Mods", files: 9, versions: 1, dependsOn: dmf, enabled: true, deployed: true},
 		{id: "healthbars", name: "Healthbars", version: "1.2.1", source: "Nexus Mods", files: 6, versions: 1, dependsOn: dmf, conflictWith: "numeric_ui", enabled: true, deployed: true},
-		{id: "spidey_sense", name: "Spidey Sense", version: "1.1.0", source: "Архив с диска", files: 5, versions: 1, dependsOn: dmf, enabled: false, deployed: true},
+		{id: "spidey_sense", name: "Spidey Sense", version: "1.1.0", source: i18n.T("Архив с диска"), files: 5, versions: 1, dependsOn: dmf, enabled: false, deployed: true},
 	}
 }
 
@@ -42,12 +43,12 @@ func (a *Manager) setDemoEnabled(id string, enabled bool) error {
 			continue
 		}
 		if m.pinned && !enabled {
-			return fmt.Errorf("%s нужен остальным модам, его нельзя выключить", m.name)
+			return i18n.Errorf("%s нужен остальным модам, его нельзя выключить", m.name)
 		}
 		m.enabled = enabled
 		return nil
 	}
-	return fmt.Errorf("мод %q не найден", id)
+	return i18n.Errorf("мод %q не найден", id)
 }
 
 func (a *Manager) demoName(id string) string {
@@ -87,43 +88,43 @@ func (a *Manager) demoState() State {
 		if conflict {
 			winner := a.demoName(m.conflictWith)
 			s.Issues = append(s.Issues, Issue{
-				Title:  fmt.Sprintf("%s и %s меняют один и тот же файл", m.name, winner),
-				Detail: "Конфликт файлов · сейчас побеждает " + winner,
-				Level:  LevelError, Action: "Выбрать победителя", Stage: 3,
+				Title:  i18n.Sprintf("%s и %s меняют один и тот же файл", m.name, winner),
+				Detail: i18n.T("Конфликт файлов · сейчас побеждает ") + winner,
+				Level:  LevelError, Action: i18n.T("Выбрать победителя"), Stage: 3,
 			})
 		}
 		if m.enabled && m.available != "" {
 			s.Issues = append(s.Issues, Issue{
-				Title:  fmt.Sprintf("%s: доступна версия %s", m.name, m.available),
-				Detail: "Обновление · установлена " + m.version,
-				Level:  LevelWarn, Action: "Обновить", Stage: 7,
+				Title:  i18n.Sprintf("%s: доступна версия %s", m.name, m.available),
+				Detail: i18n.T("Обновление · установлена ") + m.version,
+				Level:  LevelWarn, Action: i18n.T("Обновить"), Stage: 7,
 			})
 		}
 
 		switch {
 		case m.enabled && !m.deployed:
-			s.Plan = append(s.Plan, m.name+" будет развёрнут в игру")
+			s.Plan = append(s.Plan, m.name+i18n.T(" будет развёрнут в игру"))
 		case !m.enabled && m.deployed:
-			s.Plan = append(s.Plan, m.name+" будет убран из игры")
+			s.Plan = append(s.Plan, m.name+i18n.T(" будет убран из игры"))
 		}
 	}
 
 	if n := len(s.Plan); n > 0 {
-		s.PlanTitle = fmt.Sprintf("План развёртывания: %d %s", n, plural(n, "изменение", "изменения", "изменений"))
+		s.PlanTitle = i18n.Sprintf("План развёртывания: %d %s", n, plural(n, "изменение", "изменения", "изменений"))
 	}
 
-	files := StatusItem{Label: "Файлы в игре", Value: "совпадают с профилем", Level: LevelOK}
+	files := StatusItem{Label: i18n.T("Файлы в игре"), Value: i18n.T("совпадают с профилем"), Level: LevelOK}
 	if len(s.Plan) > 0 {
-		files.Value, files.Level = "ждут развёртывания", LevelWarn
+		files.Value, files.Level = i18n.T("ждут развёртывания"), LevelWarn
 	}
-	checks := StatusItem{Label: "Проверки", Value: "замечаний нет", Level: LevelOK}
+	checks := StatusItem{Label: i18n.T("Проверки"), Value: i18n.T("замечаний нет"), Level: LevelOK}
 	if n := len(s.Issues); n > 0 {
 		checks.Value = fmt.Sprintf("%d %s", n, plural(n, "замечание", "замечания", "замечаний"))
 		checks.Level = LevelWarn
 	}
 	s.Status = []StatusItem{
-		{Label: "Игра", Value: "Darktide · Steam", Level: LevelOK},
-		{Label: "Патч загрузчика", Value: "установлен", Level: LevelOK},
+		{Label: i18n.T("Игра"), Value: "Darktide · Steam", Level: LevelOK},
+		{Label: i18n.T("Патч загрузчика"), Value: i18n.T("установлен"), Level: LevelOK},
 		files,
 		checks,
 	}
@@ -134,15 +135,15 @@ func (a *Manager) demoState() State {
 func demoModState(m demoMod, conflict bool) (string, Level) {
 	switch {
 	case conflict:
-		return "Конфликт файлов", LevelError
+		return i18n.T("Конфликт файлов"), LevelError
 	case m.enabled && !m.deployed:
-		return "Ждёт развёртывания", LevelWarn
+		return i18n.T("Ждёт развёртывания"), LevelWarn
 	case !m.enabled && m.deployed:
-		return "Выключен, ждёт развёртывания", LevelOff
+		return i18n.T("Выключен, ждёт развёртывания"), LevelOff
 	case !m.enabled:
-		return "Выключен", LevelOff
+		return i18n.T("Выключен"), LevelOff
 	case m.available != "":
-		return "Есть обновление", LevelWarn
+		return i18n.T("Есть обновление"), LevelWarn
 	}
-	return "Развёрнут", LevelOK
+	return i18n.T("Развёрнут"), LevelOK
 }

@@ -1,7 +1,6 @@
 package manager
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -9,6 +8,7 @@ import (
 
 	"github.com/zemidala/modvault/core/profile"
 	"github.com/zemidala/modvault/game"
+	"github.com/zemidala/modvault/i18n"
 	"github.com/zemidala/modvault/rules"
 )
 
@@ -149,7 +149,7 @@ func (a *Manager) sorted(p profile.Profile) (profile.Profile, SortPlan, error) {
 		from := movable[k]
 		out.Entries[slot] = mods[from].entry
 		if from != slot {
-			plan.Moves = append(plan.Moves, fmt.Sprintf("%s: с %d на %d", mods[from].name, from+1, slot+1))
+			plan.Moves = append(plan.Moves, i18n.Sprintf("%s: с %d на %d", mods[from].name, from+1, slot+1))
 		}
 	}
 	return out, plan, nil
@@ -211,14 +211,14 @@ func (a *Manager) orderIssues(p profile.Profile) ([]Issue, string) {
 
 	for _, r := range rules.Missing(loaded, ord.Rules) {
 		issue := Issue{
-			Title:  fmt.Sprintf("«%s» не заработает: ему нужен мод %s", display(r.Mod), r.Other),
-			Detail: "Так сказано в " + r.Source + ". Этого мода нет в хранилище: добавьте его",
+			Title:  i18n.Sprintf("«%s» не заработает: ему нужен мод %s", display(r.Mod), r.Other),
+			Detail: i18n.T("Так сказано в ") + r.Source + i18n.T(". Этого мода нет в хранилище: добавьте его"),
 			Level:  LevelWarn,
 		}
 		if m, ok := owner[strings.ToLower(r.Other)]; ok && !m.entry.Enabled {
-			issue.Title = fmt.Sprintf("«%s» не заработает: ему нужен «%s», а он выключен", display(r.Mod), m.name)
-			issue.Detail = "Так сказано в " + r.Source
-			issue.Action, issue.Command, issue.Arg = "Включить «"+m.name+"»", "EnableMod", m.entry.ModID
+			issue.Title = i18n.Sprintf("«%s» не заработает: ему нужен «%s», а он выключен", display(r.Mod), m.name)
+			issue.Detail = i18n.T("Так сказано в ") + r.Source
+			issue.Action, issue.Command, issue.Arg = i18n.Sprintf("Включить «%s»", m.name), "EnableMod", m.entry.ModID
 		}
 		issues = append(issues, issue)
 	}
@@ -230,24 +230,24 @@ func (a *Manager) orderIssues(p profile.Profile) ([]Issue, string) {
 			names[i] = display(f)
 		}
 		issues = append(issues, Issue{
-			Title:  "Правила модов противоречат друг другу: " + strings.Join(names, ", "),
-			Detail: "Каждый из них должен грузиться после другого. Между собой они остаются в прежнем порядке",
+			Title:  i18n.T("Правила модов противоречат друг другу: ") + strings.Join(names, ", "),
+			Detail: i18n.T("Каждый из них должен грузиться после другого. Между собой они остаются в прежнем порядке"),
 			Level:  LevelWarn,
 		})
 	}
 
 	if ord.Auto {
-		note := "Порядок загрузки задаёт загрузчик модов: при запуске игры он сам расставляет их по правилам."
+		note := i18n.T("Порядок загрузки задаёт загрузчик модов: при запуске игры он сам расставляет их по правилам.")
 		if !ord.LastOrderTime.IsZero() {
-			note += " «Отсортировать по правилам» покажет порядок последнего запуска игры (" + ord.LastOrderTime.Format("02.01.2006 15:04") + ")."
+			note += i18n.T(" «Отсортировать по правилам» покажет порядок последнего запуска игры (") + ord.LastOrderTime.Format("02.01.2006 15:04") + ")."
 		}
 		return issues, note
 	}
 	if n := len(rules.Violations(loaded, ord.Rules)); n > 0 {
 		issues = append(issues, Issue{
-			Title:  fmt.Sprintf("Порядок загрузки нарушает %d %s модов", n, plural(n, "правило", "правила", "правил")),
-			Detail: "Авторы модов указали, что должно грузиться раньше, а что позже",
-			Level:  LevelWarn, Action: "Отсортировать", Command: "Sort",
+			Title:  i18n.Sprintf("Порядок загрузки нарушает %d %s модов", n, plural(n, "правило", "правила", "правил")),
+			Detail: i18n.T("Авторы модов указали, что должно грузиться раньше, а что позже"),
+			Level:  LevelWarn, Action: i18n.T("Отсортировать"), Command: "Sort",
 		})
 	}
 	return issues, ""

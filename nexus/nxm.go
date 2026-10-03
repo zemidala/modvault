@@ -5,6 +5,8 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+
+	"github.com/zemidala/modvault/i18n"
 )
 
 // Link — ссылка nxm://, которую сайт отдаёт по кнопке «Mod Manager Download».
@@ -25,23 +27,23 @@ func IsLink(s string) bool {
 // nxm://игра/mods/123/files/456?key=…&expires=…&user_id=….
 func ParseLink(raw string) (Link, error) {
 	bad := func(why string) (Link, error) {
-		return Link{}, fmt.Errorf("ссылка nxm не разобрана: %s", why)
+		return Link{}, i18n.Errorf("ссылка nxm не разобрана: %s", why)
 	}
 	u, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil || !strings.EqualFold(u.Scheme, "nxm") {
-		return bad("это не ссылка nxm://")
+		return bad(i18n.T("это не ссылка nxm://"))
 	}
 	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
 	if len(parts) >= 1 && strings.EqualFold(parts[0], "collections") {
-		return bad("это ссылка на коллекцию, а не на файл мода")
+		return bad(i18n.T("это ссылка на коллекцию, а не на файл мода"))
 	}
 	if u.Host == "" || len(parts) != 4 || !strings.EqualFold(parts[0], "mods") || !strings.EqualFold(parts[2], "files") {
-		return bad("ожидается nxm://игра/mods/номер/files/номер")
+		return bad(i18n.T("ожидается nxm://игра/mods/номер/files/номер"))
 	}
 	modID, err1 := strconv.Atoi(parts[1])
 	fileID, err2 := strconv.Atoi(parts[3])
 	if err1 != nil || err2 != nil || modID <= 0 || fileID <= 0 {
-		return bad("номера мода и файла должны быть числами")
+		return bad(i18n.T("номера мода и файла должны быть числами"))
 	}
 	q := u.Query()
 	return Link{

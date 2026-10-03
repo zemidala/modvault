@@ -2,7 +2,6 @@ package manager
 
 import (
 	"errors"
-	"fmt"
 	"io/fs"
 	"sort"
 	"strings"
@@ -10,6 +9,7 @@ import (
 	"github.com/zemidala/modvault/core/deploy"
 	"github.com/zemidala/modvault/core/profile"
 	"github.com/zemidala/modvault/game"
+	"github.com/zemidala/modvault/i18n"
 	"github.com/zemidala/modvault/rules"
 )
 
@@ -163,7 +163,7 @@ func requiredNote(extra []string) string {
 	if len(extra) == 0 {
 		return ""
 	}
-	return fmt.Sprintf(" Сами включены обязательные: %s.", strings.Join(extra, ", "))
+	return i18n.Sprintf(" Сами включены обязательные: %s.", strings.Join(extra, ", "))
 }
 
 // CreateSet создаёт набор. С ids в нём включены только эти моды и то, без
@@ -174,14 +174,14 @@ func (a *Manager) CreateSet(name string, ids []string) (SetResult, error) {
 	defer a.mu.Unlock()
 	name = strings.TrimSpace(name)
 	if real, err := a.hasMods(); err != nil || !real {
-		return SetResult{}, errors.Join(err, errors.New("сначала выберите папку игры: наборы составляются из настоящих модов"))
+		return SetResult{}, errors.Join(err, i18n.NewError("сначала выберите папку игры: наборы составляются из настоящих модов"))
 	}
 	p, _, err := a.loadProfile()
 	if err != nil {
 		return SetResult{}, err
 	}
 	if _, err := a.profiles.Load(name); err == nil {
-		return SetResult{}, fmt.Errorf("набор «%s» уже есть", name)
+		return SetResult{}, i18n.Errorf("набор «%s» уже есть", name)
 	} else if !errors.Is(err, fs.ErrNotExist) {
 		return SetResult{}, err
 	}
@@ -191,7 +191,7 @@ func (a *Manager) CreateSet(name string, ids []string) (SetResult, error) {
 	}
 
 	next := profile.Profile{Name: name, Entries: append([]profile.Entry(nil), p.Entries...), Winners: p.Winners}
-	msg := fmt.Sprintf("Набор «%s» создан как копия набора «%s».", name, p.Name)
+	msg := i18n.Sprintf("Набор «%s» создан как копия набора «%s».", name, p.Name)
 	if len(ids) > 0 {
 		for i := range next.Entries {
 			next.Entries[i].Enabled = false
@@ -200,14 +200,14 @@ func (a *Manager) CreateSet(name string, ids []string) (SetResult, error) {
 		if err != nil {
 			return SetResult{}, err
 		}
-		msg = fmt.Sprintf("Набор «%s» создан: %d %s.%s", name, len(ids), plural(len(ids), "мод", "мода", "модов"), requiredNote(extra))
+		msg = i18n.Sprintf("Набор «%s» создан: %d %s.%s", name, len(ids), plural(len(ids), "мод", "мода", "модов"), requiredNote(extra))
 	}
 	if err := a.profiles.Save(next); err != nil {
 		return SetResult{}, err
 	}
 	st, err := a.state()
 	a.note(EventSet, msg)
-	return SetResult{State: st, Message: msg + " Переключиться на него — в меню «Набор»"}, err
+	return SetResult{State: st, Message: msg + i18n.T(" Переключиться на него — в меню «Набор»")}, err
 }
 
 // AddToSet включает моды ids в наборе name; остальное в нём не меняется.
@@ -221,7 +221,7 @@ func (a *Manager) AddToSet(name string, ids []string) (SetResult, error) {
 	p := cur
 	if name != cur.Name {
 		if p, err = a.profiles.Load(name); err != nil {
-			return SetResult{}, fmt.Errorf("набор «%s» не найден", name)
+			return SetResult{}, i18n.Errorf("набор «%s» не найден", name)
 		}
 		// Мод, добавленный в хранилище после создания набора, в нём ещё не числится.
 		for _, e := range cur.Entries {
@@ -238,7 +238,7 @@ func (a *Manager) AddToSet(name string, ids []string) (SetResult, error) {
 		return SetResult{}, err
 	}
 	st, err := a.state()
-	msg := fmt.Sprintf("В набор «%s» %s %d %s.%s", name, plural(len(ids), "добавлен", "добавлены", "добавлены"), len(ids), plural(len(ids), "мод", "мода", "модов"), requiredNote(extra))
+	msg := i18n.Sprintf("В набор «%s» %s %d %s.%s", name, plural(len(ids), "добавлен", "добавлены", "добавлены"), len(ids), plural(len(ids), "мод", "мода", "модов"), requiredNote(extra))
 	return SetResult{State: st, Message: strings.TrimSpace(msg)}, err
 }
 
@@ -265,7 +265,7 @@ func (a *Manager) RemoveFromSet(name string, ids []string) (SetResult, error) {
 	p := cur
 	if name != cur.Name {
 		if p, err = a.profiles.Load(name); err != nil {
-			return SetResult{}, fmt.Errorf("набор «%s» не найден", name)
+			return SetResult{}, i18n.Errorf("набор «%s» не найден", name)
 		}
 	}
 	removed := disableIn(&p, ids)
@@ -273,11 +273,11 @@ func (a *Manager) RemoveFromSet(name string, ids []string) (SetResult, error) {
 		return SetResult{}, err
 	}
 	st, err := a.state()
-	msg := fmt.Sprintf("Из набора «%s» %s %d %s", name, plural(removed, "убран", "убраны", "убраны"), removed, plural(removed, "мод", "мода", "модов"))
+	msg := i18n.Sprintf("Из набора «%s» %s %d %s", name, plural(removed, "убран", "убраны", "убраны"), removed, plural(removed, "мод", "мода", "модов"))
 	if removed == 0 {
-		msg = fmt.Sprintf("В наборе «%s» эти моды и так выключены", name)
+		msg = i18n.Sprintf("В наборе «%s» эти моды и так выключены", name)
 	} else if name == cur.Name && a.deployer != nil {
-		msg += ". Из игры они уйдут по кнопке «Развернуть»"
+		msg += i18n.T(". Из игры они уйдут по кнопке «Развернуть»")
 	}
 	return SetResult{State: st, Message: msg}, err
 }
@@ -292,11 +292,11 @@ func (a *Manager) MoveToSet(name string, ids []string) (SetResult, error) {
 		return SetResult{}, err
 	}
 	if name == cur.Name {
-		return SetResult{}, fmt.Errorf("моды уже в наборе «%s»", name)
+		return SetResult{}, i18n.Errorf("моды уже в наборе «%s»", name)
 	}
 	to, err := a.profiles.Load(name)
 	if err != nil {
-		return SetResult{}, fmt.Errorf("набор «%s» не найден", name)
+		return SetResult{}, i18n.Errorf("набор «%s» не найден", name)
 	}
 	for _, e := range cur.Entries {
 		if to.Index(e.ModID) < 0 {
@@ -316,10 +316,10 @@ func (a *Manager) MoveToSet(name string, ids []string) (SetResult, error) {
 		return SetResult{}, err
 	}
 	st, err := a.state()
-	msg := fmt.Sprintf("В набор «%s» %s %d %s из набора «%s».%s", name, plural(len(ids), "перенесён", "перенесены", "перенесены"),
+	msg := i18n.Sprintf("В набор «%s» %s %d %s из набора «%s».%s", name, plural(len(ids), "перенесён", "перенесены", "перенесены"),
 		len(ids), plural(len(ids), "мод", "мода", "модов"), cur.Name, requiredNote(extra))
 	if a.deployer != nil {
-		msg += " Из игры они уйдут по кнопке «Развернуть»"
+		msg += i18n.T(" Из игры они уйдут по кнопке «Развернуть»")
 	}
 	return SetResult{State: st, Message: msg}, err
 }
@@ -329,7 +329,7 @@ func (a *Manager) SetEnabledMany(ids []string, enabled bool) (State, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if real, err := a.hasMods(); err != nil || !real {
-		return State{}, errors.Join(err, errors.New("это демонстрационные моды"))
+		return State{}, errors.Join(err, i18n.NewError("это демонстрационные моды"))
 	}
 	if err := a.bisecting(); err != nil {
 		return State{}, err
@@ -364,32 +364,32 @@ func (a *Manager) switchSet(name string) (SetResult, error) {
 		return SetResult{}, a.openErr
 	}
 	if _, err := a.profiles.Load(name); err != nil {
-		return SetResult{}, fmt.Errorf("набор «%s» не найден", name)
+		return SetResult{}, i18n.Errorf("набор «%s» не найден", name)
 	}
 	a.settings.Profile = name
 	if err := a.saveSettings(); err != nil {
 		return SetResult{}, err
 	}
 
-	msg := fmt.Sprintf("Выбран набор «%s»", name)
+	msg := i18n.Sprintf("Выбран набор «%s»", name)
 	switch managers := a.managers(); {
 	case a.deployer == nil || a.deployErr != nil:
-		msg += ". В игру он не попал: папка игры не выбрана или недоступна"
+		msg += i18n.T(". В игру он не попал: папка игры не выбрана или недоступна")
 	case len(managers) > 0:
-		msg += fmt.Sprintf(". В игру он не попал: игрой управляет %s", strings.Join(managers, " и "))
+		msg += i18n.Sprintf(". В игру он не попал: игрой управляет %s", strings.Join(managers, i18n.T(" и ")))
 	default:
 		plan, err := a.plan()
 		if err == nil && !plan.Empty() {
 			if _, err = a.deployer.Apply(plan); err == nil {
 				a.recovery = deploy.NothingToRecover
 				a.rememberDeployed()
-				msg = fmt.Sprintf("Набор «%s» в игре: %d %s", name, len(plan.Changes), plural(len(plan.Changes), "изменение", "изменения", "изменений"))
+				msg = i18n.Sprintf("Набор «%s» в игре: %d %s", name, len(plan.Changes), plural(len(plan.Changes), "изменение", "изменения", "изменений"))
 			}
 		} else if err == nil {
-			msg += ": игра уже совпадает с ним"
+			msg += i18n.T(": игра уже совпадает с ним")
 		}
 		if err != nil {
-			msg += ". Привести к нему игру не удалось: " + err.Error() + ". Нажмите «Развернуть», когда причина устранена"
+			msg += i18n.T(". Привести к нему игру не удалось: ") + err.Error() + i18n.T(". Нажмите «Развернуть», когда причина устранена")
 		}
 	}
 	a.note(EventSet, msg)
@@ -405,7 +405,7 @@ func (a *Manager) RenameSet(from, to string) (State, error) {
 	}
 	if err := a.RenameProfile(from, to); err != nil {
 		if errors.Is(err, fs.ErrExist) {
-			return State{}, fmt.Errorf("набор «%s» уже есть", to)
+			return State{}, i18n.Errorf("набор «%s» уже есть", to)
 		}
 		return State{}, err
 	}
@@ -420,7 +420,7 @@ func (a *Manager) DeleteSet(name string) (State, error) {
 	if err := a.DeleteProfile(name); err != nil {
 		return State{}, err
 	}
-	a.note(EventSet, "Удалён набор «"+name+"»")
+	a.note(EventSet, i18n.Sprintf("Удалён набор «%s»", name))
 	return a.State()
 }
 

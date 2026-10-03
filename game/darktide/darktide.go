@@ -3,8 +3,6 @@ package darktide
 
 import (
 	"bytes"
-	"errors"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/zemidala/modvault/game"
+	"github.com/zemidala/modvault/i18n"
 )
 
 // SteamAppID — номер игры в Steam.
@@ -60,7 +59,7 @@ func (*Darktide) Originals(dir string) map[string]string {
 func (*Darktide) Validate(dir string) error {
 	for _, rel := range []string{exePath, bundleDBPath} {
 		if _, err := os.Stat(filepath.Join(dir, filepath.FromSlash(rel))); err != nil {
-			return fmt.Errorf("в папке нет %s — похоже, это не папка Darktide", rel)
+			return i18n.Errorf("в папке нет %s — похоже, это не папка Darktide", rel)
 		}
 	}
 	return nil
@@ -96,12 +95,12 @@ func (d *Darktide) Generate(ctx game.Context) ([]game.Generated, []game.Notice, 
 		hasMods = hasMods || (m.Enabled && m.Layout.Role == game.RoleNone)
 	}
 	if hasMods && !loader {
-		notices = append(notices, game.Notice{Level: game.Error, Title: "Не установлен Darktide Mod Loader",
-			Detail: "Без него игра не загрузит моды. Скачайте DML с Nexus и добавьте как обычный мод"})
+		notices = append(notices, game.Notice{Level: game.Error, Title: i18n.T("Не установлен Darktide Mod Loader"),
+			Detail: i18n.T("Без него игра не загрузит моды. Скачайте DML с Nexus и добавьте как обычный мод")})
 	}
 	if hasMods && !framework {
-		notices = append(notices, game.Notice{Level: game.Warn, Title: "Не установлен Darktide Mod Framework",
-			Detail: "Большинству модов нужен DMF. Скачайте его с Nexus и добавьте как обычный мод"})
+		notices = append(notices, game.Notice{Level: game.Warn, Title: i18n.T("Не установлен Darktide Mod Framework"),
+			Detail: i18n.T("Большинству модов нужен DMF. Скачайте его с Nexus и добавьте как обычный мод")})
 	}
 	if !loader {
 		// Без загрузчика нет ни порядка загрузки, ни патча.
@@ -131,7 +130,7 @@ func (d *Darktide) Generate(ctx game.Context) ([]game.Generated, []game.Notice, 
 // мод — строкой «-- имя». Загрузчик и фреймворк DML грузит сам.
 func LoadOrder(mods []game.ModInfo) []byte {
 	var b bytes.Buffer
-	b.WriteString("-- Файл собран Modvault. Правки вручную пропадут при следующем развёртывании.\r\n")
+	b.WriteString(i18n.T("-- Файл собран Modvault. Правки вручную пропадут при следующем развёртывании.\r\n"))
 	seen := map[string]bool{}
 	for _, m := range mods {
 		for _, folder := range m.Layout.Folders {
@@ -153,7 +152,7 @@ func LoadOrder(mods []game.ModInfo) []byte {
 // Launch запускает игру. Через Steam — чтобы работали оверлей и облако.
 func (*Darktide) Launch(inst game.Install) error {
 	if inst.Store != "Steam" {
-		return errors.New("запуск этой версии игры пока не поддерживается: запустите её из приложения Xbox")
+		return i18n.NewError("запуск этой версии игры пока не поддерживается: запустите её из приложения Xbox")
 	}
 	if inst.ViaLauncher {
 		return openURL("steam://rungameid/" + SteamAppID) // Steam сам откроет лаунчер игры
@@ -161,14 +160,14 @@ func (*Darktide) Launch(inst game.Install) error {
 	// Игра стартует сама, минуя окно лаунчера. Без Steam она не войдёт в
 	// учётную запись, поэтому запускать её без него бессмысленно.
 	if !steamRunning() {
-		return errors.New("Steam не запущен: без него игра не стартует. Запустите Steam и нажмите «Играть» ещё раз")
+		return i18n.NewError("Steam не запущен: без него игра не стартует. Запустите Steam и нажмите «Играть» ещё раз")
 	}
 	cmd, err := launchCommand(inst.Dir)
 	if err != nil {
 		return err
 	}
 	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("игра не запустилась: %w", err)
+		return i18n.Errorf("игра не запустилась: %w", err)
 	}
 	return cmd.Process.Release() // игра живёт сама по себе, ждать её не нужно
 }
@@ -182,7 +181,7 @@ var launchArgs = []string{"-eac-untrusted", "--bundle-dir", "../bundle", "--ini"
 func launchCommand(dir string) (*exec.Cmd, error) {
 	exe := filepath.Join(dir, filepath.FromSlash(exePath))
 	if _, err := os.Stat(exe); err != nil {
-		return nil, fmt.Errorf("в папке игры нет %s", exePath)
+		return nil, i18n.Errorf("в папке игры нет %s", exePath)
 	}
 	cmd := exec.Command(exe, launchArgs...)
 	cmd.Dir = filepath.Dir(exe) // пути в параметрах заданы от папки binaries

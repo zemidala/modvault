@@ -2,7 +2,6 @@ package profile
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -10,15 +9,16 @@ import (
 	"strings"
 
 	"github.com/zemidala/modvault/core/fsx"
+	"github.com/zemidala/modvault/i18n"
 )
 
 const ext = ".json"
 
 var (
 	// ErrInvalidName — название профиля не годится в имя файла.
-	ErrInvalidName = errors.New("недопустимое название профиля")
+	ErrInvalidName = i18n.NewError("недопустимое название профиля")
 	// ErrNoMod — в профиле нет такого мода.
-	ErrNoMod = errors.New("мода нет в профиле")
+	ErrNoMod = i18n.NewError("мода нет в профиле")
 )
 
 // Entry — мод в профиле. Позиция в списке задаёт порядок загрузки.
@@ -50,7 +50,7 @@ func (p *Profile) Index(modID string) int {
 // Add ставит мод в конец профиля включённым.
 func (p *Profile) Add(modID, versionID string) error {
 	if p.Index(modID) >= 0 {
-		return fmt.Errorf("мод %q уже есть в профиле «%s»", modID, p.Name)
+		return i18n.Errorf("мод %q уже есть в профиле «%s»", modID, p.Name)
 	}
 	p.Entries = append(p.Entries, Entry{ModID: modID, VersionID: versionID, Enabled: true})
 	return nil
@@ -104,10 +104,10 @@ func (p *Profile) validate() error {
 	seen := make(map[string]bool, len(p.Entries))
 	for _, e := range p.Entries {
 		if e.ModID == "" {
-			return errors.New("запись без мода")
+			return i18n.NewError("запись без мода")
 		}
 		if seen[e.ModID] {
-			return fmt.Errorf("мод %q записан дважды", e.ModID)
+			return i18n.Errorf("мод %q записан дважды", e.ModID)
 		}
 		seen[e.ModID] = true
 	}
@@ -189,7 +189,7 @@ func (d *Dir) Save(p Profile) error {
 		return err
 	}
 	if err := p.validate(); err != nil {
-		return fmt.Errorf("профиль «%s»: %w", p.Name, err)
+		return i18n.Errorf("профиль «%s»: %w", p.Name, err)
 	}
 	if p.Entries == nil {
 		p.Entries = []Entry{}
@@ -237,7 +237,7 @@ func (d *Dir) create(name string, p Profile) error {
 		return err
 	}
 	if _, err := os.Stat(path); err == nil {
-		return fmt.Errorf("профиль «%s»: %w", name, fs.ErrExist)
+		return i18n.Errorf("профиль «%s»: %w", name, fs.ErrExist)
 	}
 	p.Name = name
 	return d.Save(p)

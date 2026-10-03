@@ -3,10 +3,11 @@ package fsx
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
 	"io"
 	"os"
 	"strings"
+
+	"github.com/zemidala/modvault/i18n"
 )
 
 const hashPrefix = "sha256:"
@@ -43,10 +44,10 @@ func ParseHash(s string) (Hash, error) {
 	var h Hash
 	digits, ok := strings.CutPrefix(s, hashPrefix)
 	if !ok || len(digits) != hex.EncodedLen(len(h)) {
-		return Hash{}, fmt.Errorf("fsx: неверный хеш %q", s)
+		return Hash{}, i18n.Errorf("fsx: неверный хеш %q", s)
 	}
 	if _, err := hex.Decode(h[:], []byte(digits)); err != nil {
-		return Hash{}, fmt.Errorf("fsx: неверный хеш %q", s)
+		return Hash{}, i18n.Errorf("fsx: неверный хеш %q", s)
 	}
 	return h, nil
 }

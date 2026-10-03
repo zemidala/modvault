@@ -1,11 +1,10 @@
 package manager
 
 import (
-	"errors"
-	"fmt"
 	"strings"
 
 	"github.com/zemidala/modvault/core/deploy"
+	"github.com/zemidala/modvault/i18n"
 )
 
 // Настройки, которые окно показывает переключателями, памятка «Начало
@@ -31,27 +30,27 @@ type Setting struct {
 func (a *Manager) settingsList() []Setting {
 	list := []Setting{
 		{
-			Key: SettingCheckOnStart, Title: "Проверять обновления при запуске",
-			Detail: "Программа сама спрашивает Nexus о новых версиях, когда открывается окно. Выключено — только по кнопке «Проверить обновления».",
+			Key: SettingCheckOnStart, Title: i18n.T("Проверять обновления при запуске"),
+			Detail: i18n.T("Программа сама спрашивает Nexus о новых версиях, когда открывается окно. Выключено — только по кнопке «Проверить обновления»."),
 			On:     a.settings.UpdateCheck != updateCheckManual,
 		},
 		{
-			Key: SettingDeployUpdates, Title: "Обновлённый мод сразу попадает в игру",
-			Detail: "После обновления включённого мода новая версия сама ложится в игру. Выключено — по кнопке «Развернуть».",
+			Key: SettingDeployUpdates, Title: i18n.T("Обновлённый мод сразу попадает в игру"),
+			Detail: i18n.T("После обновления включённого мода новая версия сама ложится в игру. Выключено — по кнопке «Развернуть»."),
 			On:     !a.settings.ManualUpdates,
 		},
 		{
-			Key: SettingDirectLaunch, Title: "Запускать игру без лаунчера",
-			Detail: "«Играть» стартует саму игру, минуя окно лаунчера. Выключено — игра запускается через Steam, с лаунчером.",
+			Key: SettingDirectLaunch, Title: i18n.T("Запускать игру без лаунчера"),
+			Detail: i18n.T("«Играть» стартует саму игру, минуя окно лаунчера. Выключено — игра запускается через Steam, с лаунчером."),
 			On:     !a.settings.LaunchViaLauncher,
 		},
 	}
 	if owner, ours := a.nxmOwner(); owner != "" {
-		detail := "Кнопка «Mod Manager Download» на сайте Nexus ставит мод в Modvault."
+		detail := i18n.T("Кнопка «Mod Manager Download» на сайте Nexus ставит мод в Modvault.")
 		if !ours {
-			detail += " Сейчас: " + nxmLabel(owner) + "."
+			detail += i18n.T(" Сейчас: ") + nxmLabel(owner) + "."
 		}
-		list = append(list, Setting{Key: SettingNxm, Title: "Открывать ссылки с сайта Nexus в Modvault", Detail: detail, On: ours})
+		list = append(list, Setting{Key: SettingNxm, Title: i18n.T("Открывать ссылки с сайта Nexus в Modvault"), Detail: detail, On: ours})
 	}
 	return list
 }
@@ -74,7 +73,7 @@ func (a *Manager) SetSetting(key string, on bool) (State, error) {
 	case SettingDirectLaunch:
 		a.settings.LaunchViaLauncher = !on
 	default:
-		return State{}, fmt.Errorf("неизвестная настройка %q", key)
+		return State{}, i18n.Errorf("неизвестная настройка %q", key)
 	}
 	if err := a.saveSettings(); err != nil {
 		return State{}, err
@@ -99,10 +98,10 @@ func (a *Manager) setupSteps() []SetupStep {
 		return nil
 	}
 	steps := []SetupStep{{
-		Title:  "Папка игры",
-		Detail: "Куда развёртывать моды.",
+		Title:  i18n.T("Папка игры"),
+		Detail: i18n.T("Куда развёртывать моды."),
 		Done:   a.settings.GameDir != "" && a.deployErr == nil,
-		Action: "Выбрать папку", Command: "ChooseGame",
+		Action: i18n.T("Выбрать папку"), Command: "ChooseGame",
 	}}
 	rec, _ := a.loadRecord()
 	vortex := false
@@ -111,25 +110,25 @@ func (a *Manager) setupSteps() []SetupStep {
 	}
 	if vortex || rec != nil {
 		steps = append(steps, SetupStep{
-			Title:  "Перенять моды у Vortex",
-			Detail: "Пока игрой управляет Vortex, Modvault в неё ничего не кладёт: ни обновления, ни наборы до игры не доходят. Файлы игры при этом не меняются, вернуть всё Vortex можно в любой момент.",
+			Title:  i18n.T("Перенять моды у Vortex"),
+			Detail: i18n.T("Пока игрой управляет Vortex, Modvault в неё ничего не кладёт: ни обновления, ни наборы до игры не доходят. Файлы игры при этом не меняются, вернуть всё Vortex можно в любой момент."),
 			Done:   rec != nil,
-			Action: "Перенять у Vortex", Command: "Adopt",
+			Action: i18n.T("Перенять у Vortex"), Command: "Adopt",
 		})
 	}
 	if a.game.NexusDomain() != "" {
 		steps = append(steps, SetupStep{
-			Title:  "Ключ Nexus",
-			Detail: "Нужен, чтобы проверять обновления и ставить моды кнопкой на сайте.",
+			Title:  i18n.T("Ключ Nexus"),
+			Detail: i18n.T("Нужен, чтобы проверять обновления и ставить моды кнопкой на сайте."),
 			Done:   a.settings.NexusUser != "",
-			Action: "Ввести ключ", Command: "NexusKey",
+			Action: i18n.T("Ввести ключ"), Command: "NexusKey",
 		})
 		if owner, ours := a.nxmOwner(); owner != "" {
 			steps = append(steps, SetupStep{
-				Title:  "Ссылки с сайта Nexus",
-				Detail: "Чтобы кнопка «Mod Manager Download» ставила моды в Modvault.",
+				Title:  i18n.T("Ссылки с сайта Nexus"),
+				Detail: i18n.T("Чтобы кнопка «Mod Manager Download» ставила моды в Modvault."),
 				Done:   ours,
-				Action: "Открывать в Modvault", Command: "ToggleNxm",
+				Action: i18n.T("Открывать в Modvault"), Command: "ToggleNxm",
 			})
 		}
 	}
@@ -197,7 +196,7 @@ func (a *Manager) WinnerOptions(key string) (WinnerChoice, error) {
 	}
 	conflicts := conflictsOf(plan, key)
 	if len(conflicts) == 0 {
-		return WinnerChoice{}, errors.New("этого конфликта больше нет")
+		return WinnerChoice{}, i18n.NewError("этого конфликта больше нет")
 	}
 	names := a.modNames()
 	mods := conflicts[0].Mods
@@ -222,7 +221,7 @@ func (a *Manager) SetWinner(key, winner string) (State, error) {
 	}
 	conflicts := conflictsOf(plan, key)
 	if len(conflicts) == 0 {
-		return State{}, errors.New("этого конфликта больше нет")
+		return State{}, i18n.NewError("этого конфликта больше нет")
 	}
 	mods := conflicts[0].Mods
 	known := false
@@ -230,7 +229,7 @@ func (a *Manager) SetWinner(key, winner string) (State, error) {
 		known = known || id == winner
 	}
 	if !known {
-		return State{}, fmt.Errorf("мод %q в этом конфликте не участвует", winner)
+		return State{}, i18n.Errorf("мод %q в этом конфликте не участвует", winner)
 	}
 	p, _, err := a.loadProfile()
 	if err != nil {
@@ -253,6 +252,6 @@ func (a *Manager) SetWinner(key, winner string) (State, error) {
 	if err := a.profiles.Save(p); err != nil {
 		return State{}, err
 	}
-	a.note(EventSet, fmt.Sprintf("В конфликте файлов (%d) победителем выбран «%s»", len(conflicts), a.modName(winner)))
+	a.note(EventSet, i18n.Sprintf("В конфликте файлов (%d) победителем выбран «%s»", len(conflicts), a.modName(winner)))
 	return a.state()
 }

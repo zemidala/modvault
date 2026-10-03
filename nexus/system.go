@@ -1,5 +1,7 @@
 package nexus
 
+import "github.com/zemidala/modvault/i18n"
+
 // Keys — место, где хранится ключ API.
 type Keys interface {
 	// Load возвращает ключ; пустая строка — ключа нет.
@@ -17,7 +19,7 @@ type Protocol interface {
 }
 
 // SystemKeys — ключ в хранилище учётных данных Windows.
-func SystemKeys() Keys { return credential{target: "Modvault: ключ Nexus Mods"} }
+func SystemKeys() Keys { return credential{target: i18n.T("Modvault: ключ Nexus Mods")} }
 
 // SystemProtocol — обработчик nxm:// текущего пользователя Windows.
 func SystemProtocol() Protocol { return protocol{path: `Software\Classes\nxm`} }

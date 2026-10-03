@@ -15,6 +15,7 @@ import (
 	"github.com/zemidala/modvault/core/fsx"
 	"github.com/zemidala/modvault/core/profile"
 	"github.com/zemidala/modvault/core/store"
+	"github.com/zemidala/modvault/i18n"
 	"github.com/zemidala/modvault/nexus"
 )
 
@@ -102,7 +103,7 @@ func (a *Manager) ModVersions(id string) ([]VersionInfo, error) {
 	}
 	i := p.Index(id)
 	if i < 0 {
-		return nil, fmt.Errorf("мод %q не найден", id)
+		return nil, i18n.Errorf("мод %q не найден", id)
 	}
 	var out []VersionInfo
 	for _, m := range mods {
@@ -129,7 +130,7 @@ func (a *Manager) UseVersion(id, versionID string) (SetResult, error) {
 	defer a.mu.Unlock()
 	v, err := a.store.Get(id, versionID)
 	if err != nil {
-		return SetResult{}, fmt.Errorf("версии %q у мода нет", versionID)
+		return SetResult{}, i18n.Errorf("версии %q у мода нет", versionID)
 	}
 	synced := a.inSync()
 	p, _, err := a.loadProfile()
@@ -143,8 +144,7 @@ func (a *Manager) UseVersion(id, versionID string) (SetResult, error) {
 		return SetResult{}, err
 	}
 	a.shareVersion(id, versionID)
-	msg := strings.Replace(a.deployUpdate(v, synced), "Обновлён: ", "Выбрана версия: ", 1)
-	msg = strings.Replace(msg, " до ", " ", 1)
+	msg := a.deployUpdate(i18n.Sprintf("Выбрана версия: %s %s", v.Name, v.Version), v, synced)
 	a.note(EventInstall, msg)
 	st, err := a.state()
 	return SetResult{State: st, Message: msg}, err
@@ -175,7 +175,7 @@ func (a *Manager) ExportSet(path string) (string, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if real, err := a.hasMods(); err != nil || !real {
-		return "", errors.Join(err, errors.New("сначала выберите папку игры"))
+		return "", errors.Join(err, i18n.NewError("сначала выберите папку игры"))
 	}
 	p, _, err := a.loadProfile()
 	if err != nil {
@@ -203,9 +203,9 @@ func (a *Manager) ExportSet(path string) (string, error) {
 	if err := fsx.WriteFile(path, data); err != nil {
 		return "", err
 	}
-	msg := fmt.Sprintf("Набор «%s» сохранён в файл: %d %s", p.Name, len(out.Mods), plural(len(out.Mods), "мод", "мода", "модов"))
+	msg := i18n.Sprintf("Набор «%s» сохранён в файл: %d %s", p.Name, len(out.Mods), plural(len(out.Mods), "мод", "мода", "модов"))
 	if local > 0 {
-		msg += fmt.Sprintf(". У %d из них нет номера на Nexus — получателю придётся искать их самому", local)
+		msg += i18n.Sprintf(". У %d из них нет номера на Nexus — получателю придётся искать их самому", local)
 	}
 	a.note(EventSet, msg)
 	return msg, nil
@@ -232,7 +232,7 @@ func (a *Manager) ImportSet(path string) (ImportResult, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if real, err := a.hasMods(); err != nil || !real {
-		return ImportResult{}, errors.Join(err, errors.New("сначала выберите папку игры"))
+		return ImportResult{}, errors.Join(err, i18n.NewError("сначала выберите папку игры"))
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -240,15 +240,15 @@ func (a *Manager) ImportSet(path string) (ImportResult, error) {
 	}
 	var in setFile
 	if err := json.Unmarshal(data, &in); err != nil || in.Format == 0 {
-		return ImportResult{}, fmt.Errorf("%s — не файл набора Modvault", filepath.Base(path))
+		return ImportResult{}, i18n.Errorf("%s — не файл набора Modvault", filepath.Base(path))
 	}
 	if domain := a.game.NexusDomain(); in.Game != "" && in.Game != domain {
-		return ImportResult{}, fmt.Errorf("набор собран для другой игры (%s)", in.Game)
+		return ImportResult{}, i18n.Errorf("набор собран для другой игры (%s)", in.Game)
 	}
 	if strings.TrimSpace(in.Name) == "" {
 		in.Name = strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
 	}
-	return a.importSet(in, "из файла")
+	return a.importSet(in, i18n.T("из файла"))
 }
 
 // importSet создаёт набор по списку модов in; origin — откуда список («из
@@ -315,9 +315,9 @@ func (a *Manager) importSet(in setFile, origin string) (ImportResult, error) {
 		return ImportResult{}, err
 	}
 	res.Set = name
-	res.Message = fmt.Sprintf("Набор «%s» создан %s: %d из %d %s уже есть и включены в нём", name, origin, len(have), len(in.Mods), plural(len(in.Mods), "мода", "модов", "модов"))
+	res.Message = i18n.Sprintf("Набор «%s» создан %s: %d из %d %s уже есть и включены в нём", name, origin, len(have), len(in.Mods), plural(len(in.Mods), "мода", "модов", "модов"))
 	if n := len(res.Missing); n > 0 {
-		res.Message += fmt.Sprintf(". Не хватает %d: после установки включите их в этом наборе", n)
+		res.Message += i18n.Sprintf(". Не хватает %d: после установки включите их в этом наборе", n)
 	}
 	a.note(EventSet, res.Message)
 	res.State, err = a.state()
@@ -367,9 +367,9 @@ type FilesReport struct {
 func (a *Manager) FilesReport() (FilesReport, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	rep := FilesReport{Title: "Файлы в игре", Lines: []string{}}
+	rep := FilesReport{Title: i18n.T("Файлы в игре"), Lines: []string{}}
 	if a.deployer == nil || a.deployErr != nil {
-		rep.Note = "Папка игры не выбрана или недоступна, поэтому программа не знает, какие файлы модов в ней лежат. Выберите папку игры щелчком по пункту «Игра»."
+		rep.Note = i18n.T("Папка игры не выбрана или недоступна, поэтому программа не знает, какие файлы модов в ней лежат. Выберите папку игры щелчком по пункту «Игра».")
 		return rep, nil
 	}
 	plan, err := a.plan()
@@ -382,32 +382,32 @@ func (a *Manager) FilesReport() (FilesReport, error) {
 		switch {
 		case d.Missing:
 			missing++
-			rep.Lines = append(rep.Lines, fmt.Sprintf("пропал: %s — %s", d.Path, names(d.ModID)))
+			rep.Lines = append(rep.Lines, i18n.Sprintf("пропал: %s — %s", d.Path, names(d.ModID)))
 		case d.Updated:
 			updated++
-			rep.Lines = append(rep.Lines, fmt.Sprintf("обновлён игрой: %s — %s", d.Path, names(d.ModID)))
+			rep.Lines = append(rep.Lines, i18n.Sprintf("обновлён игрой: %s — %s", d.Path, names(d.ModID)))
 		default:
 			changed++
-			rep.Lines = append(rep.Lines, fmt.Sprintf("изменён: %s — %s", d.Path, names(d.ModID)))
+			rep.Lines = append(rep.Lines, i18n.Sprintf("изменён: %s — %s", d.Path, names(d.ModID)))
 		}
 	}
 	sort.Strings(rep.Lines)
 
 	var notes []string
 	if changed > 0 {
-		notes = append(notes, fmt.Sprintf("%d %s в папке игры не такие, какими их положила программа: их изменили или заменили вне Modvault — другой менеджер модов, ручная правка или сам мод. Ничего не потеряется: при развёртывании изменённые файлы будут сохранены в отдельную папку, а на их место лягут файлы из хранилища. Если правки нужны — сначала скопируйте эти файлы.",
+		notes = append(notes, i18n.Sprintf("%d %s в папке игры не такие, какими их положила программа: их изменили или заменили вне Modvault — другой менеджер модов, ручная правка или сам мод. Ничего не потеряется: при развёртывании изменённые файлы будут сохранены в отдельную папку, а на их место лягут файлы из хранилища. Если правки нужны — сначала скопируйте эти файлы.",
 			changed, plural(changed, "файл мода", "файла модов", "файлов модов")))
 	}
 	if updated > 0 {
-		notes = append(notes, fmt.Sprintf("%d %s заменила сама игра: её обновили или проверили файлы в Steam. Новый файл игры станет оригиналом, поверх него снова ляжет файл мода.",
+		notes = append(notes, i18n.Sprintf("%d %s заменила сама игра: её обновили или проверили файлы в Steam. Новый файл игры станет оригиналом, поверх него снова ляжет файл мода.",
 			updated, plural(updated, "файл", "файла", "файлов")))
 	}
 	if missing > 0 {
-		notes = append(notes, fmt.Sprintf("%d %s из игры — например, после проверки файлов в Steam. При развёртывании они лягут заново.",
+		notes = append(notes, i18n.Sprintf("%d %s из игры — например, после проверки файлов в Steam. При развёртывании они лягут заново.",
 			missing, plural(missing, "файл мода пропал", "файла модов пропали", "файлов модов пропали")))
 	}
 	if n := len(plan.Changes); n > 0 {
-		notes = append(notes, fmt.Sprintf("Всего ждёт развёртывания: %d %s. Нажмите «Развернуть» внизу окна — игра совпадёт с набором.",
+		notes = append(notes, i18n.Sprintf("Всего ждёт развёртывания: %d %s. Нажмите «Развернуть» внизу окна — игра совпадёт с набором.",
 			n, plural(n, "изменение", "изменения", "изменений")))
 		if len(rep.Lines) == 0 {
 			// Расхождений нет — показываем сам план.
@@ -424,7 +424,7 @@ func (a *Manager) FilesReport() (FilesReport, error) {
 		}
 	}
 	if len(notes) == 0 {
-		notes = append(notes, "Файлы модов в игре совпадают с набором: всё, что должно лежать в игре, лежит, и ничего не изменено.")
+		notes = append(notes, i18n.T("Файлы модов в игре совпадают с набором: всё, что должно лежать в игре, лежит, и ничего не изменено."))
 	}
 	rep.Note = strings.Join(notes, "\n\n")
 	return rep, nil
@@ -438,7 +438,7 @@ func (a *Manager) FilesReport() (FilesReport, error) {
 func (a *Manager) ImportCollection(ctx context.Context, link string) (ImportResult, error) {
 	where, ok := nexus.ParseCollection(link)
 	if !ok {
-		return ImportResult{}, errors.New("это не ссылка на коллекцию Nexus: нужен адрес её страницы или её код")
+		return ImportResult{}, i18n.NewError("это не ссылка на коллекцию Nexus: нужен адрес её страницы или её код")
 	}
 	a.mu.Lock()
 	real, herr := a.hasMods()
@@ -450,20 +450,20 @@ func (a *Manager) ImportCollection(ctx context.Context, link string) (ImportResu
 		return ImportResult{}, err
 	}
 	if !real {
-		return ImportResult{}, errors.New("сначала выберите папку игры")
+		return ImportResult{}, i18n.NewError("сначала выберите папку игры")
 	}
 	if where.Game != "" && where.Game != domain {
-		return ImportResult{}, fmt.Errorf("коллекция для другой игры (%s), а Modvault ведёт %s", where.Game, a.game.Name())
+		return ImportResult{}, i18n.Errorf("коллекция для другой игры (%s), а Modvault ведёт %s", where.Game, a.game.Name())
 	}
 	col, err := c.Collection(ctx, domain, where.Slug, where.Revision)
 	if errors.Is(err, nexus.ErrNotFound) {
-		return ImportResult{}, fmt.Errorf("коллекции «%s» на Nexus нет: проверьте ссылку", where.Slug)
+		return ImportResult{}, i18n.Errorf("коллекции «%s» на Nexus нет: проверьте ссылку", where.Slug)
 	}
 	if err != nil {
-		return ImportResult{}, fmt.Errorf("коллекция «%s»: %w", where.Slug, err)
+		return ImportResult{}, i18n.Errorf("коллекция «%s»: %w", where.Slug, err)
 	}
 	if col.Game != "" && col.Game != domain {
-		return ImportResult{}, fmt.Errorf("коллекция «%s» собрана для другой игры (%s)", col.Name, col.Game)
+		return ImportResult{}, i18n.Errorf("коллекция «%s» собрана для другой игры (%s)", col.Name, col.Game)
 	}
 
 	in := setFile{Format: 1, Name: col.Name, Game: domain}
@@ -480,14 +480,14 @@ func (a *Manager) ImportCollection(ctx context.Context, link string) (ImportResu
 			optional++
 			continue
 		}
-		in.Mods = append(in.Mods, setFileMod{Name: e.Name + " (не с Nexus)", URL: e.URL})
+		in.Mods = append(in.Mods, setFileMod{Name: e.Name + i18n.T(" (не с Nexus)"), URL: e.URL})
 	}
 	if len(in.Mods) == 0 {
-		return ImportResult{}, fmt.Errorf("в коллекции «%s» нет обязательных модов", col.Name)
+		return ImportResult{}, i18n.Errorf("в коллекции «%s» нет обязательных модов", col.Name)
 	}
-	origin := fmt.Sprintf("по коллекции Nexus (редакция %d", col.Revision)
+	origin := i18n.Sprintf("по коллекции Nexus (редакция %d", col.Revision)
 	if col.Author != "" {
-		origin += ", автор " + col.Author
+		origin += i18n.T(", автор ") + col.Author
 	}
 	origin += ")"
 
@@ -498,7 +498,7 @@ func (a *Manager) ImportCollection(ctx context.Context, link string) (ImportResu
 		return ImportResult{}, err
 	}
 	if optional > 0 {
-		res.Message += fmt.Sprintf(". Необязательных в коллекции: %d — в набор не вошли", optional)
+		res.Message += i18n.Sprintf(". Необязательных в коллекции: %d — в набор не вошли", optional)
 	}
 	return res, nil
 }

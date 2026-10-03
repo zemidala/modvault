@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+
+	"github.com/zemidala/modvault/i18n"
 )
 
 // SafeJoin приклеивает относительный путь rel к root и гарантирует, что
@@ -14,10 +16,10 @@ import (
 // Символические ссылки внутри root не раскрываются.
 func SafeJoin(root, rel string) (string, error) {
 	if rel == "" {
-		return "", unsafePath(rel, "пустой путь")
+		return "", unsafePath(rel, i18n.T("пустой путь"))
 	}
 	if isSeparator(rune(rel[0])) {
-		return "", unsafePath(rel, "абсолютный путь")
+		return "", unsafePath(rel, i18n.T("абсолютный путь"))
 	}
 
 	elems := []string{root}
@@ -31,7 +33,7 @@ func SafeJoin(root, rel string) (string, error) {
 		elems = append(elems, name)
 	}
 	if len(elems) == 1 {
-		return "", unsafePath(rel, "пустой путь")
+		return "", unsafePath(rel, i18n.T("пустой путь"))
 	}
 	return filepath.Join(elems...), nil
 }
@@ -47,18 +49,18 @@ func isSeparator(r rune) bool {
 // checkName возвращает причину, по которой имя недопустимо, или пустую строку.
 func checkName(name string) string {
 	if name == ".." {
-		return "выход из папки"
+		return i18n.T("выход из папки")
 	}
 	for _, r := range name {
 		if r < 0x20 || strings.ContainsRune(`<>:"|?*`, r) {
-			return "недопустимый символ в имени"
+			return i18n.T("недопустимый символ в имени")
 		}
 	}
 	if strings.HasSuffix(name, ".") || strings.HasSuffix(name, " ") {
-		return "имя оканчивается точкой или пробелом"
+		return i18n.T("имя оканчивается точкой или пробелом")
 	}
 	if isReservedName(name) {
-		return "зарезервированное имя устройства"
+		return i18n.T("зарезервированное имя устройства")
 	}
 	return ""
 }

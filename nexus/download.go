@@ -12,6 +12,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/zemidala/modvault/i18n"
 )
 
 // RetryDelay — пауза между попытками загрузки. Рядом: сколько неудач подряд
@@ -35,7 +37,7 @@ type errFatal struct{ error }
 // вызывающий, когда убедится, что файл тот.
 func Download(ctx context.Context, urls []string, part string, size int64, progress func(done, total int64)) error {
 	if len(urls) == 0 {
-		return errors.New("Nexus не дал ссылок на файл")
+		return i18n.NewError("Nexus не дал ссылок на файл")
 	}
 	if err := os.MkdirAll(filepath.Dir(part), 0o755); err != nil {
 		return err
@@ -70,7 +72,7 @@ func Download(ctx context.Context, urls []string, part string, size int64, progr
 			failures++
 		}
 	}
-	return fmt.Errorf("загрузка не удалась: %w", last)
+	return i18n.Errorf("загрузка не удалась: %w", last)
 }
 
 // fetch делает одну попытку и возвращает, сколько байт она добавила.
@@ -93,7 +95,7 @@ func fetch(ctx context.Context, rawURL, part string, size int64, progress func(d
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
-		return 0, errFatal{errors.New("Nexus дал негодную ссылку на файл")}
+		return 0, errFatal{i18n.NewError("Nexus дал негодную ссылку на файл")}
 	}
 	if offset > 0 {
 		req.Header.Set("Range", fmt.Sprintf("bytes=%d-", offset))
@@ -121,11 +123,11 @@ func fetch(ctx context.Context, rawURL, part string, size int64, progress func(d
 		if err := os.Remove(part); err != nil {
 			return 0, errFatal{err}
 		}
-		return 0, errors.New("сервер не принял докачку")
+		return 0, i18n.NewError("сервер не принял докачку")
 	case http.StatusForbidden, http.StatusGone:
-		return 0, errFatal{errors.New("ссылка на файл устарела: нажмите кнопку загрузки на сайте ещё раз")}
+		return 0, errFatal{i18n.NewError("ссылка на файл устарела: нажмите кнопку загрузки на сайте ещё раз")}
 	default:
-		return 0, fmt.Errorf("сервер ответил %s", resp.Status)
+		return 0, i18n.Errorf("сервер ответил %s", resp.Status)
 	}
 	total := size
 	if total == 0 && resp.ContentLength > 0 {
@@ -145,7 +147,7 @@ func fetch(ctx context.Context, rawURL, part string, size int64, progress func(d
 		if n > 0 {
 			watchdog.Reset(stallTimeout)
 			if size > 0 && offset+written+int64(n) > size {
-				return written, errFatal{fmt.Errorf("сервер отдаёт больше, чем %d байт, заявленных Nexus", size)}
+				return written, errFatal{i18n.Errorf("сервер отдаёт больше, чем %d байт, заявленных Nexus", size)}
 			}
 			if _, werr := f.Write(buf[:n]); werr != nil {
 				return written, errFatal{werr}
@@ -164,7 +166,7 @@ func fetch(ctx context.Context, rawURL, part string, size int64, progress func(d
 		return written, errFatal{err}
 	}
 	if size > 0 && offset+written != size {
-		return written, fmt.Errorf("получено %d байт из %d", offset+written, size)
+		return written, i18n.Errorf("получено %d байт из %d", offset+written, size)
 	}
 	return written, nil
 }

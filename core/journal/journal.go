@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/zemidala/modvault/core/fsx"
+	"github.com/zemidala/modvault/i18n"
 )
 
 const (
@@ -34,7 +35,7 @@ const SyncEvery = time.Second
 
 // ErrPending — в папке уже лежит незавершённая операция: сначала её нужно
 // откатить или закрыть.
-var ErrPending = errors.New("есть незавершённая операция")
+var ErrPending = i18n.NewError("есть незавершённая операция")
 
 type record struct {
 	ID   string          `json:"id"`
@@ -126,7 +127,7 @@ func Load(dir string) (*Pending, error) {
 	}
 	var r record
 	if err := json.Unmarshal(data, &r); err != nil {
-		return nil, fmt.Errorf("журнал %s повреждён: %w", dir, err)
+		return nil, i18n.Errorf("журнал %s повреждён: %w", dir, err)
 	}
 	p := &Pending{ID: r.ID, Data: r.Data}
 
