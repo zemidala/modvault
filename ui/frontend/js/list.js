@@ -13,7 +13,7 @@ try {
 
 const updateRank = { update: 0, unknown: 1, missing: 2, current: 3 };
 const levelRank = { error: 0, warn: 1, ok: 2, off: 3 };
-const byText = (a, b) => a.localeCompare(b, "ru", { numeric: true, sensitivity: "base" });
+const byText = (a, b) => a.localeCompare(b, LOCALE, { numeric: true, sensitivity: "base" });
 
 // Значение мода для сортировки по столбцу; null — значения нет, такие
 // моды стоят в конце при любом направлении.
@@ -78,8 +78,8 @@ function sortBy(key) {
 // Столбцы таблицы, которые можно скрыть (шестерёнка «Столбцы»). Выбор
 // запоминается; «Установлен» по умолчанию скрыт.
 const columns = [
-  ["author", "Автор"], ["category", "Категория"], ["rating", "Рейтинг"], ["stats", "Скачали"], ["version", "Версия"],
-  ["update", "Обновление"], ["sets", "Наборы"], ["installed", "Установлен"], ["state", "Состояние"],
+  ["author", t("Автор")], ["category", t("Категория")], ["rating", t("Рейтинг")], ["stats", t("Скачали")], ["version", t("Версия")],
+  ["update", t("Обновление")], ["sets", t("Наборы")], ["installed", t("Установлен")], ["state", t("Состояние")],
 ];
 let hiddenColumns = new Set(["installed"]);
 try {
@@ -97,7 +97,7 @@ function applyColumns() {
 }
 
 function openColumns() {
-  const items = [{ title: "Столбцы таблицы" }];
+  const items = [{ title: t("Столбцы таблицы") }];
   for (const [key, label] of columns) {
     const shown = !hiddenColumns.has(key);
     items.push({
@@ -122,12 +122,12 @@ function openColumns() {
 
 // Быстрые фильтры списка: по состоянию мода и по категории.
 const filterKinds = [
-  ["all", "Все", () => true],
-  ["enabled", "Включённые", (mod) => mod.enabled],
-  ["disabled", "Выключенные", (mod) => !mod.enabled],
-  ["update", "С обновлением", (mod) => !!mod.available],
-  ["errors", "С ошибками", (mod) => mod.runErrors > 0],
-  ["favorite", "Избранные", (mod) => !!mod.favorite],
+  ["all", t("Все"), () => true],
+  ["enabled", t("Включённые"), (mod) => mod.enabled],
+  ["disabled", t("Выключенные"), (mod) => !mod.enabled],
+  ["update", t("С обновлением"), (mod) => !!mod.available],
+  ["errors", t("С ошибками"), (mod) => mod.runErrors > 0],
+  ["favorite", t("Избранные"), (mod) => !!mod.favorite],
 ];
 let filter = { kind: "all", category: "" };
 
@@ -139,11 +139,11 @@ function passes(mod) {
 function openCategories() {
   const counts = new Map();
   for (const mod of state.mods) if (mod.category) counts.set(mod.category, (counts.get(mod.category) || 0) + 1);
-  const items = [{ title: "Категория на Nexus" }, { label: "Все категории", current: !filter.category, action: () => setFilter({ category: "" }) }];
+  const items = [{ title: t("Категория на Nexus") }, { label: t("Все категории"), current: !filter.category, action: () => setFilter({ category: "" }) }];
   for (const name of [...counts.keys()].sort()) {
     items.push({ label: name, hint: String(counts.get(name)), current: filter.category === name, action: () => setFilter({ category: name }) });
   }
-  if (!counts.size) items.push({ label: "Категории появятся после проверки обновлений", disabled: true });
+  if (!counts.size) items.push({ label: t("Категории появятся после проверки обновлений"), disabled: true });
   showMenu($("filter-category"), items);
 }
 
@@ -164,11 +164,11 @@ function renderFilters(shown) {
     chip.addEventListener("click", () => setFilter({ kind: key }));
     box.append(chip);
   }
-  $("filter-category").textContent = (filter.category || "Категория") + " ▾";
+  $("filter-category").textContent = (filter.category || t("Категория")) + " ▾";
   $("filter-category").setAttribute("aria-pressed", String(!!filter.category));
   const filtered = shown !== state.mods.length;
   $("filter-count").hidden = !filtered;
-  $("filter-count").textContent = `Показано ${shown} из ${state.mods.length}`;
+  $("filter-count").textContent = t`Показано ${shown} из ${state.mods.length}`;
   $("filter-reset").hidden = !filtered;
 }
 
@@ -187,16 +187,16 @@ async function openVersions(mod, anchor) {
     toast(String(err), "error");
     return;
   }
-  const items = [{ title: `Версии «${mod.name}» в хранилище` }];
+  const items = [{ title: t`Версии «${mod.name}» в хранилище` }];
   for (const v of versions) {
     items.push({
       label: (v.current ? "✓ " : "") + v.version,
-      hint: "добавлена " + clock(v.added),
+      hint: t("добавлена ") + clock(v.added),
       current: v.current,
-      action: v.current ? null : () => act(() => backend().UseVersion(mod.id, v.id), $("set-button"), "Версия меняется…"),
+      action: v.current ? null : () => act(() => backend().UseVersion(mod.id, v.id), $("set-button"), t("Версия меняется…")),
     });
   }
-  if (versions.length < 2) items.push({ label: "Других версий нет: прежняя появится после обновления", disabled: true });
+  if (versions.length < 2) items.push({ label: t("Других версий нет: прежняя появится после обновления"), disabled: true });
   showMenu(anchor, items);
 }
 
@@ -210,14 +210,14 @@ async function importSet() {
     return;
   }
   if (!res.set) return; // файл не выбран
-  showImported(res, "Набор загружен, но модов не хватает");
+  showImported(res, t("Набор загружен, но модов не хватает"));
 }
 
 // importCollection создаёт набор по коллекции Nexus.
 async function importCollection() {
   const link = await ask(await backend().CollectionAsk());
   if (link === null) return;
-  toast("Коллекция: спрашиваю у Nexus её состав…", "busy", true);
+  toast(t("Коллекция: спрашиваю у Nexus её состав…"), "busy", true);
   let res;
   try {
     res = await backend().ImportCollection(link);
@@ -225,7 +225,7 @@ async function importCollection() {
     toast(String(err), "error");
     return;
   }
-  showImported(res, "Набор по коллекции создан, но модов не хватает");
+  showImported(res, t("Набор по коллекции создан, но модов не хватает"));
 }
 
 // showImported показывает итог создания набора по списку модов: что не
@@ -238,11 +238,11 @@ async function showImported(res, title) {
     return;
   }
   const links = res.missing.filter((m) => m.url);
-  const list = res.missing.map((m) => `• ${m.name}${m.version ? " " + m.version : ""}${m.url ? "" : " — нет на Nexus, ищите сами"}`).join("\n");
+  const list = res.missing.map((m) => `• ${m.name}${m.version ? " " + m.version : ""}${m.url ? "" : t(" — нет на Nexus, ищите сами")}`).join("\n");
   const open = await ask({
     title,
-    message: `${res.message}.\n\nНе хватает:\n${list}`,
-    ok: links.length ? `Открыть страницы на Nexus (${Math.min(links.length, 15)})` : "",
+    message: t`${res.message}.\n\nНе хватает:\n${list}`,
+    ok: links.length ? t`Открыть страницы на Nexus (${Math.min(links.length, 15)})` : "",
   });
   if (open && links.length) {
     try {
@@ -275,12 +275,12 @@ function renderMods() {
 
     const toggleCell = el("td", "tgl");
     if (mod.pinned) {
-      toggleCell.append(el("span", "always", "всегда"));
+      toggleCell.append(el("span", "always", t("всегда")));
     } else {
       const toggle = el("button", "switch");
       toggle.setAttribute("role", "switch");
       toggle.setAttribute("aria-checked", String(mod.enabled));
-      toggle.setAttribute("aria-label", (mod.enabled ? "Выключить " : "Включить ") + mod.name);
+      toggle.setAttribute("aria-label", (mod.enabled ? t("Выключить ") : t("Включить ")) + mod.name);
       const track = el("span", "switch-track");
       track.append(el("span", "switch-knob"));
       toggle.append(track);
@@ -298,9 +298,9 @@ function renderMods() {
 
     row.classList.toggle("favorite", !!mod.favorite);
     const nameCell = el("td", "name");
-    nameCell.title = mod.name + ((mod.sets || []).length ? " — в наборах: " + mod.sets.join(", ") : "");
+    nameCell.title = mod.name + ((mod.sets || []).length ? t(" — в наборах: ") + mod.sets.join(", ") : "");
     const star = el("button", "star", mod.favorite ? "★" : "☆");
-    star.title = mod.favorite ? "Убрать из избранного" : "В избранное: мод будет стоять вверху списка";
+    star.title = mod.favorite ? t("Убрать из избранного") : t("В избранное: мод будет стоять вверху списка");
     star.setAttribute("aria-label", star.title);
     star.setAttribute("aria-pressed", String(!!mod.favorite));
     star.addEventListener("click", (event) => {
@@ -311,22 +311,22 @@ function renderMods() {
     if (mod.runErrors) {
       // Игра сама записала, что этот мод выдавал ошибки в прошлом запуске.
       const warn = el("span", "run-errors", `⚠ ${mod.runErrors}`);
-      warn.title = `Ошибок в прошлом запуске игры: ${mod.runErrors}. Первая: ${mod.runError}`;
+      warn.title = t`Ошибок в прошлом запуске игры: ${mod.runErrors}. Первая: ${mod.runError}`;
       nameCell.append(warn);
     }
 
     const categoryCell = el("td", "category", mod.category || "—");
-    categoryCell.title = mod.category || (mod.nexusId ? "Категория станет известна после проверки обновлений" : "У мода нет номера на Nexus");
+    categoryCell.title = mod.category || (mod.nexusId ? t("Категория станет известна после проверки обновлений") : t("У мода нет номера на Nexus"));
     const installedCell = el("td", "installed", clock(mod.installed));
-    installedCell.title = "Эта версия добавлена " + new Date(mod.installed).toLocaleString("ru-RU");
+    installedCell.title = t("Эта версия добавлена ") + new Date(mod.installed).toLocaleString(LOCALE);
 
     const ratingCell = el("td", "rating");
-    ratingCell.title = mod.hasStats ? `Одобрений на Nexus: ${mod.endorsements.toLocaleString("ru-RU")}` : statsHint(mod);
+    ratingCell.title = mod.hasStats ? t`Одобрений на Nexus: ${mod.endorsements.toLocaleString(LOCALE)}` : statsHint(mod);
     // Своё одобрение: сердечко перед числом. Одобрить можно мод с Nexus.
     if (mod.nexusId && mod.updateStatus !== "missing") {
       const heart = el("button", "endorse", mod.endorsed ? "♥" : "♡");
       heart.setAttribute("aria-pressed", String(!!mod.endorsed));
-      heart.title = mod.endorsed ? "Вы одобрили этот мод на Nexus — щёлкните, чтобы снять одобрение" : "Одобрить мод на Nexus";
+      heart.title = mod.endorsed ? t("Вы одобрили этот мод на Nexus — щёлкните, чтобы снять одобрение") : t("Одобрить мод на Nexus");
       heart.addEventListener("click", (event) => {
         event.stopPropagation();
         endorse(mod, heart);
@@ -337,7 +337,7 @@ function renderMods() {
     const statsCell = el("td", "stats", mod.hasStats ? count(mod.uniqueDownloads) : "—");
     statsCell.title = mod.hasStats ? downloadsText(mod) : statsHint(mod);
     const authorCell = el("td", "author");
-    authorCell.title = mod.author || (mod.nexusId ? "Автор станет известен после проверки обновлений" : "У мода нет номера на Nexus: автор неизвестен");
+    authorCell.title = mod.author || (mod.nexusId ? t("Автор станет известен после проверки обновлений") : t("У мода нет номера на Nexus: автор неизвестен"));
     authorCell.append(authorLink(mod) || mod.author || "—");
     const versionCell = el("td", "version", mod.version);
     versionCell.title = mod.version;
@@ -347,7 +347,7 @@ function renderMods() {
     // В каких наборах мод включён; текущий набор выделен.
     const setsCell = el("td", "sets");
     const sets = mod.sets || [];
-    setsCell.title = sets.length ? "Включён в наборах: " + sets.join(", ") : "Не включён ни в одном наборе";
+    setsCell.title = sets.length ? t("Включён в наборах: ") + sets.join(", ") : t("Не включён ни в одном наборе");
     sets.forEach((name, i) => {
       if (i > 0) setsCell.append(", ");
       setsCell.append(el("span", name === state.profile ? "set-current" : "", name));
@@ -356,7 +356,7 @@ function renderMods() {
 
     // За номер мод тянут, чтобы переставить его в порядке загрузки.
     const numCell = el("td", "num", String(index + 1));
-    numCell.title = "Потяните, чтобы переставить мод в порядке загрузки";
+    numCell.title = t("Потяните, чтобы переставить мод в порядке загрузки");
     numCell.addEventListener("mousedown", (event) => dragStart(event, mod));
     numCell.addEventListener("click", (event) => event.stopPropagation());
     row.append(numCell, toggleCell, nameCell, authorCell, categoryCell, ratingCell, statsCell, versionCell, updateTd, setsCell, installedCell, stateCell);
@@ -402,18 +402,18 @@ function endorse(mod, button) {
 }
 
 function count(n) {
-  const short = (value, unit) => `${value.toFixed(value < 10 ? 1 : 0).replace(".", ",").replace(",0", "")} ${unit}`;
-  if (n >= 1e6) return short(n / 1e6, "млн");
-  if (n >= 1e3) return short(n / 1e3, "тыс.");
+  const short = (value, unit) => `${decimal(value.toFixed(value < 10 ? 1 : 0).replace(/\.0$/, ""))} ${unit}`;
+  if (n >= 1e6) return short(n / 1e6, t("млн"));
+  if (n >= 1e3) return short(n / 1e3, t("тыс."));
   return String(n);
 }
 
 function downloadsText(mod) {
-  return `${mod.uniqueDownloads.toLocaleString("ru-RU")} человек, всего скачиваний: ${mod.downloads.toLocaleString("ru-RU")}`;
+  return t`${mod.uniqueDownloads.toLocaleString(LOCALE)} человек, всего скачиваний: ${mod.downloads.toLocaleString(LOCALE)}`;
 }
 
 function statsHint(mod) {
-  return mod.nexusId ? "Статистика появится после проверки обновлений" : "У мода нет номера на Nexus: статистики нет";
+  return mod.nexusId ? t("Статистика появится после проверки обновлений") : t("У мода нет номера на Nexus: статистики нет");
 }
 
 // authorLink — имя автора ссылкой на его профиль на Nexus; null, если
@@ -421,7 +421,7 @@ function statsHint(mod) {
 function authorLink(mod) {
   if (!mod.author || !mod.authorUrl) return null;
   const link = el("button", "link", mod.author);
-  link.title = `Открыть профиль ${mod.author} на Nexus`;
+  link.title = t`Открыть профиль ${mod.author} на Nexus`;
   link.addEventListener("click", async (event) => {
     event.stopPropagation(); // щелчок по ссылке не выбирает строку
     try {
@@ -450,10 +450,10 @@ function renderCard() {
   $("card-category-label").hidden = !mod.category;
   $("card-category").hidden = !mod.category;
   $("card-category").textContent = mod.category || "";
-  $("card-installed").textContent = new Date(mod.installed).toLocaleString("ru-RU");
+  $("card-installed").textContent = new Date(mod.installed).toLocaleString(LOCALE);
   $("card-versions-button").hidden = mod.versions < 2;
   for (const id of ["card-rating-label", "card-rating", "card-stats-label", "card-stats"]) $(id).hidden = !mod.hasStats;
-  $("card-rating").textContent = mod.hasStats ? mod.endorsements.toLocaleString("ru-RU") : "";
+  $("card-rating").textContent = mod.hasStats ? mod.endorsements.toLocaleString(LOCALE) : "";
   $("card-stats").textContent = mod.hasStats ? downloadsText(mod) : "";
   const sets = mod.sets || [];
   $("card-sets-label").hidden = !sets.length;
@@ -468,7 +468,7 @@ function renderCard() {
   $("card-available").hidden = !hasUpdate;
   $("card-available").textContent = mod.available;
   $("card-update").hidden = !hasUpdate;
-  $("card-update").textContent = "Обновить до " + mod.available;
+  $("card-update").textContent = t("Обновить до ") + mod.available;
   $("card-nexus").hidden = !mod.nexusId;
   $("card-message").hidden = !canMessage(mod);
 
@@ -486,7 +486,7 @@ function renderPlan() {
 
 function hideFiles() {
   $("card-file-list").hidden = true;
-  $("card-show-files").textContent = "Показать файлы";
+  $("card-show-files").textContent = t("Показать файлы");
 }
 
 async function toggleFiles() {
@@ -499,7 +499,7 @@ async function toggleFiles() {
     const files = await backend().ModFiles(selectedId);
     list.replaceChildren(...files.map((path) => el("li", "", path)));
     list.hidden = false;
-    $("card-show-files").textContent = "Скрыть файлы";
+    $("card-show-files").textContent = t("Скрыть файлы");
   } catch (err) {
     toast(String(err), "error");
   }

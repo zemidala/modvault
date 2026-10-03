@@ -12,7 +12,7 @@ function render() {
   $("order-note").hidden = !state.orderNote;
   $("order-note").textContent = state.orderNote || "";
   $("home").hidden = state.demo;
-  $("home").textContent = "Хранилище: " + state.home;
+  $("home").textContent = t("Хранилище: ") + state.home;
   renderStatus();
   renderIssues();
   renderMods();
@@ -55,7 +55,7 @@ function ask(question) {
     ok.hidden = !question.ok;
     ok.textContent = question.ok || "";
     ok.classList.toggle("danger", !!question.danger);
-    $("ask-cancel").textContent = question.ok ? "Отмена" : "Закрыть";
+    $("ask-cancel").textContent = question.ok ? t("Отмена") : t("Закрыть");
     const done = (answer) => {
       box.hidden = true;
       box.removeEventListener("keydown", onKey);
@@ -159,7 +159,7 @@ function listen() {
   if (!events) return;
   events.EventsOn("download", (p) => {
     const share = p.total > 0 ? ` — ${Math.floor((p.done * 100) / p.total)}%` : "";
-    toast(`Загрузка: ${p.name}${share}`, "busy", true);
+    toast(t`Загрузка: ${p.name}${share}`, "busy", true);
     if (currentTab === "downloads") renderDownloads();
   });
   events.EventsOn("checking", onCheckStep);
@@ -175,7 +175,7 @@ async function deploy() {
   const button = $("deploy");
   button.disabled = true;
   button.classList.add("busy");
-  toast("Развёртывание…", "busy", true);
+  toast(t("Развёртывание…"), "busy", true);
   try {
     const res = await backend().Deploy();
     state = res.state;
@@ -212,7 +212,7 @@ function showIssues() {
   showTab(document.querySelector('.tab[data-tab="mods"]'));
   const section = $("issues-section");
   if (section.hidden) {
-    toast("Замечаний нет: всё в порядке");
+    toast(t("Замечаний нет: всё в порядке"));
     return;
   }
   section.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -224,8 +224,8 @@ function showIssues() {
 async function showPlanFiles() {
   try {
     const lines = await backend().PlanFiles();
-    $("sheet-title").textContent = "План по файлам";
-    $("sheet-note").textContent = "«+» — файл ляжет в игру, «~» — заменит прежний, «−» — уберётся.";
+    $("sheet-title").textContent = t("План по файлам");
+    $("sheet-note").textContent = t("«+» — файл ляжет в игру, «~» — заменит прежний, «−» — уберётся.");
     $("sheet-list").replaceChildren(...lines.map((line) => el("li", "", line)));
     $("sheet-list").hidden = false;
     $("sheet").hidden = false;

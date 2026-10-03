@@ -11,26 +11,26 @@ async function showConflicts() {
     return;
   }
   const kinds = {
-    identical: "безвреден: файлы одинаковые",
-    duplicate: "два варианта одного мода",
-    covered: "один мод перекрыт целиком",
-    ordered: "порядок указал автор",
-    overlap: "частичное пересечение",
+    identical: t("безвреден: файлы одинаковые"),
+    duplicate: t("два варианта одного мода"),
+    covered: t("один мод перекрыт целиком"),
+    ordered: t("порядок указал автор"),
+    overlap: t("частичное пересечение"),
   };
-  $("sheet-title").textContent = "Конфликты файлов";
+  $("sheet-title").textContent = t("Конфликты файлов");
   $("sheet-note").textContent = list.length
-    ? "Несколько модов кладут в игру один и тот же файл; остаётся вариант победителя. Щёлкните конфликт, чтобы разобрать его."
-    : "Конфликтов нет: моды не меняют одни и те же файлы.";
+    ? t("Несколько модов кладут в игру один и тот же файл; остаётся вариант победителя. Щёлкните конфликт, чтобы разобрать его.")
+    : t("Конфликтов нет: моды не меняют одни и те же файлы.");
   $("sheet-list").replaceChildren(...list.map((c) => {
     const item = el("li", "conflict-row");
     const winner = c.mods.find((m) => m.winner);
-    const state = c.kind === "identical" ? "Безвреден" : c.pinned ? "Решён" : "Ждёт решения";
+    const state = c.kind === "identical" ? t("Безвреден") : c.pinned ? t("Решён") : t("Ждёт решения");
     const button = el("button", "conflict-open");
     button.dataset.state = c.resolved ? "resolved" : "open";
     button.append(
       el("span", "conflict-state", state),
-      el("span", "conflict-mods", c.mods.map((m) => m.name).join(" и ")),
-      el("span", "conflict-meta", `файлов: ${c.total} · ${kinds[c.kind] || c.kind} · побеждает ${winner ? winner.name : "—"}`),
+      el("span", "conflict-mods", c.mods.map((m) => m.name).join(t(" и "))),
+      el("span", "conflict-meta", t`файлов: ${c.total} · ${kinds[c.kind] || c.kind} · побеждает ${winner ? winner.name : "—"}`),
     );
     button.addEventListener("click", () => {
       $("sheet").hidden = true;
@@ -49,7 +49,7 @@ let currentTab = "mods";
 let downloadsTimer = 0;
 
 const eventKinds = {
-  deploy: "Игра", install: "Мод", remove: "Мод", set: "Набор", nexus: "Nexus", vortex: "Vortex", error: "Ошибка",
+  deploy: t("Игра"), install: t("Мод"), remove: t("Мод"), set: t("Набор"), nexus: "Nexus", vortex: "Vortex", error: t("Ошибка"),
 };
 
 function clock(iso) {
@@ -61,13 +61,13 @@ function clock(iso) {
 // duration — сколько ждать, по-человечески: 40 с, 3 мин, 1 ч 20 мин.
 function duration(seconds) {
   const s = Math.max(1, Math.round(seconds));
-  if (s < 60) return `${s} с`;
-  if (s < 3600) return `${Math.round(s / 60)} мин`;
-  return `${Math.floor(s / 3600)} ч ${Math.round((s % 3600) / 60)} мин`;
+  if (s < 60) return t`${s} с`;
+  if (s < 3600) return t`${Math.round(s / 60)} мин`;
+  return t`${Math.floor(s / 3600)} ч ${Math.round((s % 3600) / 60)} мин`;
 }
 
 function megabytes(n) {
-  return `${(n / 1048576).toFixed(n < 10485760 ? 1 : 0).replace(".", ",")} МБ`;
+  return t`${decimal((n / 1048576).toFixed(n < 10485760 ? 1 : 0))} МБ`;
 }
 
 // renderDownloads показывает загрузки этого запуска программы.
@@ -86,14 +86,14 @@ async function renderDownloads() {
     row.dataset.state = d.state;
     const head = el("div", "download-head");
     head.append(el("span", "download-name", d.version ? `${d.name} ${d.version}` : d.name));
-    const share = d.total > 0 ? `${megabytes(d.done)} из ${megabytes(d.total)}` : d.done > 0 ? megabytes(d.done) : "";
+    const share = d.total > 0 ? t`${megabytes(d.done)} из ${megabytes(d.total)}` : d.done > 0 ? megabytes(d.done) : "";
     // Скорость и сколько осталось — как только скорость измерена.
     let pace = "";
     if (d.state === "active" && d.speed > 0) {
-      pace = ` · ${megabytes(d.speed)}/с`;
-      if (d.total > d.done) pace += ` · осталось ${duration((d.total - d.done) / d.speed)}`;
+      pace = t` · ${megabytes(d.speed)}/с`;
+      if (d.total > d.done) pace += t` · осталось ${duration((d.total - d.done) / d.speed)}`;
     }
-    const status = d.state === "active" ? `Идёт · ${share}${pace}` : d.state === "done" ? `Готово · ${clock(d.finished)}` : `Не удалось · ${clock(d.finished)}`;
+    const status = d.state === "active" ? t`Идёт · ${share}${pace}` : d.state === "done" ? t`Готово · ${clock(d.finished)}` : t`Не удалось · ${clock(d.finished)}`;
     head.append(el("span", "download-status", status));
     row.append(head);
     if (d.state === "active") {
@@ -167,20 +167,20 @@ function renderSettings() {
     const row = el("div", "setting");
     const text = el("div", "setting-text");
     text.append(el("div", "setting-title", item.label), el("div", "setting-detail", item.value));
-    const button = el("button", "ghost", item.command === "Release" ? "Вернуть Vortex" : "Изменить");
+    const button = el("button", "ghost", item.command === "Release" ? t("Вернуть Vortex") : t("Изменить"));
     button.addEventListener("click", () => run(item.command));
     row.append(text, button);
     links.append(row);
   }
   // Папки, которые можно открыть в Проводнике.
   backend().Folders().then((folders) => {
-    const titles = { game: "Папка игры", store: "Хранилище модов", logs: "Журналы игры" };
+    const titles = { game: t("Папка игры"), store: t("Хранилище модов"), logs: t("Журналы игры") };
     for (const kind of ["game", "store", "logs"]) {
       if (!folders[kind]) continue;
       const row = el("div", "setting");
       const text = el("div", "setting-text");
       text.append(el("div", "setting-title", titles[kind]), el("div", "setting-detail", folders[kind]));
-      const button = el("button", "ghost", "Открыть");
+      const button = el("button", "ghost", t("Открыть"));
       button.addEventListener("click", () => backend().OpenFolder(kind).catch((err) => toast(String(err), "error")));
       row.append(text, button);
       links.append(row);
@@ -229,7 +229,7 @@ function showTab(tab) {
 // dropFiles принимает архивы, брошенные мышью в окно.
 async function dropFiles(paths) {
   if (!paths || !paths.length) return;
-  toast(`Добавляю из архивов: ${paths.length}…`, "busy", true);
+  toast(t`Добавляю из архивов: ${paths.length}…`, "busy", true);
   try {
     const res = await backend().AddDropped(paths);
     state = res.state;

@@ -130,7 +130,9 @@ func (d *Darktide) Generate(ctx game.Context) ([]game.Generated, []game.Notice, 
 // мод — строкой «-- имя». Загрузчик и фреймворк DML грузит сам.
 func LoadOrder(mods []game.ModInfo) []byte {
 	var b bytes.Buffer
-	b.WriteString(i18n.T("-- Файл собран Modvault. Правки вручную пропадут при следующем развёртывании.\r\n"))
+	// Строка идёт в файл игры и от языка окна не зависит: иначе смена языка
+	// выглядела бы как изменение, ждущее развёртывания.
+	b.WriteString("-- Файл собран Modvault. Правки вручную пропадут при следующем развёртывании.\r\n")
 	seen := map[string]bool{}
 	for _, m := range mods {
 		for _, folder := range m.Layout.Folders {

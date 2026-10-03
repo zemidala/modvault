@@ -3,13 +3,16 @@
 package ui
 
 import (
+	"bytes"
 	"context"
 	"embed"
 	"errors"
 	"io/fs"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -31,8 +34,53 @@ func Assets() fs.FS {
 	if err != nil {
 		panic(err) // папка вшита при сборке, ошибка невозможна
 	}
-	return sub
+	return langFS{sub}
 }
+
+// langFile — скрипт, которым страница узнаёт язык окна до своей загрузки.
+const langFile = "js/lang.js"
+
+// langFS отдаёт файлы страницы, подставляя в langFile язык этого запуска.
+type langFS struct{ fs.FS }
+
+func langScript() []byte {
+	return []byte("window.MODVAULT_LANG = " + strconv.Quote(i18n.Language()) + ";\n")
+}
+
+func (l langFS) Open(name string) (fs.File, error) {
+	if name == langFile {
+		return &memFile{name: name, Reader: bytes.NewReader(langScript())}, nil
+	}
+	return l.FS.Open(name)
+}
+
+func (l langFS) ReadFile(name string) ([]byte, error) {
+	if name == langFile {
+		return langScript(), nil
+	}
+	return fs.ReadFile(l.FS, name)
+}
+
+// memFile — файл из памяти.
+type memFile struct {
+	name string
+	*bytes.Reader
+}
+
+func (f *memFile) Stat() (fs.FileInfo, error) { return memInfo{f.name, f.Size()}, nil }
+func (f *memFile) Close() error               { return nil }
+
+type memInfo struct {
+	name string
+	size int64
+}
+
+func (i memInfo) Name() string       { return path.Base(i.name) }
+func (i memInfo) Size() int64        { return i.size }
+func (i memInfo) Mode() fs.FileMode  { return 0o444 }
+func (i memInfo) ModTime() time.Time { return time.Time{} }
+func (i memInfo) IsDir() bool        { return false }
+func (i memInfo) Sys() any           { return nil }
 
 // App — объект, методы которого доступны странице.
 type App struct {

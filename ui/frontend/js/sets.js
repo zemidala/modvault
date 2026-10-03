@@ -25,8 +25,8 @@ function renderPicked() {
   const n = picked.size;
   $("picked-bar").hidden = n === 0;
   $("pick-hint").hidden = n > 0 || state.demo || state.mods.length < 2;
-  const word = n % 10 === 1 && n % 100 !== 11 ? "мод" : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? "мода" : "модов";
-  $("picked-count").textContent = `Выделено: ${n} ${word}`;
+  const word = plural(n, "мод", "мода", "модов");
+  $("picked-count").textContent = t`Выделено: ${n} ${word}`;
 }
 
 // Всплывающее меню под кнопкой anchor или в точке {x, y}. Пункт: {label, hint, current, disabled,
@@ -96,31 +96,31 @@ async function loadSets() {
 async function openSets() {
   const sets = await loadSets();
   if (!sets) return;
-  const items = [{ title: "Наборы модов" }];
+  const items = [{ title: t("Наборы модов") }];
   for (const set of sets) {
     items.push({
       label: (set.current ? "✓ " : "") + set.name,
-      hint: `включено: ${set.enabled}`,
+      hint: t`включено: ${set.enabled}`,
       current: set.current,
       action: set.current ? null : () => switchSet(set.name),
       remove: set.current ? null : () => call(() => confirmThen(() => backend().DeleteSetAsk(set.name), () => backend().DeleteSet(set.name))),
-      removeTitle: `Удалить набор «${set.name}»`,
+      removeTitle: t`Удалить набор «${set.name}»`,
     });
   }
   items.push({ separator: true });
-  items.push({ label: "Новый набор — копия текущего…", action: () => newSet([]) });
-  items.push({ label: `Переименовать «${state.profile}»…`, action: renameSet });
+  items.push({ label: t("Новый набор — копия текущего…"), action: () => newSet([]) });
+  items.push({ label: t`Переименовать «${state.profile}»…`, action: renameSet });
   items.push({ separator: true });
-  items.push({ label: `Сохранить «${state.profile}» в файл…`, hint: "поделиться", action: () => act(() => backend().ExportSet(), $("set-button")) });
-  items.push({ label: "Загрузить набор из файла…", action: importSet });
-  items.push({ label: "Загрузить коллекцию Nexus…", action: importCollection });
+  items.push({ label: t`Сохранить «${state.profile}» в файл…`, hint: t("поделиться"), action: () => act(() => backend().ExportSet(), $("set-button")) });
+  items.push({ label: t("Загрузить набор из файла…"), action: importSet });
+  items.push({ label: t("Загрузить коллекцию Nexus…"), action: importCollection });
   showMenu($("set-button"), items);
 }
 
 // switchSet выбирает набор; программа сразу приводит к нему игру.
 async function switchSet(name) {
   picked.clear();
-  await act(() => backend().SwitchSet(name), $("set-button"), `Набор «${name}»: игра приводится к нему…`);
+  await act(() => backend().SwitchSet(name), $("set-button"), t`Набор «${name}»: игра приводится к нему…`);
   renderPicked();
 }
 
@@ -142,20 +142,20 @@ async function openAddToSet() {
   const sets = await loadSets();
   if (!sets) return;
   const ids = [...picked];
-  const items = [{ title: "Включить выделенные моды в наборе" }];
+  const items = [{ title: t("Включить выделенные моды в наборе") }];
   for (const set of sets) {
     if (set.current) continue;
     items.push({
       label: set.name,
-      hint: `включено: ${set.enabled}`,
+      hint: t`включено: ${set.enabled}`,
       action: async () => {
         if (await act(() => backend().AddToSet(set.name, ids), $("picked-add"))) clearPicked();
       },
     });
   }
-  if (items.length === 1) items.push({ label: "Других наборов пока нет", disabled: true });
+  if (items.length === 1) items.push({ label: t("Других наборов пока нет"), disabled: true });
   items.push({ separator: true });
-  items.push({ label: "В новый набор…", action: () => newSet(ids) });
+  items.push({ label: t("В новый набор…"), action: () => newSet(ids) });
   showMenu($("picked-add"), items);
 }
 
@@ -174,29 +174,29 @@ async function openRowMenu(mod, x, y) {
     if ((await act(request, $("set-button"))) && many) clearPicked();
   };
   const current = state.profile;
-  const items = [{ title: many ? `Выделено модов: ${ids.length}` : mod.name }];
-  if (many || !mod.favorite) items.push({ label: "★ В избранное", action: () => call(() => backend().SetFavorite(ids, true)) });
-  if (many || mod.favorite) items.push({ label: "☆ Убрать из избранного", action: () => call(() => backend().SetFavorite(ids, false)) });
+  const items = [{ title: many ? t`Выделено модов: ${ids.length}` : mod.name }];
+  if (many || !mod.favorite) items.push({ label: t("★ В избранное"), action: () => call(() => backend().SetFavorite(ids, true)) });
+  if (many || mod.favorite) items.push({ label: t("☆ Убрать из избранного"), action: () => call(() => backend().SetFavorite(ids, false)) });
   items.push({ separator: true });
   if (many || mod.enabled) {
-    items.push({ label: `Убрать из набора «${current}»`, action: () => done(() => backend().RemoveFromSet(current, ids)) });
+    items.push({ label: t`Убрать из набора «${current}»`, action: () => done(() => backend().RemoveFromSet(current, ids)) });
   }
   if (many || !mod.enabled) {
-    items.push({ label: `Включить в наборе «${current}»`, action: () => done(() => backend().AddToSet(current, ids)) });
+    items.push({ label: t`Включить в наборе «${current}»`, action: () => done(() => backend().AddToSet(current, ids)) });
   }
 
   const others = ((await loadSets()) || []).filter((set) => !set.current);
   if (others.length) {
-    items.push({ separator: true }, { title: "Добавить в набор" });
+    items.push({ separator: true }, { title: t("Добавить в набор") });
     for (const set of others) {
       const inSet = !many && (mod.sets || []).includes(set.name);
       items.push(inSet
-        ? { label: `✓ ${set.name}`, hint: "убрать", action: () => done(() => backend().RemoveFromSet(set.name, ids)) }
+        ? { label: `✓ ${set.name}`, hint: t("убрать"), action: () => done(() => backend().RemoveFromSet(set.name, ids)) }
         : { label: set.name, action: () => done(() => backend().AddToSet(set.name, ids)) });
     }
     // Перенести — убрать из текущего набора и включить в другом.
     if (many || mod.enabled) {
-      items.push({ separator: true }, { title: `Перенести из «${current}» в набор` });
+      items.push({ separator: true }, { title: t`Перенести из «${current}» в набор` });
       for (const set of others) {
         items.push({ label: set.name, action: () => done(() => backend().MoveToSet(set.name, ids)) });
       }
@@ -205,18 +205,18 @@ async function openRowMenu(mod, x, y) {
   if (!many && mod.nexusId) {
     items.push({ separator: true });
     items.push({
-      label: mod.endorsed ? "♥ Снять одобрение на Nexus" : "♡ Одобрить на Nexus",
+      label: mod.endorsed ? t("♥ Снять одобрение на Nexus") : t("♡ Одобрить на Nexus"),
       action: () => endorse(mod, $("set-button")),
     });
   }
   if (!many && canMessage(mod)) {
-    items.push({ label: "✉ Написать автору…", action: () => compose(mod) });
+    items.push({ label: t("✉ Написать автору…"), action: () => compose(mod) });
   }
   if (!many && mod.versions > 1) {
     items.push({ separator: true });
-    items.push({ label: "Версии…", hint: `в хранилище: ${mod.versions}`, action: () => openVersions(mod, { x, y }) });
+    items.push({ label: t("Версии…"), hint: t`в хранилище: ${mod.versions}`, action: () => openVersions(mod, { x, y }) });
   }
   items.push({ separator: true });
-  items.push({ label: "В новый набор…", action: () => newSet(ids) });
+  items.push({ label: t("В новый набор…"), action: () => newSet(ids) });
   showMenu({ x, y }, items);
 }

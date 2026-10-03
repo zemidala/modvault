@@ -64,7 +64,7 @@ function wire() {
     const wasDemo = state && state.demo;
     if (await call(() => backend().AddMod())) {
       const after = state.mods.map((m) => m.id + m.version).join();
-      if (after !== before || wasDemo !== state.demo) toast("Мод добавлен в хранилище");
+      if (after !== before || wasDemo !== state.demo) toast(t("Мод добавлен в хранилище"));
     }
   });
   $("card-remove").addEventListener("click", () => call(async () => {
@@ -78,7 +78,7 @@ function wire() {
   }));
   $("card-show-files").addEventListener("click", toggleFiles);
   $("check-updates").addEventListener("click", () => checkUpdates(false));
-  $("card-update").addEventListener("click", () => act(() => backend().UpdateMod(selectedId), $("card-update"), "Обновление: запрос к Nexus…"));
+  $("card-update").addEventListener("click", () => act(() => backend().UpdateMod(selectedId), $("card-update"), t("Обновление: запрос к Nexus…")));
   $("card-message").addEventListener("click", () => {
     const mod = state.mods.find((m) => m.id === selectedId);
     if (mod) compose(mod);
@@ -100,7 +100,7 @@ function wire() {
   $("play").addEventListener("click", async () => {
     try {
       await backend().Play();
-      toast("Игра запускается");
+      toast(t("Игра запускается"));
     } catch (err) {
       toast(String(err), "error");
     }
@@ -118,7 +118,7 @@ function wire() {
 async function start() {
   wire();
   if (!backend()) {
-    toast("Страница открыта вне программы: данных нет", "error");
+    toast(t("Страница открыта вне программы: данных нет"), "error");
     return;
   }
   try {
@@ -129,7 +129,7 @@ async function start() {
     // Проверка обновлений при запуске идёт в фоне и окну не мешает.
     if (state.checkOnStart) checkUpdates(true);
   } catch (err) {
-    toast("Программа не может работать с хранилищем: " + err, "error", true);
+    toast(t("Программа не может работать с хранилищем: ") + err, "error", true);
   }
 }
 

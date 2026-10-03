@@ -9,6 +9,7 @@
 package i18n
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -59,7 +60,20 @@ func normal(code string) string {
 	return Russian
 }
 
+// fileOverride — файл выбора языка для тестов; пусто — настоящий.
+var fileOverride string
+
+// UseFile задаёт, где лежит выбор языка. Для тестов: они не должны менять
+// язык настоящей программы.
+func UseFile(path string) { fileOverride = path }
+
 func file() (string, error) {
+	if fileOverride != "" {
+		return fileOverride, nil
+	}
+	if testing.Testing() {
+		return "", errors.New("в тестах выбор языка не хранится")
+	}
 	dir, err := os.UserCacheDir()
 	if err != nil {
 		return "", err

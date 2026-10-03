@@ -23,28 +23,28 @@ function updateCell(cell, mod) {
 
   if (!mod.nexusId) {
     text = "—";
-    hint = "У мода нет номера на Nexus: проверить его нельзя";
+    hint = t("У мода нет номера на Nexus: проверить его нельзя");
   } else if (status === "checking") {
-    text = "Проверяется";
+    text = t("Проверяется");
     level = "busy";
   } else if (status === "queued") {
-    text = "В очереди";
+    text = t("В очереди");
     level = "queued";
   } else if (status === "missing") {
-    text = "Нет на Nexus";
-    hint = "Страница мода на Nexus убрана или скрыта автором";
+    text = t("Нет на Nexus");
+    hint = t("Страница мода на Nexus убрана или скрыта автором");
   } else if (status === "update") {
     update = mark && mark !== "ok" ? mark : mod.available;
     text = update;
     level = "warn";
-    hint = "На Nexus есть версия " + update;
+    hint = t("На Nexus есть версия ") + update;
   } else if (status === "current") {
-    text = "✓ Актуально";
+    text = t("✓ Актуально");
     level = "ok";
-    hint = "Установлена последняя версия с Nexus";
+    hint = t("Установлена последняя версия с Nexus");
   } else {
-    text = "Не проверен";
-    hint = "Нажмите «Проверить обновления»";
+    text = t("Не проверен");
+    hint = t("Нажмите «Проверить обновления»");
   }
   cell.dataset.level = level;
   cell.title = hint;
@@ -58,7 +58,7 @@ function updateCell(cell, mod) {
 // updateButton — значок «обновить» перед новой версией в строке мода.
 function updateButton(mod, version) {
   const button = el("button", "icon-button");
-  button.title = `Обновить «${mod.name}» до ${version}`;
+  button.title = t`Обновить «${mod.name}» до ${version}`;
   button.setAttribute("aria-label", button.title);
   const ns = "http://www.w3.org/2000/svg";
   const svg = document.createElementNS(ns, "svg");
@@ -71,7 +71,7 @@ function updateButton(mod, version) {
   button.append(svg);
   button.addEventListener("click", (event) => {
     event.stopPropagation(); // щелчок по значку не выбирает строку
-    act(() => backend().UpdateMod(mod.id), button, "Обновление: запрос к Nexus…");
+    act(() => backend().UpdateMod(mod.id), button, t("Обновление: запрос к Nexus…"));
   });
   return button;
 }
@@ -90,8 +90,8 @@ function renderCheck() {
   box.hidden = !checking;
   if (!checking) return;
   const known = checking.total > 0;
-  $("check-label").textContent = checking.name ? "Проверка обновлений: " + checking.name : "Проверка обновлений: запрос к Nexus…";
-  $("check-count").textContent = known ? `${checking.done} из ${checking.total}` : "";
+  $("check-label").textContent = checking.name ? t("Проверка обновлений: ") + checking.name : t("Проверка обновлений: запрос к Nexus…");
+  $("check-count").textContent = known ? t`${checking.done} из ${checking.total}` : "";
   $("check-bar").classList.toggle("indeterminate", !known);
   $("check-fill").style.width = known ? `${Math.round((checking.done * 100) / checking.total)}%` : "";
 }
@@ -131,7 +131,7 @@ async function checkUpdates(quiet) {
     state = res.state;
     if (!quiet || res.updates > 0) toast(res.message);
   } catch (err) {
-    toast((quiet ? "Проверка обновлений при запуске не удалась: " : "") + String(err), "error");
+    toast((quiet ? t("Проверка обновлений при запуске не удалась: ") : "") + String(err), "error");
   } finally {
     button.disabled = false;
     button.classList.remove("busy");

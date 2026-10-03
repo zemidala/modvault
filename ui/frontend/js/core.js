@@ -45,7 +45,7 @@ async function call(request) {
 
 // Кнопка, за которой ещё нет ядра, честно говорит, когда заработает.
 function notYet(label, stage) {
-  toast(`«${label}» появится на этапе ${stage}`);
+  toast(t`«${label}» появится на этапе ${stage}`);
 }
 
 function renderStatus() {
@@ -58,7 +58,7 @@ function renderStatus() {
     value.title = item.value;
     if (item.command) {
       value = el("button", "status-value status-command", item.value);
-      value.title = item.value + " — щёлкните, чтобы открыть подробности";
+      value.title = item.value + t(" — щёлкните, чтобы открыть подробности");
       value.addEventListener("click", () => run(item.command));
     }
     node.append(el("span", "muted", item.label), value);
@@ -82,8 +82,8 @@ function renderIssues() {
     }
     if (issue.key) {
       // Замечание, с которым решено жить, можно убрать с глаз.
-      const hide = el("button", "ghost small-button", "Скрыть");
-      hide.title = "Убрать это замечание из списка. Вернуть скрытые можно ссылкой под списком";
+      const hide = el("button", "ghost small-button", t("Скрыть"));
+      hide.title = t("Убрать это замечание из списка. Вернуть скрытые можно ссылкой под списком");
       hide.addEventListener("click", () => call(() => backend().HideIssue(issue.key)));
       row.append(hide);
     }
@@ -92,6 +92,6 @@ function renderIssues() {
   const hidden = state.hiddenIssues || 0;
   $("issues").hidden = state.issues.length === 0;
   $("issues-hidden").hidden = hidden === 0;
-  $("issues-hidden-count").textContent = `Скрыто замечаний: ${hidden}`;
+  $("issues-hidden-count").textContent = t`Скрыто замечаний: ${hidden}`;
   $("issues-section").hidden = state.issues.length === 0 && hidden === 0;
 }
