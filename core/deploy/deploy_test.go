@@ -312,6 +312,85 @@ func TestDrift(t *testing.T) {
 	}
 }
 
+// replaceFile заменяет файл новым, как это делает Steam: ссылка на файл
+// в хранилище при этом не портится.
+func replaceFile(t testing.TB, path, content string) {
+	t.Helper()
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Обновление игры заменило файл, который мод подменял. Старая резервная
+// копия не возвращается никогда: оригиналом становится новый файл.
+func TestGameUpdateNeverRestoresStaleBackup(t *testing.T) {
+	for _, keep := range []bool{true, false} {
+		t.Run(fmt.Sprintf("мод остаётся=%v", keep), func(t *testing.T) {
+			e := newEnv(t, map[string]string{"bundle/db.data": "версия 1"})
+			patched1 := mod(t, e.store, "patch", "1", map[string]string{"bundle/db.data": "патч к версии 1"})
+			e.deploy(t, patched1)
+
+			gameFile := filepath.Join(e.game, "bundle", "db.data")
+			replaceFile(t, gameFile, "версия 2")
+
+			if orig, err := e.d.Original("bundle/db.data"); err != nil || orig != gameFile {
+				t.Fatalf("оригинал после обновления: %q, %v", orig, err)
+			}
+			p, err := e.d.Plan([]Source{patched1}, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(p.Drift) != 1 || !p.Drift[0].Updated {
+				t.Fatalf("обновление не распознано: %+v", p.Drift)
+			}
+
+			var sources []Source
+			if keep {
+				sources = []Source{mod(t, e.store, "patch", "2", map[string]string{"bundle/db.data": "патч к версии 2"})}
+			}
+			e.deploy(t, sources...)
+			want := "версия 2"
+			if keep {
+				want = "патч к версии 2"
+			}
+			if data, _ := os.ReadFile(gameFile); string(data) != want {
+				t.Fatalf("после развёртывания: %q, want %q", data, want)
+			}
+
+			// Снять всё: в игре остаётся версия 2, а не устаревшая версия 1.
+			e.deploy(t)
+			if data, _ := os.ReadFile(gameFile); string(data) != "версия 2" {
+				t.Errorf("после снятия: %q — вернулась устаревшая резервная копия", data)
+			}
+			if left := snapshot(t, filepath.Join(e.state, backupsDir)); strings.Contains(left, "=") {
+				t.Errorf("резервные копии остались:\n%s", left)
+			}
+		})
+	}
+}
+
+func TestOriginal(t *testing.T) {
+	e := newEnv(t, map[string]string{"bundle/db.data": "оригинал"})
+	a := mod(t, e.store, "a", "1", map[string]string{"bundle/db.data": "мод", "mods/a/a.mod": "a"})
+	if orig, _ := e.d.Original("bundle/db.data"); orig != filepath.Join(e.game, "bundle", "db.data") {
+		t.Errorf("до развёртывания: %q", orig)
+	}
+	e.deploy(t, a)
+	orig, err := e.d.Original("BUNDLE/db.data")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if data, _ := os.ReadFile(orig); string(data) != "оригинал" {
+		t.Errorf("оригинал заменённого файла: %q", data)
+	}
+	if _, err := e.d.Original("mods/a/a.mod"); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("у файла, принесённого модом, нашёлся оригинал: %v", err)
+	}
+}
+
 func TestPlanRejects(t *testing.T) {
 	e := newEnv(t, map[string]string{"dir/file/inner.txt": "x"})
 	bad := Source{ModID: "bad", VersionID: "1", Files: []File{{Path: "../outside.lua", Src: "x"}}}
@@ -357,6 +436,14 @@ func sets(t testing.TB, store string) (p1, p2 []Source) {
 	return []Source{a1, b}, []Source{a2, c}
 }
 
+// setupP1 разворачивает P1, а затем «обновляет игру»: Steam заменяет файл
+// игры, который подменял мод B. P2 мода B уже не содержит.
+func setupP1(t testing.TB, e *env, p1 []Source) {
+	t.Helper()
+	e.deploy(t, p1...)
+	replaceFile(t, filepath.Join(e.game, "bundle", "данные.data"), "бандл после обновления игры")
+}
+
 func TestCrashHelper(t *testing.T) {
 	point := os.Getenv(crashPoint)
 	if point == "" {
@@ -388,8 +475,12 @@ func TestKillAtEveryStep(t *testing.T) {
 	// Эталон: P1, затем P2 без обрывов.
 	ref := newEnv(t, foreignFiles)
 	p1, p2 := sets(t, ref.store)
-	ref.deploy(t, p1...)
+	setupP1(t, ref, p1)
 	want1 := snapshot(t, ref.game)
+	before, err := ref.d.Plan(p1, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 	plan, err := ref.d.Plan(p2, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -411,7 +502,7 @@ func TestKillAtEveryStep(t *testing.T) {
 		t.Run(point, func(t *testing.T) {
 			e := newEnv(t, foreignFiles)
 			p1, p2 := sets(t, e.store)
-			e.deploy(t, p1...)
+			setupP1(t, e, p1)
 
 			cmd := exec.Command(os.Args[0], "-test.run=^TestCrashHelper$")
 			cmd.Env = append(os.Environ(), crashGame+"="+e.game, crashState+"="+e.state, crashStore+"="+e.store, crashPoint+"="+point)
@@ -440,9 +531,18 @@ func TestKillAtEveryStep(t *testing.T) {
 				t.Fatalf("после восстановления игра не совпала ни с P1, ни с P2:\n%s\n--- ожидалось ---\n%s", got, want)
 			}
 
-			// Учёт согласован с диском, и следующее развёртывание проходит.
-			if plan, err := d.Plan(current, nil); err != nil || !plan.Empty() || len(plan.Drift) != 0 {
-				t.Fatalf("учёт расходится с диском: %+v, %v", plan, err)
+			// Учёт согласован с диском: после отката план тот же, что до обрыва,
+			// после завершения — пуст. Следующее развёртывание проходит.
+			plan, err := d.Plan(current, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if committed && (!plan.Empty() || len(plan.Drift) != 0) {
+				t.Fatalf("учёт расходится с диском: %+v", plan)
+			}
+			if !committed && (len(plan.steps) != len(before.steps) || len(plan.Drift) != len(before.Drift)) {
+				t.Fatalf("после отката план другой: %d шагов и %d расхождений, было %d и %d",
+					len(plan.steps), len(plan.Drift), len(before.steps), len(before.Drift))
 			}
 			e.deploy(t, p2...)
 			if got := snapshot(t, e.game); got != want2 {

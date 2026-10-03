@@ -1,0 +1,144 @@
+// Package darktide — плагин Warhammer 40,000: Darktide.
+package darktide
+
+import (
+	"bytes"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"github.com/zemidala/modvault/game"
+)
+
+// SteamAppID — номер игры в Steam.
+const SteamAppID = "1361210"
+
+const (
+	loadOrderPath = "mods/mod_load_order.txt"
+	exePath       = "binaries/Darktide.exe"
+)
+
+// Darktide реализует game.Game.
+type Darktide struct {
+	// Patcher патчит bundle_database.data в папке dir; nil — dtkit-patch из игры.
+	Patcher func(gameDir, dir string) error
+}
+
+func New() *Darktide { return &Darktide{} }
+
+func (*Darktide) ID() string   { return "darktide" }
+func (*Darktide) Name() string { return "Darktide" }
+
+func (*Darktide) Layout(files []string) (game.Layout, error) { return Layout(files) }
+
+// Validate проверяет, что в папке есть исполняемый файл и база бандлов игры.
+func (*Darktide) Validate(dir string) error {
+	for _, rel := range []string{exePath, bundleDBPath} {
+		if _, err := os.Stat(filepath.Join(dir, filepath.FromSlash(rel))); err != nil {
+			return fmt.Errorf("в папке нет %s — похоже, это не папка Darktide", rel)
+		}
+	}
+	return nil
+}
+
+// Managers ищет следы других менеджеров модов.
+func (*Darktide) Managers(dir string) []string {
+	var found []string
+	if _, err := os.Stat(filepath.Join(dir, "vortex.deployment.json")); err == nil {
+		found = append(found, "Vortex")
+	}
+	if entries, err := os.ReadDir(dir); err == nil {
+		for _, e := range entries {
+			if e.IsDir() && strings.HasPrefix(strings.ToLower(e.Name()), "servo-modquisitor") {
+				found = append(found, "Servo-Modquisitor")
+				break
+			}
+		}
+	}
+	return found
+}
+
+// Generate собирает mod_load_order.txt и пропатченную базу бандлов.
+func (d *Darktide) Generate(ctx game.Context) ([]game.Generated, []game.Notice, error) {
+	if err := os.MkdirAll(ctx.WorkDir, 0o755); err != nil {
+		return nil, nil, err
+	}
+	var out []game.Generated
+	var notices []game.Notice
+
+	loader, framework := false, false
+	for _, m := range ctx.Mods {
+		if !m.Enabled {
+			continue
+		}
+		loader = loader || m.Layout.Role == game.RoleLoader
+		framework = framework || m.Layout.Role == game.RoleFramework
+	}
+	hasMods := false
+	for _, m := range ctx.Mods {
+		hasMods = hasMods || (m.Enabled && m.Layout.Role == game.RoleNone)
+	}
+	if hasMods && !loader {
+		notices = append(notices, game.Notice{Level: game.Error, Title: "Не установлен Darktide Mod Loader",
+			Detail: "Без него игра не загрузит моды. Скачайте DML с Nexus и добавьте как обычный мод"})
+	}
+	if hasMods && !framework {
+		notices = append(notices, game.Notice{Level: game.Warn, Title: "Не установлен Darktide Mod Framework",
+			Detail: "Большинству модов нужен DMF. Скачайте его с Nexus и добавьте как обычный мод"})
+	}
+	if !loader {
+		// Без загрузчика нет ни порядка загрузки, ни патча.
+		return nil, notices, nil
+	}
+
+	src, err := writeGenerated(ctx.WorkDir, "mod_load_order", ".txt", LoadOrder(ctx.Mods))
+	if err != nil {
+		return nil, notices, err
+	}
+	out = append(out, game.Generated{Path: loadOrderPath, Src: src})
+
+	patched, notice, err := d.bundle(ctx)
+	if err != nil {
+		return nil, notices, err
+	}
+	if notice != nil {
+		notices = append(notices, *notice)
+	}
+	if patched != "" {
+		out = append(out, game.Generated{Path: bundleDBPath, Src: patched})
+	}
+	return out, notices, nil
+}
+
+// LoadOrder собирает mod_load_order.txt: папка мода на строку, выключенный
+// мод — строкой «-- имя». Загрузчик и фреймворк DML грузит сам.
+func LoadOrder(mods []game.ModInfo) []byte {
+	var b bytes.Buffer
+	b.WriteString("-- Файл собран Modvault. Правки вручную пропадут при следующем развёртывании.\r\n")
+	seen := map[string]bool{}
+	for _, m := range mods {
+		for _, folder := range m.Layout.Folders {
+			k := strings.ToLower(folder)
+			if k == loaderFolder || k == frameworkFolder || seen[k] {
+				continue
+			}
+			seen[k] = true
+			if !m.Enabled {
+				b.WriteString("-- ")
+			}
+			b.WriteString(folder)
+			b.WriteString("\r\n")
+		}
+	}
+	return b.Bytes()
+}
+
+// Launch запускает игру. Через Steam — чтобы работали оверлей и облако.
+func (*Darktide) Launch(inst game.Install) error {
+	if inst.Store == "Steam" {
+		return openURL("steam://rungameid/" + SteamAppID)
+	}
+	return errors.New("запуск этой версии игры пока не поддерживается: запустите её из приложения Xbox")
+}

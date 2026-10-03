@@ -289,6 +289,14 @@ function wire() {
   $("card-remove").addEventListener("click", () => call(() => backend().RemoveMod(selectedId)));
   $("card-show-files").addEventListener("click", toggleFiles);
   $("deploy").addEventListener("click", deploy);
+  $("play").addEventListener("click", async () => {
+    try {
+      await backend().Play();
+      toast("Игра запускается");
+    } catch (err) {
+      toast(String(err), "error");
+    }
+  });
   $("plan-files").addEventListener("click", showPlanFiles);
   $("sheet-close").addEventListener("click", () => { $("sheet").hidden = true; });
   $("sheet").addEventListener("click", (event) => {

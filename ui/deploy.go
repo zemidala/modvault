@@ -17,6 +17,7 @@ import (
 	"github.com/zemidala/modvault/core/fsx"
 	"github.com/zemidala/modvault/core/profile"
 	"github.com/zemidala/modvault/core/store"
+	"github.com/zemidala/modvault/game"
 	"github.com/zemidala/modvault/internal/version"
 )
 
@@ -24,8 +25,10 @@ const settingsFile = "settings.json"
 
 // settings — настройки программы, которые переживают перезапуск.
 type settings struct {
-	// GameDir — папка, куда развёртываются моды. До этапа 4 её выбирают вручную.
+	// GameDir — папка игры, куда развёртываются моды.
 	GameDir string `json:"gameDir"`
+	// GameStore — откуда игра: «Steam», «Xbox», «вручную».
+	GameStore string `json:"gameStore,omitempty"`
 }
 
 func loadSettings(home string) (settings, error) {
@@ -92,12 +95,47 @@ func (a *App) setGame(dir string) (State, error) {
 	if err != nil {
 		return State{}, err
 	}
-	a.settings.GameDir = abs
-	if err := a.saveSettings(); err != nil {
+	where := "вручную"
+	if installs, err := a.game.Detect(); err == nil {
+		for _, inst := range installs {
+			if strings.EqualFold(filepath.Clean(inst.Dir), abs) {
+				where = inst.Store
+			}
+		}
+	}
+	if err := a.setInstall(game.Install{Dir: abs, Store: where}); err != nil {
 		return State{}, err
 	}
-	a.openDeployer()
 	return a.state()
+}
+
+func (a *App) setInstall(inst game.Install) error {
+	a.settings.GameDir, a.settings.GameStore = inst.Dir, inst.Store
+	if err := a.saveSettings(); err != nil {
+		return err
+	}
+	a.openDeployer()
+	return nil
+}
+
+// Play запускает игру.
+func (a *App) Play() error {
+	a.mu.Lock()
+	inst := game.Install{Dir: a.settings.GameDir, Store: a.settings.GameStore}
+	a.mu.Unlock()
+	if inst.Dir == "" {
+		return errors.New("сначала выберите папку игры")
+	}
+	return a.game.Launch(inst)
+}
+
+// layout раскладывает версию мода по папкам игры.
+func (a *App) layout(v store.Version) (game.Layout, error) {
+	paths := make([]string, len(v.Files))
+	for i, f := range v.Files {
+		paths[i] = f.Path
+	}
+	return a.game.Layout(paths)
 }
 
 // DeployResult — состояние окна после развёртывания и сообщение для пользователя.
@@ -117,6 +155,9 @@ func (a *App) Deploy() (DeployResult, error) {
 	}
 	if !real {
 		return DeployResult{}, errors.New("сейчас показаны демонстрационные данные: добавьте мод, чтобы было что развернуть")
+	}
+	if managers := a.game.Managers(a.settings.GameDir); len(managers) > 0 {
+		return DeployResult{}, fmt.Errorf("игрой управляет %s; Modvault не развёртывает поверх другого менеджера, пока не научится принимать его моды (этап 5)", strings.Join(managers, " и "))
 	}
 	plan, err := a.plan()
 	if err != nil {
@@ -175,37 +216,88 @@ func (a *App) plan() (*deploy.Plan, error) {
 	if a.deployErr != nil {
 		return nil, a.deployErr
 	}
-	p, _, err := a.loadProfile()
-	if err != nil {
-		return nil, err
-	}
-	sources, err := a.sources(p)
-	if err != nil {
-		return nil, err
-	}
-	return a.deployer.Plan(sources, p.Winners)
+	plan, _, err := a.planWithNotices()
+	return plan, err
 }
 
-// sources собирает включённые моды профиля в порядке загрузки. Файлы ложатся
-// в игру по тем же путям, что в архиве; раскладку под Darktide даст этап 4.
-func (a *App) sources(p profile.Profile) ([]deploy.Source, error) {
+// planWithNotices рассчитывает развёртывание и возвращает замечания игры.
+func (a *App) planWithNotices() (*deploy.Plan, []game.Notice, error) {
+	if a.deployer == nil && a.deployErr == nil {
+		return nil, nil, errors.New("сначала выберите папку игры")
+	}
+	if a.deployErr != nil {
+		return nil, nil, a.deployErr
+	}
+	p, _, err := a.loadProfile()
+	if err != nil {
+		return nil, nil, err
+	}
+	sources, notices, err := a.sources(p)
+	if err != nil {
+		return nil, notices, err
+	}
+	plan, err := a.deployer.Plan(sources, p.Winners)
+	return plan, notices, err
+}
+
+// generatedMod — служебные файлы игры (порядок загрузки, патч) в развёртывании
+// выглядят как мод, стоящий последним: они побеждают одноимённые файлы модов.
+const generatedMod = "modvault"
+
+// sources собирает включённые моды профиля в порядке загрузки, раскладывает
+// их файлы по папкам игры и добавляет служебные файлы игры.
+func (a *App) sources(p profile.Profile) ([]deploy.Source, []game.Notice, error) {
 	var out []deploy.Source
+	var notices []game.Notice
+	infos := make([]game.ModInfo, 0, len(p.Entries))
 	for _, e := range p.Entries {
+		v, err := a.store.Get(e.ModID, e.VersionID)
+		if err != nil {
+			return nil, nil, err
+		}
+		l, err := a.layout(v)
+		if err != nil {
+			notices = append(notices, game.Notice{Level: game.Error, Title: fmt.Sprintf("«%s» не развёртывается", v.Name), Detail: err.Error()})
+			continue
+		}
+		infos = append(infos, game.ModInfo{ModID: e.ModID, Enabled: e.Enabled, Layout: l})
 		if !e.Enabled {
 			continue
 		}
-		v, err := a.store.Get(e.ModID, e.VersionID)
-		if err != nil {
-			return nil, err
-		}
 		root := a.store.FilesDir(e.ModID, e.VersionID)
-		s := deploy.Source{ModID: e.ModID, VersionID: e.VersionID, Files: make([]deploy.File, len(v.Files))}
-		for i, f := range v.Files {
-			s.Files[i] = deploy.File{Path: f.Path, Src: filepath.Join(root, filepath.FromSlash(f.Path)), Hash: f.Hash, Size: f.Size}
+		s := deploy.Source{ModID: e.ModID, VersionID: e.VersionID}
+		for _, f := range v.Files {
+			dst, ok := l.Paths[f.Path]
+			if !ok {
+				continue
+			}
+			s.Files = append(s.Files, deploy.File{Path: dst, Src: filepath.Join(root, filepath.FromSlash(f.Path)), Hash: f.Hash, Size: f.Size})
 		}
 		out = append(out, s)
 	}
-	return out, nil
+
+	generated, gameNotices, err := a.game.Generate(game.Context{
+		Dir:      a.settings.GameDir,
+		WorkDir:  filepath.Join(a.gameState(a.settings.GameDir), "generated"),
+		Mods:     infos,
+		Original: a.deployer.Original,
+	})
+	notices = append(notices, gameNotices...)
+	if err != nil {
+		return nil, notices, err
+	}
+	if len(generated) > 0 {
+		s := deploy.Source{ModID: generatedMod, VersionID: "1"}
+		for _, g := range generated {
+			hash, size, err := fsx.HashFile(g.Src)
+			if err != nil {
+				return nil, notices, err
+			}
+			s.Files = append(s.Files, deploy.File{Path: g.Path, Src: g.Src, Hash: hash, Size: size})
+		}
+		out = append(out, s)
+	}
+	return out, notices, nil
 }
 
 // modNames возвращает функцию «идентификатор → название мода».
@@ -216,6 +308,7 @@ func (a *App) modNames() func(string) string {
 			names[m.ID] = m.Latest().Name
 		}
 	}
+	names[generatedMod] = "Modvault (служебные файлы)"
 	return func(id string) string {
 		if name, ok := names[id]; ok {
 			return name
@@ -246,9 +339,10 @@ func (a *App) realState() (State, error) {
 	}
 
 	var plan *deploy.Plan
+	var notices []game.Notice
 	var planErr error
 	if a.deployer != nil && a.deployErr == nil {
-		plan, planErr = a.plan()
+		plan, notices, planErr = a.planWithNotices()
 	}
 
 	pending := map[string]bool{}
@@ -315,6 +409,32 @@ func (a *App) realState() (State, error) {
 	case planErr != nil:
 		s.Issues = append(s.Issues, Issue{Title: "Не удалось рассчитать развёртывание", Detail: planErr.Error(), Level: LevelError})
 	}
+	if a.settings.GameDir != "" && a.deployErr == nil {
+		if managers := a.game.Managers(a.settings.GameDir); len(managers) > 0 {
+			whose := "его"
+			if len(managers) > 1 {
+				whose = "их"
+			}
+			s.Issues = append(s.Issues, Issue{
+				Title:  "Игрой управляет " + strings.Join(managers, " и "),
+				Detail: "Modvault не развёртывает поверх другого менеджера. Принимать " + whose + " моды без переустановки программа научится на этапе 5",
+				Level:  LevelError,
+			})
+		}
+		if err := a.game.Validate(a.settings.GameDir); err != nil {
+			s.Issues = append(s.Issues, Issue{Title: "Похоже, это не папка " + a.game.Name(), Detail: err.Error(), Level: LevelWarn, Action: "Выбрать папку", Command: "ChooseGame"})
+		}
+	}
+	for _, n := range notices {
+		if n.Level == game.Info {
+			continue
+		}
+		level := LevelWarn
+		if n.Level == game.Error {
+			level = LevelError
+		}
+		s.Issues = append(s.Issues, Issue{Title: n.Title, Detail: n.Detail, Level: level})
+	}
 	for _, problem := range problems {
 		s.Issues = append(s.Issues, Issue{Title: "Запись в хранилище повреждена", Detail: problem.Error(), Level: LevelError})
 	}
@@ -366,6 +486,9 @@ func conflictIssues(plan *deploy.Plan, names func(string) string) []Issue {
 	var order []string
 	groups := map[string]*group{}
 	for _, c := range plan.Conflicts {
+		if c.Winner == generatedMod {
+			continue // служебный файл заменяет образец из архива — так и задумано
+		}
 		k := strings.Join(c.Mods, "\x00") + "\x01" + c.Winner
 		g, ok := groups[k]
 		if !ok {
@@ -448,6 +571,9 @@ func (a *App) status(s State, mods int, plan *deploy.Plan) []StatusItem {
 	game := StatusItem{Label: "Игра", Value: "папка не выбрана", Level: LevelWarn, Command: "ChooseGame"}
 	if a.settings.GameDir != "" {
 		game.Value, game.Level = a.settings.GameDir, LevelOK
+		if a.settings.GameStore != "" && a.settings.GameStore != "вручную" {
+			game.Value = a.game.Name() + " · " + a.settings.GameStore
+		}
 		if a.deployErr != nil {
 			game.Level = LevelError
 		}

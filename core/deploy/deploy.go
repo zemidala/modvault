@@ -23,11 +23,13 @@ import (
 //	backups/<путь>           чужие файлы, которые мод временно заменил
 //	stash/<id>/<путь>        свои файлы, снятые текущим развёртыванием
 //	displaced/<id>/<путь>    файлы, изменённые вне программы; не удаляются
+//	stale/<id>/<путь>        устаревшие резервные копии, снятые текущим развёртыванием
 const (
 	manifestFile = "manifest.json"
 	backupsDir   = "backups"
 	stashDir     = "stash"
 	displacedDir = "displaced"
+	staleDir     = "stale"
 )
 
 // Шаги развёртывания. Каждый шаг обратим: откат делает обратное действие,
@@ -38,6 +40,7 @@ const (
 	opDisplace = "displace" // свой, но изменённый файл → displaced
 	opPlace    = "place"    // файл мода → игра
 	opRestore  = "restore"  // чужой файл из backups → обратно в игру
+	opStale    = "stale"    // устаревшая резервная копия → stale
 )
 
 type step struct {
@@ -108,6 +111,38 @@ func (d *Deployer) Manifest() (*manifest.Manifest, error) {
 	return manifest.Load(filepath.Join(d.state, manifestFile))
 }
 
+// Original возвращает путь к оригиналу файла игры rel — тому, что лежало бы
+// в игре без модов: резервную копию, если файл сейчас заменён модом, иначе
+// сам файл в игре. Если оригинала нет (файл целиком принёс мод) — ошибка,
+// совместимая с fs.ErrNotExist.
+func (d *Deployer) Original(rel string) (string, error) {
+	game, err := d.gamePath(rel)
+	if err != nil {
+		return "", err
+	}
+	m, err := d.Manifest()
+	if err != nil {
+		return "", err
+	}
+	e, ok := m.Get(rel)
+	if !ok {
+		return game, nil
+	}
+	if exists(game) {
+		ours, err := d.matches(game, e)
+		if err != nil {
+			return "", err
+		}
+		if !ours {
+			return game, nil // файл заменили вне программы: он и есть оригинал
+		}
+	}
+	if !e.Backup {
+		return "", &os.PathError{Op: "original", Path: game, Err: fs.ErrNotExist}
+	}
+	return d.backupPath(e.Path)
+}
+
 func (d *Deployer) gamePath(rel string) (string, error) {
 	return fsx.SafeJoin(d.game, rel)
 }
@@ -144,6 +179,10 @@ type Drift struct {
 	// Missing — файла нет; иначе он изменён. Изменённый файл при развёртывании
 	// не удаляется, а переносится в папку displaced.
 	Missing bool
+	// Updated — на месте файла мода лежит новый файл игры: её обновили или
+	// проверили файлы в Steam. Он становится оригиналом, а прежняя резервная
+	// копия устарела и не вернётся никогда.
+	Updated bool
 }
 
 // Plan — что нужно сделать, чтобы игра совпала с профилем.
@@ -210,7 +249,7 @@ func (d *Deployer) Plan(sources []Source, winners map[string]string) (*Plan, err
 				return nil, err
 			}
 			if !ours {
-				p.Drift = append(p.Drift, Drift{Path: e.Path, ModID: e.ModID})
+				p.Drift = append(p.Drift, Drift{Path: e.Path, ModID: e.ModID, Updated: e.Backup})
 			}
 		}
 		if hasE && !exists {
@@ -228,6 +267,22 @@ func (d *Deployer) Plan(sources []Source, winners map[string]string) (*Plan, err
 				op = opDisplace
 			}
 			p.steps = append(p.steps, step{Op: op, Path: e.Path})
+		}
+
+		// Игра заменила наш файл своим новым: старая резервная копия больше
+		// не оригинал. Её снимаем, а новый файл игры считаем оригиналом.
+		if hasE && exists && !ours && e.Backup {
+			p.steps = append(p.steps, step{Op: opStale, Path: e.Path})
+			if hasT {
+				p.steps = append(p.steps, step{Op: opBackup, Path: t.Path})
+				if err := d.addPlace(p, t, true, newDirs); err != nil {
+					return nil, err
+				}
+				p.Changes = append(p.Changes, Change{Kind: Replace, Path: t.Path, ModID: t.ModID, OldID: e.ModID})
+			} else {
+				p.Changes = append(p.Changes, Change{Kind: Remove, Path: e.Path, ModID: e.ModID})
+			}
+			continue
 		}
 
 		switch {
@@ -402,8 +457,10 @@ func (d *Deployer) Apply(p *Plan) (Result, error) {
 // cleanup убирает то, что после завершённого развёртывания не нужно:
 // снятые свои файлы и опустевшие папки, которые программа создала в игре.
 func (d *Deployer) cleanup(id string) error {
-	if err := os.RemoveAll(filepath.Join(d.state, stashDir, id)); err != nil {
-		return err
+	for _, dir := range []string{stashDir, staleDir} {
+		if err := os.RemoveAll(filepath.Join(d.state, dir, id)); err != nil {
+			return err
+		}
 	}
 	m, err := d.Manifest()
 	if err != nil {
@@ -446,6 +503,12 @@ func (d *Deployer) do(id string, s step) (string, error) {
 		return "", moveInto(game, func(rel string) (string, error) { return d.asidePath(stashDir, id, rel) }, s.Path)
 	case opDisplace:
 		return "", moveInto(game, func(rel string) (string, error) { return d.asidePath(displacedDir, id, rel) }, s.Path)
+	case opStale:
+		backup, err := d.backupPath(s.Path)
+		if err != nil {
+			return "", err
+		}
+		return "", moveInto(backup, func(rel string) (string, error) { return d.asidePath(staleDir, id, rel) }, s.Path)
 	case opRestore:
 		backup, err := d.backupPath(s.Path)
 		if err != nil {
@@ -515,6 +578,7 @@ func (d *Deployer) rollback(id string, h header, done int) error {
 		}
 	}
 	os.RemoveAll(filepath.Join(d.state, stashDir, id))
+	os.RemoveAll(filepath.Join(d.state, staleDir, id))
 	removeIfEmpty(filepath.Join(d.state, displacedDir, id))
 	return nil
 }
@@ -539,7 +603,8 @@ func (d *Deployer) undo(id string, s step, unsure bool) error {
 	if err != nil {
 		return err
 	}
-	var aside string
+	// from — откуда шаг унёс файл, aside — куда.
+	from, aside := game, ""
 	switch s.Op {
 	case opBackup, opRestore:
 		aside, err = d.backupPath(s.Path)
@@ -547,6 +612,10 @@ func (d *Deployer) undo(id string, s step, unsure bool) error {
 		aside, err = d.asidePath(stashDir, id, s.Path)
 	case opDisplace:
 		aside, err = d.asidePath(displacedDir, id, s.Path)
+	case opStale:
+		if from, err = d.backupPath(s.Path); err == nil {
+			aside, err = d.asidePath(staleDir, id, s.Path)
+		}
 	case opPlace:
 		if !exists(game) {
 			return nil
@@ -583,20 +652,20 @@ func (d *Deployer) undo(id string, s step, unsure bool) error {
 		return fsx.Move(game, aside)
 	}
 
-	// Шаг унёс файл из игры; отмена возвращает его.
+	// Шаг унёс файл; отмена возвращает его.
 	switch {
 	case !exists(aside):
 		return nil
-	case exists(game):
+	case exists(from):
 		if unsure {
 			return os.Remove(aside) // копия между томами не успела убрать оригинал
 		}
 		return fmt.Errorf("файл уже на месте, а копия в %s осталась", aside)
 	}
-	if err := os.MkdirAll(filepath.Dir(game), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(from), 0o755); err != nil {
 		return err
 	}
-	return fsx.Move(aside, game)
+	return fsx.Move(aside, from)
 }
 
 // recover разбирается с развёртыванием, оборвавшимся в прошлый раз.

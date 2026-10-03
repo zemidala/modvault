@@ -19,6 +19,8 @@ import (
 	"github.com/zemidala/modvault/core/fsx"
 	"github.com/zemidala/modvault/core/profile"
 	"github.com/zemidala/modvault/core/store"
+	"github.com/zemidala/modvault/game"
+	"github.com/zemidala/modvault/game/darktide"
 )
 
 //go:embed all:frontend
@@ -107,6 +109,7 @@ type App struct {
 	profiles *profile.Dir
 	openErr  error // почему не открылись хранилище или профили
 
+	game      game.Game
 	settings  settings
 	deployer  *deploy.Deployer
 	deployErr error           // почему нельзя развёртывать в выбранную папку
@@ -129,13 +132,23 @@ func DefaultHome() string {
 	return filepath.Join(base, "Modvault")
 }
 
+// NewApp создаёт приложение для настоящего запуска: папка данных по
+// умолчанию, игра ищется сама, если папка ещё не выбрана.
 func NewApp() *App {
-	return NewAppAt(DefaultHome())
+	a := NewAppAt(DefaultHome())
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.openErr == nil && a.settings.GameDir == "" {
+		if installs, err := a.game.Detect(); err == nil && len(installs) > 0 {
+			a.setInstall(installs[0])
+		}
+	}
+	return a
 }
 
 // NewAppAt создаёт приложение с папкой данных home.
 func NewAppAt(home string) *App {
-	a := &App{home: home, demo: demoMods()}
+	a := &App{home: home, demo: demoMods(), game: darktide.New()}
 	a.store, a.openErr = store.Open(home)
 	if a.openErr == nil {
 		a.profiles, a.openErr = profile.Open(filepath.Join(home, "profiles"))
@@ -220,6 +233,13 @@ func (a *App) addArchive(path string) (State, error) {
 	}
 	if err != nil {
 		return State{}, err
+	}
+	if _, err := a.layout(v); err != nil {
+		// Архив, который игра не умеет разложить, в хранилище не остаётся.
+		if rerr := a.store.Remove(v.ModID, v.ID, true); rerr != nil {
+			return State{}, errors.Join(err, rerr)
+		}
+		return State{}, fmt.Errorf("«%s» не добавлен: %w", info.Name, err)
 	}
 
 	// Новая версия уже установленного мода занимает его место в профиле.

@@ -1,10 +1,13 @@
 package ui
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/zemidala/modvault/game/darktide"
 )
 
 func issueTitles(s State) string {
@@ -15,92 +18,209 @@ func issueTitles(s State) string {
 	return strings.Join(out, " | ")
 }
 
-func TestDeployFromWindow(t *testing.T) {
+var (
+	bundleAnchor = []byte{0xa3, 0x3a, 0x4a, 0xa4, 0xaf, 0x26, 0xa6, 0x9b}
+	patchMarker  = []byte("9ba626afa44a3aa3.patch_999")
+	cleanBundle  = append(append(bytes.Repeat([]byte{1}, 64), bundleAnchor...), bytes.Repeat([]byte{2}, 64)...)
+)
+
+// newGame создаёт папку, похожую на чистый Darktide, и приложение,
+// у которого вместо dtkit-patch подменный патчер.
+func newGame(t *testing.T) (*App, string, string) {
+	t.Helper()
 	a, home := newApp(t)
-	game := filepath.Join(t.TempDir(), "Игра")
-	os.MkdirAll(game, 0o755)
-	os.WriteFile(filepath.Join(game, "Darktide.exe"), []byte("игра"), 0o644)
+	a.game = &darktide.Darktide{Patcher: func(_, dir string) error {
+		f := filepath.Join(dir, "bundle_database.data")
+		data, err := os.ReadFile(f)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(f, append(data, patchMarker...), 0o644)
+	}}
+	g := filepath.Join(t.TempDir(), "Warhammer 40,000 DARKTIDE")
+	for rel, data := range map[string][]byte{
+		"binaries/Darktide.exe":       []byte("exe"),
+		"bundle/bundle_database.data": cleanBundle,
+		"mods/mod_load_order.txt":     []byte("Flux\r\n"), // чей-то старый порядок загрузки
+	} {
+		p := filepath.Join(g, filepath.FromSlash(rel))
+		os.MkdirAll(filepath.Dir(p), 0o755)
+		os.WriteFile(p, data, 0o644)
+	}
+	return a, home, g
+}
 
-	s, err := a.addArchive(writeZip(t, "Scoreboard-22-1-4-0-1700000000.zip", map[string]string{
-		"Scoreboard/Scoreboard.mod": "return {}",
-		"Darktide.exe":              "мод заменяет файл игры",
-	}))
+func snapshot(t *testing.T, dir string) map[string]string {
+	t.Helper()
+	out := map[string]string{}
+	filepath.WalkDir(dir, func(p string, e os.DirEntry, err error) error {
+		if err == nil && !e.IsDir() {
+			rel, _ := filepath.Rel(dir, p)
+			data, _ := os.ReadFile(p)
+			out[filepath.ToSlash(rel)] = string(data)
+		}
+		return nil
+	})
+	return out
+}
+
+func sameTree(a, b map[string]string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for k, v := range a {
+		if b[k] != v {
+			return false
+		}
+	}
+	return true
+}
+
+var (
+	dmlArchive = map[string]string{
+		"binaries/mod_loader":       "loader",
+		"mods/base/base.mod":        "return {}",
+		"mods/base/mod_manager.lua": "-- base",
+		"mods/mod_load_order.txt":   "-- пример из архива DML",
+		"tools/dtkit-patch.exe":     "patcher",
+		"toggle_darktide_mods.bat":  "@echo off",
+		"README.md":                 "DML",
+	}
+	dmfArchive = map[string]string{"Darktide Mod Framework/mods/dmf/dmf.mod": "return {}", "Darktide Mod Framework/mods/dmf/scripts/dmf.lua": "-- dmf"}
+)
+
+func TestDarktideDeploy(t *testing.T) {
+	a, home, g := newGame(t)
+	clean := snapshot(t, g)
+
+	if _, err := a.addArchive(writeZip(t, "Darktide Mod Loader-19-25-3-1700000000.zip", dmlArchive)); err != nil {
+		t.Fatal(err)
+	}
+	a.addArchive(writeZip(t, "Darktide Mod Framework-8-25-3-1700000001.zip", dmfArchive))
+	a.addArchive(writeZip(t, "Scoreboard-22-1-4-0-1700000002.zip", map[string]string{"scoreboard-main/Scoreboard.mod": "return {}", "scoreboard-main/scripts/a.lua": "-- a"}))
+	a.addArchive(writeZip(t, "Flux-30-1-0-1700000003.zip", map[string]string{"Flux/Flux.mod": "return {}"}))
+	if _, err := a.SetEnabled("flux", false); err != nil {
+		t.Fatal(err)
+	}
+
+	s, err := a.setGame(g)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(issueTitles(s), "Папка игры не выбрана") || s.Status[0].Command != "ChooseGame" {
-		t.Fatalf("без папки игры: %s, %+v", issueTitles(s), s.Status[0])
+	if strings.Contains(issueTitles(s), "не папка") || strings.Contains(issueTitles(s), "Mod Loader") {
+		t.Errorf("замечания до развёртывания: %s", issueTitles(s))
 	}
-	if _, err := a.Deploy(); err == nil {
-		t.Error("развёртывание без папки игры прошло")
+	if _, err := a.Deploy(); err != nil {
+		t.Fatal(err)
 	}
 
-	s, err = a.setGame(game)
+	got := snapshot(t, g)
+	want := map[string]string{
+		"mods/base/base.mod":             "return {}",
+		"mods/dmf/dmf.mod":               "return {}",
+		"mods/Scoreboard/Scoreboard.mod": "return {}",
+		"mods/Scoreboard/scripts/a.lua":  "-- a",
+		"tools/dtkit-patch.exe":          "patcher",
+	}
+	for path, content := range want {
+		if got[path] != content {
+			t.Errorf("%s = %q, want %q", path, got[path], content)
+		}
+	}
+	if _, ok := got["mods/Flux/Flux.mod"]; ok {
+		t.Error("выключенный мод развёрнут")
+	}
+	if _, ok := got["README.md"]; ok {
+		t.Error("описание из архива DML легло в игру")
+	}
+	order := strings.Split(strings.TrimSpace(got["mods/mod_load_order.txt"]), "\r\n")
+	if len(order) != 3 || !strings.HasPrefix(order[0], "-- Файл собран Modvault") || order[1] != "Scoreboard" || order[2] != "-- Flux" {
+		t.Errorf("порядок загрузки:\n%s", got["mods/mod_load_order.txt"])
+	}
+	if !bytes.Contains([]byte(got["bundle/bundle_database.data"]), patchMarker) {
+		t.Error("база бандлов не пропатчена")
+	}
+
+	s = state(t, NewAppAt(home))
+	if findMod(t, s, "scoreboard").State != "Развёрнут" || s.PlanTitle != "" {
+		t.Errorf("после перезапуска: %s, план %q", findMod(t, s, "scoreboard").State, s.PlanTitle)
+	}
+
+	// Выключить всё, включая DML и DMF: игра как до модов, с чужим порядком
+	// загрузки и непропатченной базой.
+	for _, id := range []string{"darktide_mod_loader", "darktide_mod_framework", "scoreboard"} {
+		if _, err := a.SetEnabled(id, false); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := a.Deploy(); err != nil {
+		t.Fatal(err)
+	}
+	if after := snapshot(t, g); !sameTree(after, clean) {
+		t.Errorf("после «выключить всё» игра отличается от исходной:\n%v\n---\n%v", after, clean)
+	}
+}
+
+func TestRejectsUnknownLayout(t *testing.T) {
+	a, _, _ := newGame(t)
+	_, err := a.addArchive(writeZip(t, "непонятный.zip", map[string]string{"scripts/a.lua": "1"}))
+	if err == nil || !strings.Contains(err.Error(), "не добавлен") {
+		t.Fatalf("архив без .mod: %v", err)
+	}
+	if s := state(t, a); !s.Demo {
+		t.Error("отклонённый архив остался в хранилище")
+	}
+}
+
+func TestOtherManagerBlocksDeploy(t *testing.T) {
+	a, _, g := newGame(t)
+	os.WriteFile(filepath.Join(g, "vortex.deployment.json"), []byte("{}"), 0o644)
+	a.addArchive(writeZip(t, "dml.zip", dmlArchive))
+	a.setGame(g)
+	before := snapshot(t, g)
+
+	s := state(t, a)
+	if !strings.Contains(issueTitles(s), "Игрой управляет Vortex") {
+		t.Errorf("замечания: %s", issueTitles(s))
+	}
+	if _, err := a.Deploy(); err == nil || !strings.Contains(err.Error(), "Vortex") {
+		t.Errorf("развёртывание поверх Vortex: %v", err)
+	}
+	if after := snapshot(t, g); !sameTree(after, before) {
+		t.Error("отказ от развёртывания изменил игру")
+	}
+}
+
+func TestMissingLoaderNotice(t *testing.T) {
+	a, _, g := newGame(t)
+	a.addArchive(writeZip(t, "Flux.zip", map[string]string{"Flux/Flux.mod": "return {}"}))
+	s, err := a.setGame(g)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if m := findMod(t, s, "scoreboard"); m.State != "Ждёт развёртывания" {
-		t.Errorf("до развёртывания: %q", m.State)
+	if !strings.Contains(issueTitles(s), "Не установлен Darktide Mod Loader") {
+		t.Errorf("нет замечания о DML: %s", issueTitles(s))
 	}
-	if s.PlanTitle != "План развёртывания: 2 изменения" || len(s.Plan) != 1 || !strings.Contains(s.Plan[0], "положить 2 файла") {
-		t.Errorf("план: %q %v", s.PlanTitle, s.Plan)
-	}
-	files, err := a.PlanFiles()
-	if err != nil || len(files) != 2 || !strings.HasPrefix(files[0], "+ ") {
-		t.Errorf("план по файлам: %v, %v", files, err)
-	}
+}
 
-	res, err := a.Deploy()
+func TestNotDarktideFolder(t *testing.T) {
+	a, _, _ := newGame(t)
+	a.addArchive(writeZip(t, "Flux.zip", map[string]string{"Flux/Flux.mod": "return {}"}))
+	s, err := a.setGame(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(res.Message, "2 изменения") || res.State.PlanTitle != "" {
-		t.Errorf("после развёртывания: %q, план %q", res.Message, res.State.PlanTitle)
-	}
-	if m := findMod(t, res.State, "scoreboard"); m.State != "Развёрнут" {
-		t.Errorf("состояние мода: %q", m.State)
-	}
-	if data, _ := os.ReadFile(filepath.Join(game, "Scoreboard", "Scoreboard.mod")); string(data) != "return {}" {
-		t.Errorf("файл мода в игре: %q", data)
-	}
-
-	// Папка игры и развёрнутое переживают перезапуск программы.
-	b := NewAppAt(home)
-	if s := state(t, b); findMod(t, s, "scoreboard").State != "Развёрнут" || s.Status[0].Value != game {
-		t.Errorf("после перезапуска: %+v", s.Status[0])
-	}
-
-	// Мод удалён из хранилища, но его файлы ещё в игре: окно не уходит
-	// в демонстрационный режим, а следующее развёртывание их убирает.
-	if err := b.removeMod("scoreboard", true); err != nil {
-		t.Fatal(err)
-	}
-	s = state(t, b)
-	if s.Demo || s.PlanTitle == "" {
-		t.Fatalf("после удаления развёрнутого мода: demo=%v, план %q", s.Demo, s.PlanTitle)
-	}
-	if _, err := b.Deploy(); err != nil {
-		t.Fatal(err)
-	}
-	if data, _ := os.ReadFile(filepath.Join(game, "Darktide.exe")); string(data) != "игра" {
-		t.Errorf("файл игры не вернулся: %q", data)
-	}
-	if _, err := os.Stat(filepath.Join(game, "Scoreboard")); !os.IsNotExist(err) {
-		t.Errorf("папка мода осталась в игре: %v", err)
-	}
-	if s := state(t, b); !s.Demo {
-		t.Error("после снятия всего окно не вернулось к демонстрационным данным")
+	if !strings.Contains(issueTitles(s), "Похоже, это не папка Darktide") {
+		t.Errorf("замечания: %s", issueTitles(s))
 	}
 }
 
 func TestConflictAndDriftIssues(t *testing.T) {
-	a, _ := newApp(t)
-	game := t.TempDir()
-	if _, err := a.setGame(game); err != nil {
-		t.Fatal(err)
-	}
-	a.addArchive(writeZip(t, "Healthbars.zip", map[string]string{"shared/ui.lua": "healthbars", "hb/hb.mod": "1"}))
-	a.addArchive(writeZip(t, "Numeric UI.zip", map[string]string{"shared/ui.lua": "numeric", "nu/nu.mod": "2"}))
+	a, _, g := newGame(t)
+	a.addArchive(writeZip(t, "dml.zip", dmlArchive))
+	a.addArchive(writeZip(t, "Healthbars.zip", map[string]string{"mods/hb/hb.mod": "1", "bundle/shared.patch_001": "healthbars"}))
+	a.addArchive(writeZip(t, "Numeric UI.zip", map[string]string{"mods/nu/nu.mod": "2", "bundle/shared.patch_001": "numeric"}))
+	a.setGame(g)
 	if _, err := a.Deploy(); err != nil {
 		t.Fatal(err)
 	}
@@ -108,20 +228,16 @@ func TestConflictAndDriftIssues(t *testing.T) {
 	if !strings.Contains(issueTitles(s), "Healthbars и Numeric UI меняют одни и те же файлы (1)") {
 		t.Errorf("конфликт: %s", issueTitles(s))
 	}
-	if data, _ := os.ReadFile(filepath.Join(game, "shared", "ui.lua")); string(data) != "numeric" {
+	if data, _ := os.ReadFile(filepath.Join(g, "bundle", "shared.patch_001")); string(data) != "numeric" {
 		t.Errorf("победил не нижний мод: %q", data)
 	}
 
-	// Файл мода изменили вне программы.
-	target := filepath.Join(game, "nu", "nu.mod")
+	target := filepath.Join(g, "mods", "nu", "nu.mod")
 	os.Remove(target)
 	os.WriteFile(target, []byte("правка"), 0o644)
 	s = state(t, a)
-	if !strings.Contains(issueTitles(s), "1 файл мода изменён вне программы") {
-		t.Errorf("расхождение: %s", issueTitles(s))
-	}
-	if s.Status[2].Level != LevelError {
-		t.Errorf("строка «Файлы в игре»: %+v", s.Status[2])
+	if !strings.Contains(issueTitles(s), "1 файл мода изменён вне программы") || s.Status[2].Level != LevelError {
+		t.Errorf("расхождение: %s, %+v", issueTitles(s), s.Status[2])
 	}
 	res, err := a.Deploy()
 	if err != nil {
@@ -133,14 +249,12 @@ func TestConflictAndDriftIssues(t *testing.T) {
 }
 
 func TestMissingGameDir(t *testing.T) {
-	a, home := newApp(t)
-	game := filepath.Join(t.TempDir(), "игра")
-	os.MkdirAll(game, 0o755)
-	if _, err := a.setGame(game); err != nil {
+	a, home, g := newGame(t)
+	if _, err := a.setGame(g); err != nil {
 		t.Fatal(err)
 	}
 	a.addArchive(writeZip(t, "m.zip", map[string]string{"m/m.mod": "1"}))
-	os.RemoveAll(game)
+	os.RemoveAll(g)
 
 	s := state(t, NewAppAt(home))
 	if !strings.Contains(issueTitles(s), "Развёртывание недоступно") || s.Status[0].Level != LevelError {
