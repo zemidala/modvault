@@ -388,6 +388,10 @@ type CheckProgress struct {
 	Finished  bool   `json:"finished"`
 	Available string `json:"available"`
 	Missing   bool   `json:"missing"`
+	// Первый шаг проверки вместо мода несёт расклад: Queued — о ком будут
+	// спрашивать, Unchanged — кто с прошлой проверки не менялся.
+	Queued    []string `json:"queued"`
+	Unchanged []string `json:"unchanged"`
 }
 
 // UpdateReport — итог проверки обновлений.
@@ -490,6 +494,17 @@ func (a *Manager) CheckUpdates(ctx context.Context, progress func(CheckProgress)
 		ids = append(ids, id)
 	}
 	sort.Ints(ids)
+	// Расклад до первого запроса о моде: кто в очереди, а о ком уже известно,
+	// что с прошлой проверки он не менялся.
+	plan := CheckProgress{Total: len(ids)}
+	for _, t := range targets {
+		if ask[t.nexusID] {
+			plan.Queued = append(plan.Queued, t.modID)
+		} else {
+			plan.Unchanged = append(plan.Unchanged, t.modID)
+		}
+	}
+	progress(plan)
 	var failure error
 	for i, id := range ids {
 		// Моды хранилища с этим номером на Nexus: обычно один.

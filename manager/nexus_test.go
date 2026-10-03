@@ -398,9 +398,13 @@ func TestUpdates(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Ход проверки: сначала «спрашиваем об этом моде», потом «вот что узнали».
-	if len(steps) != 2 {
+	if len(steps) != 3 {
 		t.Fatalf("шагов проверки: %+v", steps)
 	}
+	if s := steps[0]; s.Total != 1 || strings.Join(s.Queued, ",") != "score_board" || len(s.Unchanged) != 0 || len(s.Mods) != 0 {
+		t.Errorf("расклад проверки: %+v", s)
+	}
+	steps = steps[1:]
 	if s := steps[0]; s.Finished || s.Done != 0 || s.Total != 1 || s.Name != "Score Board" || strings.Join(s.Mods, ",") != "score_board" {
 		t.Errorf("шаг до запроса: %+v", s)
 	}
@@ -422,7 +426,11 @@ func TestUpdates(t *testing.T) {
 
 	// Вторая проверка спрашивает только «что менялось»: один запрос на всех.
 	before := f.apiRequests()
-	rep, err = a.CheckUpdates(ctx, nil)
+	steps = nil
+	rep, err = a.CheckUpdates(ctx, func(p CheckProgress) { steps = append(steps, p) })
+	if len(steps) != 1 || steps[0].Total != 0 || strings.Join(steps[0].Unchanged, ",") != "score_board" {
+		t.Errorf("расклад второй проверки: %+v", steps)
+	}
 	if err != nil || rep.Requests != 1 || f.apiRequests()-before != 1 || rep.Updates != 1 {
 		t.Errorf("вторая проверка: %+v, %v, запросов %d", rep, err, f.apiRequests()-before)
 	}

@@ -85,32 +85,55 @@ function renderIssues() {
   $("issues-section").hidden = state.issues.length === 0;
 }
 
-// Проверка обновлений, пока она идёт: общий ход и отметки по модам.
-// rows: идентификатор мода → "checking", "ok", "missing" или найденная версия.
+// Проверка обновлений. checking — общий ход, пока проверка идёт. marks —
+// отметка у каждого мода: "queued" (в очереди), "checking" (спрашиваем
+// сейчас), "ok", "missing" или найденная версия; после проверки отметки
+// остаются в столбце «Обновление» до следующей.
 let checking = null;
+const marks = new Map();
 
-// markRow показывает в строке мода, что с ним делает проверка обновлений;
-// без отметки строка показывает обычное состояние.
-function markRow(row, mark) {
-  const cell = row.querySelector(".state");
-  if (!cell) return;
-  cell.classList.toggle("checking", mark === "checking");
-  if (!mark) {
-    cell.textContent = row.dataset.state;
-    cell.dataset.level = row.dataset.level;
+// updateCell заполняет ячейку «Обновление» мода: значок и подпись.
+function updateCell(cell, mod) {
+  const mark = marks.get(mod.id);
+  let text = "";
+  let level = "off";
+  let hint = "";
+  if (!mod.nexusId) {
+    text = "—";
+    hint = "У мода нет номера на Nexus: проверить его нельзя";
   } else if (mark === "checking") {
-    cell.textContent = "Проверяется…";
-    cell.dataset.level = "warn";
-  } else if (mark === "ok") {
-    cell.textContent = "✓ Новых версий нет";
-    cell.dataset.level = "ok";
+    text = "Проверяется";
+    level = "busy";
+  } else if (mark === "queued") {
+    text = "В очереди";
+    level = "queued";
   } else if (mark === "missing") {
-    cell.textContent = "На Nexus не найден";
-    cell.dataset.level = "off";
+    text = "Нет на Nexus";
+    hint = "Страница мода на Nexus убрана или скрыта автором";
   } else {
-    cell.textContent = "↑ Есть версия " + mark;
-    cell.dataset.level = "warn";
+    const version = mark && mark !== "ok" ? mark : mod.available;
+    if (version) {
+      text = "↑ " + version;
+      level = "warn";
+      hint = "На Nexus есть версия " + version;
+    } else if (mark === "ok") {
+      text = "✓ Актуален";
+      level = "ok";
+    }
   }
+  cell.dataset.level = level;
+  cell.title = hint;
+  cell.replaceChildren();
+  if (level === "busy" || level === "queued") cell.append(el("span", "spinner"));
+  cell.append(text);
+}
+
+// setMark ставит моду отметку и сразу показывает её в его строке.
+function setMark(id, mark) {
+  marks.set(id, mark);
+  const mod = state.mods.find((m) => m.id === id);
+  const row = document.querySelector(`#mods tr[data-id="${CSS.escape(id)}"]`);
+  if (mod && row) updateCell(row.querySelector(".update"), mod);
 }
 
 // renderCheck показывает общий ход проверки обновлений над списком.
@@ -128,26 +151,36 @@ function renderCheck() {
 // onCheckStep принимает шаг проверки от программы.
 function onCheckStep(step) {
   if (!checking) return;
-  checking.done = step.done;
   checking.total = step.total;
-  checking.name = step.name;
-  const mark = !step.finished ? "checking" : step.missing ? "missing" : step.available || "ok";
-  for (const id of step.mods || []) {
-    checking.rows.set(id, mark);
-    const row = document.querySelector(`#mods tr[data-id="${CSS.escape(id)}"]`);
-    if (row) markRow(row, mark);
+  if (step.queued || step.unchanged) {
+    // Расклад: кто с прошлой проверки не менялся, тот уже проверен.
+    for (const id of step.unchanged || []) setMark(id, "ok");
+    for (const id of step.queued || []) setMark(id, "queued");
+  } else {
+    checking.done = step.done;
+    checking.name = step.name;
+    const mark = !step.finished ? "checking" : step.missing ? "missing" : step.available || "ok";
+    for (const id of step.mods || []) setMark(id, mark);
   }
   renderCheck();
 }
 
 async function checkUpdates() {
-  checking = { done: 0, total: 0, name: "", rows: new Map() };
+  checking = { done: 0, total: 0, name: "" };
+  marks.clear();
+  for (const mod of state.mods) if (mod.nexusId) marks.set(mod.id, "queued");
   renderCheck();
+  renderMods();
   try {
     await act(() => backend().CheckUpdates(), $("check-updates"));
   } finally {
-    // Итог остаётся в списке: у модов с обновлением новая версия видна в столбце «Версия».
     checking = null;
+    // Найденную версию дальше показывает само состояние мода; до кого
+    // проверка не дошла (сбой), у того отметка снимается.
+    for (const [id, mark] of marks) {
+      if (mark === "queued" || mark === "checking") marks.delete(id);
+      else if (mark !== "missing") marks.set(id, "ok");
+    }
     renderCheck();
     renderMods();
   }
@@ -186,19 +219,17 @@ function renderMods() {
 
     const stateCell = el("td", "state", mod.state);
     stateCell.dataset.level = mod.level;
+    stateCell.title = mod.state;
     row.dataset.id = mod.id;
-    row.dataset.state = mod.state;
-    row.dataset.level = mod.level;
 
-    // Вышла версия новее — это видно прямо в списке.
-    const versionCell = el("td", "version", mod.available ? `${mod.version} → ${mod.available}` : mod.version);
-    if (mod.available) {
-      versionCell.classList.add("warn");
-      versionCell.title = "На Nexus есть версия " + mod.available;
-    }
+    const nameCell = el("td", "name", mod.name);
+    nameCell.title = mod.name;
+    const versionCell = el("td", "version", mod.version);
+    versionCell.title = mod.version;
+    const updateTd = el("td", "update");
+    updateCell(updateTd, mod);
 
-    row.append(el("td", "num", String(index + 1)), toggleCell, el("td", "name", mod.name), versionCell, stateCell);
-    if (checking) markRow(row, checking.rows.get(mod.id));
+    row.append(el("td", "num", String(index + 1)), toggleCell, nameCell, versionCell, updateTd, stateCell);
 
     const select = () => {
       selectedId = mod.id === selectedId ? null : mod.id;
