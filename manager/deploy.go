@@ -446,6 +446,9 @@ func (a *Manager) realState() (State, error) {
 	for _, problem := range problems {
 		s.Issues = append(s.Issues, Issue{Title: "Запись в хранилище повреждена", Detail: problem.Error(), Level: LevelError})
 	}
+	orderIssues, note := a.orderIssues(p)
+	s.Issues = append(s.Issues, orderIssues...)
+	s.OrderNote = note
 	if plan != nil {
 		s.Issues = append(s.Issues, driftIssues(plan)...)
 		s.Issues = append(s.Issues, conflictIssues(plan, names)...)

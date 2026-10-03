@@ -43,7 +43,9 @@ type State struct {
 	Issues    []Issue      `json:"issues"`
 	Mods      []Mod        `json:"mods"`
 	PlanTitle string       `json:"planTitle"`
-	Plan      []string     `json:"plan"`
+	// OrderNote поясняет, кто задаёт порядок загрузки, если не профиль.
+	OrderNote string   `json:"orderNote"`
+	Plan      []string `json:"plan"`
 }
 
 // StatusItem — один пункт строки состояния под шапкой.
@@ -66,6 +68,8 @@ type Issue struct {
 	Stage int `json:"stage"`
 	// Command — метод Manager, который вызывает кнопка; пусто — действие ещё не готово.
 	Command string `json:"command"`
+	// Arg — к чему применить команду (например, какой мод включить).
+	Arg string `json:"arg"`
 }
 
 // Mod — строка списка и карточка мода.
