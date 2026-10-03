@@ -389,6 +389,28 @@ func (a *App) OpenNexus(id string) error {
 	return nil
 }
 
+// BisectAsk объясняет, как идёт поиск сбойного мода, и спрашивает согласия.
+func (a *App) BisectAsk() Ask {
+	return Ask{
+		Title: "Найти сбойный мод",
+		Message: "Если игра падает или ведёт себя странно, а в «Требуют внимания» виновника нет, программа найдёт его делением пополам.\n\n" +
+			"Она включит половину ваших модов и попросит запустить игру. Вы отвечаете, осталась ли проблема, — и круг сужается вдвое. Для 140 модов это 7–8 запусков игры вместо 140.\n\n" +
+			"Поиск идёт во временном наборе «" + manager.BisectSet + "»: ваш набор не меняется, и в конце программа вернёт игру к нему. Прервать поиск можно в любой момент.",
+		OK: "Начать поиск",
+	}
+}
+
+// StartBisect начинает поиск сбойного мода.
+func (a *App) StartBisect() (manager.BisectResult, error) { return a.m.StartBisect() }
+
+// BisectAnswer принимает ответ, осталась ли проблема в этом шаге поиска.
+func (a *App) BisectAnswer(problem bool) (manager.BisectResult, error) {
+	return a.m.BisectAnswer(problem)
+}
+
+// CancelBisect прерывает поиск сбойного мода.
+func (a *App) CancelBisect() (manager.BisectResult, error) { return a.m.CancelBisect() }
+
 // Journal возвращает последние записи журнала действий.
 func (a *App) Journal() ([]manager.Event, error) {
 	events, err := a.m.Journal(500)

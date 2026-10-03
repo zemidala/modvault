@@ -636,3 +636,9 @@ button.busy::after,
 .ask-choices { display: flex; flex-direction: column; gap: 8px; }
 .ask-choices .choice { justify-content: flex-start; text-align: left; }
 .ask-choices .choice[aria-current="true"] { border-color: var(--gold); color: var(--gold); }
+
+/* Поиск сбойного мода: вопрос после каждого запуска игры. */
+.bisect { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; padding: 12px 14px; border-color: var(--orange-worn); }
+.bisect .issue-text { flex: 1 1 360px; }
+.bisect-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.bisect-actions .plate { padding: 0 18px; font-family: inherit; font-size: inherit; font-weight: 700; letter-spacing: 0; text-transform: none; }

@@ -350,6 +350,13 @@ func (a *Manager) SetEnabledMany(ids []string, enabled bool) (State, error) {
 func (a *Manager) SwitchSet(name string) (SetResult, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if name == BisectSet || a.profileName() == BisectSet {
+		return SetResult{}, errors.New("идёт поиск сбойного мода: сначала закончите или прервите его")
+	}
+	return a.switchSet(name)
+}
+
+func (a *Manager) switchSet(name string) (SetResult, error) {
 	if a.openErr != nil {
 		return SetResult{}, a.openErr
 	}

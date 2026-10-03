@@ -509,6 +509,7 @@ func (a *Manager) realState() (State, error) {
 	}
 
 	s.Status = a.status(s, len(mods), plan)
+	s.Bisect = a.bisectStatus()
 	s.Settings = a.settingsList()
 	s.Setup = a.setupSteps()
 	if s.Setup == nil {

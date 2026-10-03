@@ -43,6 +43,21 @@
 <div class="body">
 
   <main id="view-mods">
+    <section id="bisect-section" aria-label="Поиск сбойного мода" hidden>
+      <div class="heading"><h2>Поиск сбойного мода</h2><span class="rule"></span><span class="diamond"></span></div>
+      <div class="frame bisect">
+        <div class="issue-text">
+          <div class="issue-title" id="bisect-title"></div>
+          <div class="setup-detail" id="bisect-detail"></div>
+        </div>
+        <div class="bisect-actions">
+          <button class="plate" id="bisect-bad">Проблема осталась</button>
+          <button class="plate" id="bisect-good">Проблемы нет</button>
+          <button class="ghost" id="bisect-cancel">Прервать поиск</button>
+        </div>
+      </div>
+    </section>
+
     <section id="setup-section" aria-label="Начало работы" hidden>
       <div class="heading"><h2>Начало работы</h2><span class="rule"></span><button class="ghost small-button" id="setup-hide">Скрыть</button></div>
       <div class="frame" id="setup"></div>
@@ -63,6 +78,7 @@
         <button class="ghost" id="check-updates">Проверить обновления</button>
         <button class="ghost" id="sort">Отсортировать по правилам</button>
         <button class="ghost" id="add-mod">Добавить мод</button>
+        <button class="ghost" id="bisect-start" title="Игра падает или ведёт себя странно, а виновник неизвестен: программа найдёт его за несколько запусков">Найти сбойный мод</button>
       </div>
       <div class="check-progress" id="check-progress" role="status" hidden>
         <div class="check-text"><span id="check-label"></span><span id="check-count"></span></div>

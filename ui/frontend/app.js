@@ -666,6 +666,7 @@ function render() {
   renderPlan();
   renderPicked();
   renderSetup();
+  renderBisect();
   if (currentTab === "settings") renderSettings();
   if (currentTab === "journal") renderJournal();
   if (currentTab === "downloads") renderDownloads();
@@ -832,6 +833,49 @@ async function showPlanFiles() {
 
 function setEnabled(id, enabled) {
   return call(() => backend().SetEnabled(id, enabled));
+}
+
+// Поиск сбойного мода делением пополам: программа включает половину
+// модов, пользователь запускает игру и отвечает, осталась ли проблема.
+function renderBisect() {
+  const b = state.bisect;
+  $("bisect-section").hidden = !b;
+  $("bisect-start").hidden = !!b || state.demo;
+  if (!b) return;
+  $("bisect-title").textContent = `Шаг ${b.step} из ${b.steps}: под подозрением ${b.suspects}, сейчас включено ${b.testing.length}`;
+  $("bisect-detail").textContent = "Запустите игру и посмотрите, повторяется ли проблема. Потом ответьте здесь — программа сузит круг. Включены: " + b.testing.join(", ") + ".";
+}
+
+async function bisectStep(request, button) {
+  button.disabled = true;
+  button.classList.add("busy");
+  toast("Поиск сбойного мода: игра приводится к следующему шагу…", "busy", true);
+  let res = null;
+  try {
+    res = await request();
+    state = res.state;
+    render();
+    toast(res.message);
+  } catch (err) {
+    toast(String(err), "error");
+  } finally {
+    button.disabled = false;
+    button.classList.remove("busy");
+  }
+  // Виновник найден: предложить сразу выключить его в своём наборе.
+  if (res && res.culprit) {
+    const yes = await ask({
+      title: "Сбойный мод найден",
+      message: `Проблему вызывает «${res.culpritName}».\n\nВыключить его в наборе «${state.profile}»? Остальные моды останутся как были.\n\nЕсли после этого проблема не уйдёт, виновников несколько: запустите поиск ещё раз.`,
+      ok: "Выключить",
+    });
+    if (yes) call(() => backend().RemoveFromSet(state.profile, [res.culprit]).then((r) => r.state));
+  }
+}
+
+async function startBisect() {
+  if (!(await ask(await backend().BisectAsk()))) return;
+  bisectStep(() => backend().StartBisect(), $("bisect-start"));
 }
 
 // Разделы окна: моды, загрузки, журнал, настройки.
@@ -1024,6 +1068,10 @@ function wire() {
   }).observe(pinned);
 
   $("setup-hide").addEventListener("click", () => call(() => backend().HideSetup()));
+  $("bisect-start").addEventListener("click", startBisect);
+  $("bisect-bad").addEventListener("click", () => bisectStep(() => backend().BisectAnswer(true), $("bisect-bad")));
+  $("bisect-good").addEventListener("click", () => bisectStep(() => backend().BisectAnswer(false), $("bisect-good")));
+  $("bisect-cancel").addEventListener("click", () => bisectStep(() => backend().CancelBisect(), $("bisect-cancel")));
   // Архив мода можно бросить в окно мышью.
   if (window.runtime && window.runtime.OnFileDrop) window.runtime.OnFileDrop((x, y, paths) => dropFiles(paths), false);
 

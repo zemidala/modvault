@@ -49,6 +49,8 @@ type State struct {
 	PlanTitle    string       `json:"planTitle"`
 	// Settings — настройки-переключатели для раздела «Настройки».
 	Settings []Setting `json:"settings"`
+	// Bisect — ход поиска сбойного мода; nil, если поиск не идёт.
+	Bisect *BisectStatus `json:"bisect"`
 	// Setup — памятка «Начало работы»; пусто, когда всё сделано.
 	Setup []SetupStep `json:"setup"`
 	// OrderNote поясняет, кто задаёт порядок загрузки, если не профиль.
