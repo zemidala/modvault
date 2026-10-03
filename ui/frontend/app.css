@@ -235,9 +235,17 @@ main section { display: flex; flex-direction: column; gap: 8px; }
 
 .col-num { width: 52px; }
 .col-toggle { width: 68px; }
-.col-version { width: 150px; }
-.col-update { width: 170px; }
-.col-state { width: 240px; }
+/* Название мода получает всё, что осталось от узких столбцов. */
+.col-version { width: 100px; }
+.col-update { width: 130px; }
+.col-sets { width: 150px; }
+.col-state { width: 170px; }
+@media (min-width: 1500px) {
+  .col-version { width: 130px; }
+  .col-update { width: 160px; }
+  .col-sets { width: 240px; }
+  .col-state { width: 240px; }
+}
 
 .num { font-variant-numeric: tabular-nums; color: var(--brass); }
 .name { font-weight: 700; }
@@ -245,6 +253,8 @@ main section { display: flex; flex-direction: column; gap: 8px; }
 .mods td { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .version { font-variant-numeric: tabular-nums; }
 .update { font-variant-numeric: tabular-nums; color: var(--muted); }
+.sets { font-size: 13px; color: var(--muted); }
+.sets .set-current { color: var(--parchment); }
 .update[data-level="ok"] { color: var(--ok); }
 .update[data-level="warn"], .update[data-level="busy"] { color: var(--orange-text); }
 .spinner {
@@ -359,9 +369,11 @@ tr[data-enabled="false"] .name, tr[data-enabled="false"] .version { color: var(-
 
 @media (max-width: 1000px) {
   .card { flex-basis: 260px; }
-  .col-state { width: 170px; }
-  .col-version { width: 110px; }
-  .col-update { width: 140px; }
+  .col-state { width: 150px; }
+  .col-version { width: 90px; }
+  .col-update { width: 120px; }
+  /* В узком окне наборы мода видны в подсказке к его названию. */
+  .col-sets, .mods td.sets { display: none; }
 }
 
 .status-command {

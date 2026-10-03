@@ -371,6 +371,7 @@ func (a *Manager) realState() (State, error) {
 		byID[m.ID] = m
 	}
 	updates := a.loadUpdates()
+	inSets := a.setsByMod(p)
 	for _, e := range p.Entries {
 		v, err := a.store.Get(e.ModID, e.VersionID)
 		if err != nil {
@@ -379,6 +380,10 @@ func (a *Manager) realState() (State, error) {
 		row := Mod{
 			ID: e.ModID, Name: v.Name, Version: v.Version, Source: v.Source, NexusID: v.NexusID,
 			Files: len(v.Files), Versions: len(byID[e.ModID].Versions), Enabled: e.Enabled,
+			Sets: inSets[e.ModID],
+		}
+		if row.Sets == nil {
+			row.Sets = []string{}
 		}
 		if u, ok := updates.Mods[e.ModID]; ok && u.newerThan(v) {
 			row.Available = u.Version

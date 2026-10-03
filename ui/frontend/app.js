@@ -405,13 +405,23 @@ function renderMods() {
     row.dataset.id = mod.id;
 
     const nameCell = el("td", "name", mod.name);
-    nameCell.title = mod.name;
+    nameCell.title = mod.name + ((mod.sets || []).length ? " — в наборах: " + mod.sets.join(", ") : "");
     const versionCell = el("td", "version", mod.version);
     versionCell.title = mod.version;
     const updateTd = el("td", "update");
     updateCell(updateTd, mod);
 
-    row.append(el("td", "num", String(index + 1)), toggleCell, nameCell, versionCell, updateTd, stateCell);
+    // В каких наборах мод включён; текущий набор выделен.
+    const setsCell = el("td", "sets");
+    const sets = mod.sets || [];
+    setsCell.title = sets.length ? "Включён в наборах: " + sets.join(", ") : "Не включён ни в одном наборе";
+    sets.forEach((name, i) => {
+      if (i > 0) setsCell.append(", ");
+      setsCell.append(el("span", name === state.profile ? "set-current" : "", name));
+    });
+    if (!sets.length) setsCell.append("—");
+
+    row.append(el("td", "num", String(index + 1)), toggleCell, nameCell, versionCell, updateTd, setsCell, stateCell);
 
     const select = () => {
       selectedId = mod.id === selectedId ? null : mod.id;

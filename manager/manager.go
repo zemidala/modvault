@@ -85,9 +85,11 @@ type Mod struct {
 	Versions  int    `json:"versions"`
 	DependsOn string `json:"dependsOn"`
 	Enabled   bool   `json:"enabled"`
-	Pinned    bool   `json:"pinned"`
-	State     string `json:"state"`
-	Level     Level  `json:"level"`
+	// Sets — наборы, в которых мод включён, по алфавиту.
+	Sets   []string `json:"sets"`
+	Pinned bool     `json:"pinned"`
+	State  string   `json:"state"`
+	Level  Level    `json:"level"`
 }
 
 // Manager — Modvault целиком. Методы с заглавной буквы безопасны для

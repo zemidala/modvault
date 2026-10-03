@@ -87,6 +87,12 @@ func TestSets(t *testing.T) {
 	if got := enabledIDs(res.State); got != "dml,dmf,plain" {
 		t.Errorf("в тестовом наборе включены: %s", got)
 	}
+	// У каждого мода видно, в каких наборах он включён.
+	for id, want := range map[string]string{"plain": "Основной,Тест", "dml": "Основной,Тест", "other": "Основной"} {
+		if got := strings.Join(findMod(t, res.State, id).Sets, ","); got != want {
+			t.Errorf("наборы мода %s: %q, ждали %q", id, got, want)
+		}
+	}
 	if !inGame("Plain") || inGame("Other") || inGame("Needy") || !inGame("dmf") {
 		t.Error("игра не совпала с тестовым набором")
 	}

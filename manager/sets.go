@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"sort"
 	"strings"
 
 	"github.com/zemidala/modvault/core/deploy"
@@ -70,6 +71,38 @@ func (a *Manager) Sets() ([]SetInfo, error) {
 		out = append(out, SetInfo{Name: cur.Name, Current: true, Enabled: enabled(cur)})
 	}
 	return out, nil
+}
+
+// setsByMod возвращает для каждого мода наборы, в которых он включён.
+// cur — текущий набор: он мог ещё ни разу не сохраняться.
+func (a *Manager) setsByMod(cur profile.Profile) map[string][]string {
+	out := map[string][]string{}
+	names, err := a.profiles.List()
+	if err != nil {
+		names = nil
+	}
+	seen := false
+	for _, name := range names {
+		seen = seen || name == cur.Name
+	}
+	if !seen {
+		names = append(names, cur.Name)
+		sort.Strings(names)
+	}
+	for _, name := range names {
+		p := cur
+		if name != cur.Name {
+			if p, err = a.profiles.Load(name); err != nil {
+				continue
+			}
+		}
+		for _, e := range p.Entries {
+			if e.Enabled {
+				out[e.ModID] = append(out[e.ModID], name)
+			}
+		}
+	}
+	return out
 }
 
 // withRequired включает в профиле моды ids и всё, без чего они не
