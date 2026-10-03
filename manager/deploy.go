@@ -32,6 +32,13 @@ type settings struct {
 	IgnoredManagers []string `json:"ignoredManagers,omitempty"`
 	// Profile — текущий профиль; пусто — «Основной».
 	Profile string `json:"profile,omitempty"`
+	// NexusUser — чей ключ Nexus сохранён; сам ключ лежит в учётных данных Windows.
+	NexusUser    string `json:"nexusUser,omitempty"`
+	NexusPremium bool   `json:"nexusPremium,omitempty"`
+	// NxmCommand — команда, которой Modvault назначил себя открывать ссылки
+	// nxm://; NxmPrevious — кто открывал их до этого.
+	NxmCommand  string `json:"nxmCommand,omitempty"`
+	NxmPrevious string `json:"nxmPrevious,omitempty"`
 }
 
 func loadSettings(home string) (settings, error) {
@@ -363,14 +370,18 @@ func (a *Manager) realState() (State, error) {
 	for _, m := range mods {
 		byID[m.ID] = m
 	}
+	updates := a.loadUpdates()
 	for _, e := range p.Entries {
 		v, err := a.store.Get(e.ModID, e.VersionID)
 		if err != nil {
 			return State{}, err
 		}
 		row := Mod{
-			ID: e.ModID, Name: v.Name, Version: v.Version, Source: v.Source,
+			ID: e.ModID, Name: v.Name, Version: v.Version, Source: v.Source, NexusID: v.NexusID,
 			Files: len(v.Files), Versions: len(byID[e.ModID].Versions), Enabled: e.Enabled,
+		}
+		if u, ok := updates.Mods[e.ModID]; ok && u.newerThan(v) {
+			row.Available = u.Version
 		}
 		if row.Version == "" {
 			row.Version = "—"
@@ -623,7 +634,7 @@ func (a *Manager) status(s State, mods int, plan *deploy.Plan) []StatusItem {
 	if rec, err := a.loadRecord(); err == nil && rec != nil {
 		items = append(items, StatusItem{Label: "Vortex", Value: "отсоединён · вернуть", Level: LevelOff, Command: "Release"})
 	}
-	return items
+	return append(items, a.nexusStatus()...)
 }
 
 // IgnoreManagers перестаёт учитывать другие менеджеры модов, кроме Vortex:

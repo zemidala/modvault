@@ -53,6 +53,7 @@ type Version struct {
 	Archive     string    `json:"archive"` // имя файла архива в папке версии; пусто — архива нет
 	ArchiveHash fsx.Hash  `json:"archiveHash,omitzero"`
 	NexusID     int       `json:"nexusId,omitempty"`
+	NexusFileID int       `json:"nexusFileId,omitempty"` // номер файла на Nexus; 0 — неизвестен
 	// AsIs — файлы уже разложены так, как лежат в игре (например, приняты
 	// у другого менеджера модов), раскладывать их заново не нужно.
 	AsIs  bool   `json:"asIs,omitempty"`
@@ -76,6 +77,7 @@ type Info struct {
 	Version string // если пусто, версия именуется по хешу содержимого
 	Source  string
 	NexusID int
+	FileID  int  // номер файла на Nexus
 	AsIs    bool // файлы уже разложены как в игре
 }
 
@@ -177,7 +179,7 @@ func (s *Store) Add(archivePath string, info Info) (Version, error) {
 	v := Version{
 		ModID: modID, ID: versionID,
 		Name: info.Name, Version: info.Version, Source: info.Source,
-		NexusID: info.NexusID, AsIs: info.AsIs,
+		NexusID: info.NexusID, NexusFileID: info.FileID, AsIs: info.AsIs,
 		Added:   time.Now().UTC().Truncate(time.Second),
 		Archive: "archive." + string(format), ArchiveHash: archiveHash,
 	}
@@ -287,7 +289,7 @@ func (s *Store) AddFiles(root string, files []string, info Info) (Version, error
 	v := Version{
 		ModID: modID, ID: versionID,
 		Name: info.Name, Version: info.Version, Source: info.Source,
-		NexusID: info.NexusID, AsIs: info.AsIs,
+		NexusID: info.NexusID, NexusFileID: info.FileID, AsIs: info.AsIs,
 		Added: time.Now().UTC().Truncate(time.Second),
 	}
 	return s.finish(stage, final, v, sorted)

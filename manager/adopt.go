@@ -589,5 +589,6 @@ func (a *Manager) release(dryRun bool) (ReleaseReport, error) {
 		return rep, err
 	}
 	a.settings.IgnoredManagers = nil
+	a.returnNxm() // ссылки с сайта снова открывает тот, кто открывал до нас
 	return rep, a.saveSettings()
 }

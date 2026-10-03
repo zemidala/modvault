@@ -14,11 +14,11 @@ import (
 	"time"
 )
 
-// Сколько неудач подряд (без единого полученного байта) терпит загрузка,
-// сколько ждёт между попытками и сколько ждёт молчащий сервер.
+// RetryDelay — пауза между попытками загрузки. Рядом: сколько неудач подряд
+// (без единого полученного байта) терпит загрузка и сколько ждёт молчащий сервер.
 var (
 	maxFailures  = 5
-	retryDelay   = 2 * time.Second
+	RetryDelay   = 2 * time.Second
 	stallTimeout = 60 * time.Second
 )
 
@@ -49,7 +49,7 @@ func Download(ctx context.Context, urls []string, part string, size int64, progr
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-time.After(retryDelay):
+			case <-time.After(RetryDelay):
 			}
 		}
 		written, err := fetch(ctx, urls[attempt%len(urls)], part, size, progress)

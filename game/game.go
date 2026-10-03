@@ -96,6 +96,8 @@ type Ordering struct {
 type Game interface {
 	ID() string
 	Name() string
+	// NexusDomain — имя игры в адресах Nexus Mods; пусто — игры там нет.
+	NexusDomain() string
 	// Detect ищет установки игры на компьютере.
 	Detect() ([]Install, error)
 	// Validate проверяет, что папка похожа на установку игры.

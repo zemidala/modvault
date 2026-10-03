@@ -46,6 +46,37 @@ func (f Files) Latest(have int) (File, bool) {
 	return best, found
 }
 
+// Replaces сообщает, что файл newID пришёл на смену файлу oldID — сразу
+// или через несколько замен.
+func (f Files) Replaces(oldID, newID int) bool {
+	next := make(map[int]int, len(f.Updates))
+	for _, u := range f.Updates {
+		next[u.Old] = u.New
+	}
+	cur := oldID
+	for range f.Updates {
+		n, ok := next[cur]
+		if !ok {
+			return false
+		}
+		if n == newID {
+			return true
+		}
+		cur = n
+	}
+	return false
+}
+
+// Find возвращает файл по номеру.
+func (f Files) Find(id int) (File, bool) {
+	for _, file := range f.Files {
+		if file.ID == id {
+			return file, true
+		}
+	}
+	return File{}, false
+}
+
 func usable(f File) bool {
 	return f.Category != CategoryOld && f.Category != CategoryArchived && f.Category != ""
 }

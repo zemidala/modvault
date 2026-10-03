@@ -31,6 +31,9 @@ func New() *Darktide { return &Darktide{} }
 func (*Darktide) ID() string   { return "darktide" }
 func (*Darktide) Name() string { return "Darktide" }
 
+// NexusDomain — имя игры в адресах Nexus Mods.
+func (*Darktide) NexusDomain() string { return "warhammer40kdarktide" }
+
 func (*Darktide) Layout(files []string) (game.Layout, error) { return Layout(files) }
 
 func (*Darktide) Describe(files []string) game.Layout { return Describe(files) }

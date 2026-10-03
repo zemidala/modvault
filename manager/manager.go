@@ -18,6 +18,7 @@ import (
 	"github.com/zemidala/modvault/core/store"
 	"github.com/zemidala/modvault/game"
 	"github.com/zemidala/modvault/game/darktide"
+	"github.com/zemidala/modvault/nexus"
 )
 
 // mainProfile — профиль по умолчанию.
@@ -79,6 +80,7 @@ type Mod struct {
 	Version   string `json:"version"`
 	Available string `json:"available"`
 	Source    string `json:"source"`
+	NexusID   int    `json:"nexusId"` // номер мода на Nexus; 0 — неизвестен
 	Files     int    `json:"files"`
 	Versions  int    `json:"versions"`
 	DependsOn string `json:"dependsOn"`
@@ -103,6 +105,13 @@ type Manager struct {
 	deployer  *deploy.Deployer
 	deployErr error           // почему нельзя развёртывать в выбранную папку
 	recovery  deploy.Recovery // что сделано с прерванным развёртыванием при запуске
+
+	keys      nexus.Keys     // где лежит ключ Nexus
+	protocol  nexus.Protocol // кто открывает ссылки nxm://; nil — этим не управляем
+	nexusBase string         // адрес API Nexus; пусто — настоящий
+	nexus     *nexus.Client  // клиент с ключом; nil — ещё не создан
+	// downloading — номера файлов Nexus, которые сейчас скачиваются.
+	downloading map[int]bool
 
 	demo []demoMod
 }
@@ -174,6 +183,7 @@ func New() *Manager {
 	a := NewAt(home)
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	a.keys, a.protocol = nexus.SystemKeys(), nexus.SystemProtocol()
 	if a.openErr == nil && a.settings.GameDir == "" && len(installs) > 0 {
 		a.setInstall(installs[0])
 	}
@@ -185,9 +195,11 @@ func NewAt(home string) *Manager {
 	return NewWith(home, darktide.New())
 }
 
-// NewWith создаёт Modvault с папкой данных home и плагином игры g.
+// NewWith создаёт Modvault с папкой данных home и плагином игры g. Ключ
+// Nexus такой Modvault держит в памяти, а системный обработчик ссылок nxm://
+// не трогает: с системой работает только New.
 func NewWith(home string, g game.Game) *Manager {
-	a := &Manager{home: home, demo: demoMods(), game: g}
+	a := &Manager{home: home, demo: demoMods(), game: g, keys: &nexus.MemoryKeys{}}
 	a.store, a.openErr = store.Open(home)
 	if a.openErr == nil {
 		a.profiles, a.openErr = profile.Open(filepath.Join(home, "profiles"))
@@ -249,32 +261,53 @@ func (a *Manager) addArchive(path string) (State, error) {
 		return State{}, a.openErr
 	}
 	info := store.GuessInfo(path)
+	if info.NexusID != 0 {
+		// Архив с Nexus, скачанный вручную: если мод с этим номером уже
+		// есть под другим названием, это его новая версия.
+		info.Name = a.nexusName(info.Name, info.NexusID, nexus.File{}, nexus.Files{})
+	}
+	if _, _, err := a.addVersion(path, info); err != nil {
+		return State{}, err
+	}
+	return a.state()
+}
+
+// errAlreadyStored — такая версия мода уже лежит в хранилище.
+var errAlreadyStored = errors.New("уже есть в хранилище")
+
+// addVersion кладёт архив в хранилище и ставит версию в профиль. Возвращает
+// добавленную версию и ту, что стояла в профиле до неё (пусто — мод новый).
+func (a *Manager) addVersion(path string, info store.Info) (store.Version, string, error) {
 	// Был ли мод в профиле до добавления: новый мод включается, у старого
 	// меняется только версия.
 	before, _, err := a.loadProfile()
 	if err != nil {
-		return State{}, err
+		return store.Version{}, "", err
 	}
-	listed := before.Index(store.Slug(info.Name)) >= 0
+	prev := ""
+	listed := false
+	if i := before.Index(store.Slug(info.Name)); i >= 0 {
+		listed, prev = true, before.Entries[i].VersionID
+	}
 	v, err := a.store.Add(path, info)
 	if errors.Is(err, fs.ErrExist) {
-		return State{}, fmt.Errorf("«%s» этой версии уже есть в хранилище", info.Name)
+		return store.Version{}, "", fmt.Errorf("«%s» этой версии %w", info.Name, errAlreadyStored)
 	}
 	if err != nil {
-		return State{}, err
+		return store.Version{}, "", err
 	}
 	if _, err := a.layout(v); err != nil {
 		// Архив, который игра не умеет разложить, в хранилище не остаётся.
 		if rerr := a.store.Remove(v.ModID, v.ID, true); rerr != nil {
-			return State{}, errors.Join(err, rerr)
+			return store.Version{}, "", errors.Join(err, rerr)
 		}
-		return State{}, fmt.Errorf("«%s» не добавлен: %w", info.Name, err)
+		return store.Version{}, "", fmt.Errorf("«%s» не добавлен: %w", info.Name, err)
 	}
 
 	// Новая версия уже установленного мода занимает его место в профиле.
 	p, _, err := a.loadProfile()
 	if err != nil {
-		return State{}, err
+		return store.Version{}, "", err
 	}
 	if p.Index(v.ModID) < 0 {
 		err = p.Add(v.ModID, v.ID)
@@ -285,12 +318,58 @@ func (a *Manager) addArchive(path string) (State, error) {
 		err = p.SetEnabled(v.ModID, true)
 	}
 	if err != nil {
-		return State{}, err
+		return store.Version{}, "", err
 	}
 	if err := a.profiles.Save(p); err != nil {
-		return State{}, err
+		return store.Version{}, "", err
 	}
-	return a.state()
+	a.pruneVersions(v.ModID, v.ID, prev)
+	return v, prev, nil
+}
+
+// pruneVersions оставляет в хранилище новую версию мода и одну прежнюю, к
+// которой можно вернуться; версии, выбранные в других профилях, тоже
+// остаются. Остальные уходят в Корзину.
+func (a *Manager) pruneVersions(modID, current, prev string) {
+	mods, _, err := a.store.List()
+	if err != nil {
+		return
+	}
+	var versions []store.Version
+	for _, m := range mods {
+		if m.ID == modID {
+			versions = m.Versions
+		}
+	}
+	keep := map[string]bool{current: true}
+	if prev != "" {
+		keep[prev] = true
+	} else {
+		for i := len(versions) - 1; i >= 0; i-- { // прежняя — самая свежая из остальных
+			if versions[i].ID != current {
+				keep[versions[i].ID] = true
+				break
+			}
+		}
+	}
+	names, err := a.profiles.List()
+	if err != nil {
+		return
+	}
+	for _, name := range names {
+		p, err := a.profiles.Load(name)
+		if err != nil {
+			return // не знаем, что нужно этому профилю: ничего не удаляем
+		}
+		if i := p.Index(modID); i >= 0 {
+			keep[p.Entries[i].VersionID] = true
+		}
+	}
+	for _, v := range versions {
+		if !keep[v.ID] {
+			a.store.Remove(modID, v.ID, false) // Корзина недоступна — версия просто остаётся
+		}
+	}
 }
 
 // ModName возвращает название мода.

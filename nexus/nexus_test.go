@@ -198,9 +198,9 @@ func TestClientHidesAddress(t *testing.T) {
 
 // fastRetries убирает ожидание между попытками.
 func fastRetries(t *testing.T) {
-	old := retryDelay
-	retryDelay = time.Millisecond
-	t.Cleanup(func() { retryDelay = old })
+	old := RetryDelay
+	RetryDelay = time.Millisecond
+	t.Cleanup(func() { RetryDelay = old })
 }
 
 func TestDownloadResumes(t *testing.T) {
