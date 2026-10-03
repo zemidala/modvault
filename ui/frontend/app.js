@@ -431,14 +431,89 @@ async function openRowMenu(mod, x, y) {
   showMenu({ x, y }, items);
 }
 
+// Сортировка списка по столбцу: щелчок по названию столбца — по
+// возрастанию, второй — по убыванию, третий — обратно к порядку загрузки.
+// Это только вид списка: порядок загрузки модов в игре он не меняет.
+// Избранные моды всегда стоят первыми.
+let sorting = { key: "", desc: false };
+try {
+  sorting = JSON.parse(localStorage.getItem("modvault.sort")) || sorting;
+} catch (err) {
+  // сохранённой сортировки нет или она испорчена — остаётся порядок загрузки
+}
+
+const updateRank = { update: 0, unknown: 1, missing: 2, current: 3 };
+const levelRank = { error: 0, warn: 1, ok: 2, off: 3 };
+const byText = (a, b) => a.localeCompare(b, "ru", { numeric: true, sensitivity: "base" });
+
+// Значение мода для сортировки по столбцу; null — значения нет, такие
+// моды стоят в конце при любом направлении.
+const sortValue = {
+  num: (mod, index) => index,
+  toggle: (mod) => (mod.enabled ? 0 : 1),
+  name: (mod) => mod.name,
+  author: (mod) => mod.author || null,
+  rating: (mod) => (mod.hasStats ? mod.endorsements : null),
+  stats: (mod) => (mod.hasStats ? mod.uniqueDownloads : null),
+  version: (mod) => (mod.version && mod.version !== "—" ? mod.version : null),
+  update: (mod) => (mod.updateStatus ? updateRank[mod.updateStatus] : null),
+  sets: (mod) => ((mod.sets || []).length ? mod.sets.join(", ") : null),
+  state: (mod) => `${levelRank[mod.level] ?? 9} ${mod.state}`,
+};
+
+// sortMods расставляет моды для показа: избранные первыми, дальше — по
+// выбранному столбцу, а при равенстве и без сортировки — по порядку загрузки.
+function sortMods(shown) {
+  const value = sortValue[sorting.key];
+  const sign = sorting.desc ? -1 : 1;
+  shown.sort((a, b) => {
+    const favorite = Number(b.mod.favorite) - Number(a.mod.favorite);
+    if (favorite) return favorite;
+    if (value) {
+      const x = value(a.mod, a.index);
+      const y = value(b.mod, b.index);
+      if (x === null || y === null) {
+        if (x !== y) return x === null ? 1 : -1;
+      } else {
+        const order = typeof x === "number" ? x - y : byText(x, y);
+        if (order) return order * sign;
+      }
+    }
+    return a.index - b.index;
+  });
+}
+
+// renderSortHeads показывает в шапке таблицы, по какому столбцу идёт сортировка.
+function renderSortHeads() {
+  for (const th of document.querySelectorAll(".mods th[data-sort]")) {
+    const active = th.dataset.sort === sorting.key;
+    th.setAttribute("aria-sort", !active ? "none" : sorting.desc ? "descending" : "ascending");
+    th.querySelector(".sort-mark").textContent = !active ? "" : sorting.desc ? "▼" : "▲";
+  }
+}
+
+function sortBy(key) {
+  if (sorting.key !== key) sorting = { key, desc: false };
+  else if (!sorting.desc) sorting = { key, desc: true };
+  else sorting = { key: "", desc: false };
+  try {
+    localStorage.setItem("modvault.sort", JSON.stringify(sorting));
+  } catch (err) {
+    // не сохранилось — сортировка действует до закрытия окна
+  }
+  renderMods();
+}
+
 function renderMods() {
   const body = $("mods");
   const query = $("search").value.trim().toLowerCase();
   body.replaceChildren();
 
-  // Избранные моды стоят первыми; номер у каждого — его место в порядке загрузки.
+  // Избранные моды стоят первыми, дальше — по выбранному столбцу; номер у
+  // каждого — его место в порядке загрузки.
   const shown = state.mods.map((mod, index) => ({ mod, index }));
-  shown.sort((a, b) => Number(b.mod.favorite) - Number(a.mod.favorite) || a.index - b.index);
+  sortMods(shown);
+  renderSortHeads();
   shown.forEach(({ mod, index }) => {
     if (query && !mod.name.toLowerCase().includes(query) && !(mod.author || "").toLowerCase().includes(query)) return;
 
@@ -1067,6 +1142,13 @@ function wire() {
     $("view-mods").style.setProperty("--pinned-h", `${pinned.offsetHeight}px`);
   }).observe(pinned);
 
+  for (const th of document.querySelectorAll(".mods th[data-sort]")) {
+    th.tabIndex = 0;
+    th.addEventListener("click", () => sortBy(th.dataset.sort));
+    th.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") sortBy(th.dataset.sort);
+    });
+  }
   $("setup-hide").addEventListener("click", () => call(() => backend().HideSetup()));
   $("bisect-start").addEventListener("click", startBisect);
   $("bisect-bad").addEventListener("click", () => bisectStep(() => backend().BisectAnswer(true), $("bisect-bad")));

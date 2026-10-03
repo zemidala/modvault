@@ -94,12 +94,12 @@
         <button class="ghost" id="picked-clear">Снять выделение</button>
       </div>
       </div>
-      <p class="muted small" id="pick-hint">Ctrl + щелчок или Shift + щелчок — выделить несколько модов, чтобы собрать из них набор. Правая кнопка мыши на моде — убрать из набора, добавить или перенести в другой.</p>
+      <p class="muted small" id="pick-hint">Ctrl + щелчок или Shift + щелчок — выделить несколько модов, чтобы собрать из них набор. Правая кнопка мыши на моде — убрать из набора, добавить или перенести в другой. Щелчок по названию столбца сортирует список.</p>
       <p class="muted small order-note" id="order-note" hidden></p>
       <div class="frame">
         <table class="mods">
           <thead>
-            <tr><th class="col-num">№</th><th class="col-toggle">Вкл.</th><th>Мод</th><th class="col-author">Автор</th><th class="col-rating" title="Сколько пользователей Nexus одобрили мод">Рейтинг</th><th class="col-stats" title="Сколько разных людей скачали мод с Nexus">Скачали</th><th class="col-version">Версия</th><th class="col-update">Обновление</th><th class="col-sets">Наборы</th><th class="col-state">Состояние</th></tr>
+            <tr><th class="col-num" data-sort="num">№<span class="sort-mark"></span></th><th class="col-toggle" data-sort="toggle">Вкл.<span class="sort-mark"></span></th><th data-sort="name">Мод<span class="sort-mark"></span></th><th class="col-author" data-sort="author">Автор<span class="sort-mark"></span></th><th class="col-rating" data-sort="rating" title="Сколько пользователей Nexus одобрили мод">Рейтинг<span class="sort-mark"></span></th><th class="col-stats" data-sort="stats" title="Сколько разных людей скачали мод с Nexus">Скачали<span class="sort-mark"></span></th><th class="col-version" data-sort="version">Версия<span class="sort-mark"></span></th><th class="col-update" data-sort="update">Обновление<span class="sort-mark"></span></th><th class="col-sets" data-sort="sets">Наборы<span class="sort-mark"></span></th><th class="col-state" data-sort="state">Состояние<span class="sort-mark"></span></th></tr>
           </thead>
           <tbody id="mods"></tbody>
         </table>

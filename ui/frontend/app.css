@@ -642,3 +642,9 @@ button.busy::after,
 .bisect .issue-text { flex: 1 1 360px; }
 .bisect-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .bisect-actions .plate { padding: 0 18px; font-family: inherit; font-size: inherit; font-weight: 700; letter-spacing: 0; text-transform: none; }
+
+/* Сортировка по столбцу: название столбца нажимается. */
+.mods th[data-sort] { cursor: pointer; user-select: none; white-space: nowrap; }
+.mods th[data-sort]:hover { color: var(--parchment); }
+.mods th[aria-sort="ascending"], .mods th[aria-sort="descending"] { color: var(--gold); }
+.sort-mark { margin-left: 5px; font-size: 9px; }
