@@ -448,6 +448,8 @@ type updates struct {
 	Gone map[int]bool `json:"gone,omitempty"`
 	// Stats — одобрения и скачивания мода по его номеру на Nexus.
 	Stats map[int]modStats `json:"stats"`
+	// Endorsed — отметка владельца ключа у мода по его номеру на Nexus.
+	Endorsed map[int]string `json:"endorsed,omitempty"`
 }
 
 // modStats — статистика мода на Nexus, какой её застал запрос.
@@ -497,6 +499,9 @@ func (a *Manager) loadUpdates() updates {
 	}
 	if u.ModCategory == nil {
 		u.ModCategory = map[int]int{}
+	}
+	if u.Endorsed == nil {
+		u.Endorsed = map[int]string{}
 	}
 	return u
 }
@@ -689,6 +694,19 @@ func (a *Manager) CheckUpdates(ctx context.Context, progress func(CheckProgress)
 			cache.Categories = names
 		}
 	}
+	// Свои одобрения — одним запросом на все моды.
+	if len(targets) > 0 {
+		list, err := c.Endorsements(ctx)
+		rep.Requests++
+		if err == nil {
+			cache.Endorsed = map[int]string{}
+			for _, e := range list {
+				if e.Game == domain {
+					cache.Endorsed[e.ModID] = e.Status
+				}
+			}
+		}
+	}
 	for i, id := range ids {
 		// Моды хранилища с этим номером на Nexus: обычно один.
 		step := CheckProgress{Done: i, Total: len(ids)}
@@ -833,6 +851,63 @@ func (a *Manager) UpdateMod(ctx context.Context, id string, progress func(Progre
 	defer a.mu.Unlock()
 	res.State, err = a.state()
 	return res, err
+}
+
+// EndorseResult — итог одобрения мода.
+type EndorseResult struct {
+	State   State  `json:"state"`
+	Message string `json:"message"`
+}
+
+// Endorse одобряет мод на Nexus от имени владельца ключа или снимает
+// одобрение. Одобрять можно то, чем пользуешься: Nexus сам решает, давно
+// ли мод скачан, и его отказ передаётся как есть.
+func (a *Manager) Endorse(ctx context.Context, id string, endorse bool) (EndorseResult, error) {
+	a.mu.Lock()
+	v, err := a.profileVersion(id)
+	c, cerr := a.client()
+	domain, derr := a.domain()
+	a.mu.Unlock()
+	if err := errors.Join(err, cerr, derr); err != nil {
+		return EndorseResult{}, err
+	}
+	if v.NexusID == 0 {
+		return EndorseResult{}, fmt.Errorf("у «%s» нет номера на Nexus: одобрить его нельзя", v.Name)
+	}
+	status, err := c.Endorse(ctx, domain, v.NexusID, v.Version, endorse)
+	if err != nil {
+		what := "одобрение"
+		if !endorse {
+			what = "снятие одобрения"
+		}
+		return EndorseResult{}, fmt.Errorf("Nexus не принял %s «%s»: %w", what, v.Name, err)
+	}
+
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	cache := a.loadUpdates()
+	was := cache.Endorsed[v.NexusID] == nexus.Endorsed
+	now := status == nexus.Endorsed
+	cache.Endorsed[v.NexusID] = status
+	// Счётчик одобрений меняется на глазах, не дожидаясь проверки обновлений.
+	if st, ok := cache.Stats[v.NexusID]; ok && was != now {
+		if now {
+			st.Endorsements++
+		} else if st.Endorsements > 0 {
+			st.Endorsements--
+		}
+		cache.Stats[v.NexusID] = st
+	}
+	if err := a.saveUpdates(cache); err != nil {
+		return EndorseResult{}, err
+	}
+	msg := fmt.Sprintf("«%s» одобрен на Nexus", v.Name)
+	if !now {
+		msg = fmt.Sprintf("Одобрение «%s» на Nexus снято", v.Name)
+	}
+	a.note(EventNexus, msg)
+	st, err := a.state()
+	return EndorseResult{State: st, Message: msg}, err
 }
 
 // ModPage возвращает адрес страницы мода на Nexus.

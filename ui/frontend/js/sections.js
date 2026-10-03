@@ -58,6 +58,14 @@ function clock(iso) {
   return `${two(d.getDate())}.${two(d.getMonth() + 1)} ${two(d.getHours())}:${two(d.getMinutes())}`;
 }
 
+// duration — сколько ждать, по-человечески: 40 с, 3 мин, 1 ч 20 мин.
+function duration(seconds) {
+  const s = Math.max(1, Math.round(seconds));
+  if (s < 60) return `${s} с`;
+  if (s < 3600) return `${Math.round(s / 60)} мин`;
+  return `${Math.floor(s / 3600)} ч ${Math.round((s % 3600) / 60)} мин`;
+}
+
 function megabytes(n) {
   return `${(n / 1048576).toFixed(n < 10485760 ? 1 : 0).replace(".", ",")} МБ`;
 }
@@ -79,7 +87,13 @@ async function renderDownloads() {
     const head = el("div", "download-head");
     head.append(el("span", "download-name", d.version ? `${d.name} ${d.version}` : d.name));
     const share = d.total > 0 ? `${megabytes(d.done)} из ${megabytes(d.total)}` : d.done > 0 ? megabytes(d.done) : "";
-    const status = d.state === "active" ? `Идёт · ${share}` : d.state === "done" ? `Готово · ${clock(d.finished)}` : `Не удалось · ${clock(d.finished)}`;
+    // Скорость и сколько осталось — как только скорость измерена.
+    let pace = "";
+    if (d.state === "active" && d.speed > 0) {
+      pace = ` · ${megabytes(d.speed)}/с`;
+      if (d.total > d.done) pace += ` · осталось ${duration((d.total - d.done) / d.speed)}`;
+    }
+    const status = d.state === "active" ? `Идёт · ${share}${pace}` : d.state === "done" ? `Готово · ${clock(d.finished)}` : `Не удалось · ${clock(d.finished)}`;
     head.append(el("span", "download-status", status));
     row.append(head);
     if (d.state === "active") {

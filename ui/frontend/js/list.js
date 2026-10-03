@@ -299,8 +299,20 @@ function renderMods() {
     const installedCell = el("td", "installed", clock(mod.installed));
     installedCell.title = "Эта версия добавлена " + new Date(mod.installed).toLocaleString("ru-RU");
 
-    const ratingCell = el("td", "rating", mod.hasStats ? count(mod.endorsements) : "—");
+    const ratingCell = el("td", "rating");
     ratingCell.title = mod.hasStats ? `Одобрений на Nexus: ${mod.endorsements.toLocaleString("ru-RU")}` : statsHint(mod);
+    // Своё одобрение: сердечко перед числом. Одобрить можно мод с Nexus.
+    if (mod.nexusId && mod.updateStatus !== "missing") {
+      const heart = el("button", "endorse", mod.endorsed ? "♥" : "♡");
+      heart.setAttribute("aria-pressed", String(!!mod.endorsed));
+      heart.title = mod.endorsed ? "Вы одобрили этот мод на Nexus — щёлкните, чтобы снять одобрение" : "Одобрить мод на Nexus";
+      heart.addEventListener("click", (event) => {
+        event.stopPropagation();
+        endorse(mod, heart);
+      });
+      ratingCell.append(heart);
+    }
+    ratingCell.append(mod.hasStats ? count(mod.endorsements) : "—");
     const statsCell = el("td", "stats", mod.hasStats ? count(mod.uniqueDownloads) : "—");
     statsCell.title = mod.hasStats ? downloadsText(mod) : statsHint(mod);
     const authorCell = el("td", "author");
@@ -358,6 +370,11 @@ function renderMods() {
 }
 
 // count сокращает большое число: 1 234 → «1,2 тыс.», 2 500 000 → «2,5 млн».
+// endorse одобряет мод на Nexus или снимает одобрение.
+function endorse(mod, button) {
+  return act(() => backend().Endorse(mod.id, !mod.endorsed), button);
+}
+
 function count(n) {
   const short = (value, unit) => `${value.toFixed(value < 10 ? 1 : 0).replace(".", ",").replace(",0", "")} ${unit}`;
   if (n >= 1e6) return short(n / 1e6, "млн");

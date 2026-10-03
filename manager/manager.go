@@ -103,7 +103,9 @@ type Mod struct {
 	AuthorURL string `json:"authorUrl"`
 	// Статистика мода на Nexus: одобрения и скачивания (разными людьми и
 	// всего). HasStats — она известна.
-	HasStats        bool `json:"hasStats"`
+	HasStats bool `json:"hasStats"`
+	// Endorsed — владелец ключа Nexus одобрил этот мод.
+	Endorsed        bool `json:"endorsed"`
 	Endorsements    int  `json:"endorsements"`
 	Downloads       int  `json:"downloads"`
 	UniqueDownloads int  `json:"uniqueDownloads"`

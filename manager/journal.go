@@ -153,6 +153,12 @@ type Download struct {
 	Message  string    `json:"message"` // итог или причина неудачи
 	Started  time.Time `json:"started"`
 	Finished time.Time `json:"finished"`
+	// Speed — скорость загрузки, байт в секунду; 0 — ещё не измерена.
+	Speed int64 `json:"speed"`
+
+	// Замер скорости: сколько было скачано и когда.
+	sampleAt   time.Time
+	sampleDone int64
 }
 
 // Downloads возвращает загрузки этого запуска, от новых к старым.
@@ -191,6 +197,15 @@ func (a *Manager) describeDownload(d *Download, name, version string, total int6
 func (a *Manager) progressDownload(d *Download, done, total int64) {
 	a.mu.Lock()
 	d.Done, d.Total = done, total
+	// Скорость — за последнюю секунду с небольшим: так она не скачет от
+	// куска к куску и не отстаёт от настоящей.
+	switch now := time.Now(); {
+	case d.sampleAt.IsZero():
+		d.sampleAt, d.sampleDone = now, done
+	case now.Sub(d.sampleAt) >= time.Second:
+		d.Speed = int64(float64(done-d.sampleDone) / now.Sub(d.sampleAt).Seconds())
+		d.sampleAt, d.sampleDone = now, done
+	}
 	a.mu.Unlock()
 }
 
@@ -199,6 +214,7 @@ func (a *Manager) finishDownload(d *Download, message string, err error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	d.Finished = time.Now().UTC()
+	d.Speed = 0
 	if err != nil {
 		d.State, d.Message = DownloadFailed, err.Error()
 		a.noteError("Загрузка «"+d.Name+"»", err)

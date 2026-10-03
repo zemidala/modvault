@@ -1,6 +1,7 @@
 package nexus
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -75,6 +76,11 @@ func (c *Client) remember(h http.Header) {
 }
 
 func (c *Client) get(ctx context.Context, path string, query url.Values, out any) error {
+	return c.do(ctx, http.MethodGet, path, query, nil, out)
+}
+
+// do выполняет запрос к API; body, если задано, уходит в теле как JSON.
+func (c *Client) do(ctx context.Context, method, path string, query url.Values, body, out any) error {
 	if c.Key == "" {
 		return ErrNoKey
 	}
@@ -86,9 +92,20 @@ func (c *Client) get(ctx context.Context, path string, query url.Values, out any
 	if len(query) > 0 {
 		u += "?" + query.Encode()
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	var payload io.Reader
+	if body != nil {
+		data, err := json.Marshal(body)
+		if err != nil {
+			return err
+		}
+		payload = bytes.NewReader(data)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, u, payload)
 	if err != nil {
 		return err
+	}
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
 	}
 	req.Header.Set("apikey", c.Key)
 	req.Header.Set("Accept", "application/json")
@@ -114,12 +131,12 @@ func (c *Client) get(ctx context.Context, path string, query url.Values, out any
 	defer resp.Body.Close()
 	c.remember(resp.Header)
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 32<<20))
+	answer, err := io.ReadAll(io.LimitReader(resp.Body, 32<<20))
 	if err != nil {
 		return fmt.Errorf("Nexus недоступен: %w", err)
 	}
-	if resp.StatusCode == http.StatusOK {
-		if err := json.Unmarshal(body, out); err != nil {
+	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusCreated {
+		if err := json.Unmarshal(answer, out); err != nil {
 			return fmt.Errorf("непонятный ответ Nexus: %w", err)
 		}
 		return nil
@@ -128,7 +145,7 @@ func (c *Client) get(ctx context.Context, path string, query url.Values, out any
 	var apiErr struct {
 		Message string `json:"message"`
 	}
-	json.Unmarshal(body, &apiErr)
+	json.Unmarshal(answer, &apiErr)
 	detail := func(sentinel error) error {
 		if apiErr.Message == "" {
 			return sentinel
@@ -196,6 +213,41 @@ func (m ModInfo) AuthorPage(game string) string {
 		return fmt.Sprintf("https://www.nexusmods.com/%s/users/%d", url.PathEscape(game), m.Uploader.ID)
 	}
 	return ""
+}
+
+// Одобрение мода пользователем, как его называет Nexus.
+const (
+	Endorsed  = "Endorsed"
+	Abstained = "Abstained"
+)
+
+// Endorsement — отметка пользователя у мода.
+type Endorsement struct {
+	ModID  int    `json:"mod_id"`
+	Game   string `json:"domain_name"`
+	Status string `json:"status"` // Endorsed, Abstained или Undecided
+}
+
+// Endorsements возвращает отметки владельца ключа у модов всех игр.
+func (c *Client) Endorsements(ctx context.Context) ([]Endorsement, error) {
+	var out []Endorsement
+	err := c.get(ctx, "/user/endorsements.json", nil, &out)
+	return out, err
+}
+
+// Endorse одобряет мод (endorse) или снимает одобрение. version — версия
+// мода, которой пользуется владелец ключа. Возвращает новую отметку.
+func (c *Client) Endorse(ctx context.Context, game string, modID int, version string, endorse bool) (string, error) {
+	action := "abstain"
+	if endorse {
+		action = "endorse"
+	}
+	var out struct {
+		Status string `json:"status"`
+	}
+	path := fmt.Sprintf("/games/%s/mods/%d/%s.json", url.PathEscape(game), modID, action)
+	err := c.do(ctx, http.MethodPost, path, nil, map[string]string{"Version": version}, &out)
+	return out.Status, err
 }
 
 // Mod возвращает сведения о моде.

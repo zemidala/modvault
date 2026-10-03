@@ -369,6 +369,11 @@ func (a *App) UpdateMod(id string) (manager.UpdateResult, error) {
 	return res, err
 }
 
+// Endorse одобряет мод на Nexus или снимает одобрение.
+func (a *App) Endorse(id string, endorse bool) (manager.EndorseResult, error) {
+	return a.m.Endorse(a.ctx, id, endorse)
+}
+
 // OpenNexus открывает страницу мода в браузере.
 func (a *App) OpenNexus(id string) error {
 	page, err := a.m.ModPage(id)

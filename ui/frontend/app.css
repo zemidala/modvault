@@ -241,7 +241,7 @@ main section { display: flex; flex-direction: column; gap: 8px; }
 .col-author { width: 110px; }
 .col-category { width: 120px; }
 .col-installed { width: 100px; }
-.col-rating { width: 78px; }
+.col-rating { width: 100px; }
 .col-stats { width: 86px; }
 .col-version { width: 100px; }
 .col-update { width: 120px; }
@@ -253,7 +253,7 @@ main section { display: flex; flex-direction: column; gap: 8px; }
   .col-author { width: 150px; }
   .col-category { width: 130px; }
   .col-installed { width: 110px; }
-  .col-rating { width: 90px; }
+  .col-rating { width: 110px; }
   .col-stats { width: 100px; }
   .col-version { width: 120px; }
   .col-update { width: 150px; }
@@ -707,3 +707,12 @@ button.busy::after,
   from { box-shadow: 0 0 0 3px var(--orange-worn); }
   to { box-shadow: 0 0 0 3px transparent; }
 }
+
+/* Своё одобрение мода на Nexus: сердечко перед числом одобрений. */
+.endorse {
+  margin-right: 6px; padding: 0 2px; border: 0; background: none; cursor: pointer;
+  font: inherit; font-size: 15px; line-height: 1; color: var(--brass-frame);
+}
+.endorse:hover { color: var(--orange-text); }
+.endorse[aria-pressed="true"] { color: var(--orange-text); }
+.endorse.busy { opacity: 0.5; }

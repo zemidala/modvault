@@ -201,6 +201,13 @@ async function openRowMenu(mod, x, y) {
       }
     }
   }
+  if (!many && mod.nexusId) {
+    items.push({ separator: true });
+    items.push({
+      label: mod.endorsed ? "♥ Снять одобрение на Nexus" : "♡ Одобрить на Nexus",
+      action: () => endorse(mod, $("set-button")),
+    });
+  }
   if (!many && mod.versions > 1) {
     items.push({ separator: true });
     items.push({ label: "Версии…", hint: `в хранилище: ${mod.versions}`, action: () => openVersions(mod, { x, y }) });

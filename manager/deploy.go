@@ -17,6 +17,7 @@ import (
 	"github.com/zemidala/modvault/core/store"
 	"github.com/zemidala/modvault/game"
 	"github.com/zemidala/modvault/internal/version"
+	"github.com/zemidala/modvault/nexus"
 )
 
 const settingsFile = "settings.json"
@@ -405,6 +406,7 @@ func (a *Manager) realState() (State, error) {
 			row.Sets = []string{}
 		}
 		row.Favorite = favorite[e.ModID]
+		row.Endorsed = v.NexusID != 0 && updates.Endorsed[v.NexusID] == nexus.Endorsed
 		row.Installed = v.Added
 		row.Category = updates.Categories[updates.ModCategory[v.NexusID]]
 		if st, ok := updates.Stats[v.NexusID]; ok && v.NexusID != 0 && updates.Profiles[v.NexusID] != "" {

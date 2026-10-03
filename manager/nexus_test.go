@@ -51,10 +51,16 @@ type fakeNexus struct {
 	cut      map[int]int   // файл → сколько раз оборвать отдачу посередине
 	broken   map[int]bool  // файл не отдаётся вовсе
 	foreign  map[int]bool  // Nexus знает этот архив как другой файл
+	// endorsed — отметки владельца ключа; refuse — причина, по которой
+	// Nexus одобрение не принимает; versions — с какой версией одобряли.
+	endorsed map[int]string
+	refuse   string
+	versions map[int]string
 }
 
 func newFakeNexus(t *testing.T) *fakeNexus {
-	f := &fakeNexus{mods: map[int]*fakeMod{}, changed: map[int]int64{}, cut: map[int]int{}, broken: map[int]bool{}, foreign: map[int]bool{}}
+	f := &fakeNexus{mods: map[int]*fakeMod{}, changed: map[int]int64{}, cut: map[int]int{}, broken: map[int]bool{}, foreign: map[int]bool{},
+		endorsed: map[int]string{}, versions: map[int]string{}}
 	f.srv = httptest.NewServer(http.HandlerFunc(f.serve))
 	t.Cleanup(f.srv.Close)
 	old := nexus.RetryDelay
@@ -140,6 +146,14 @@ func (f *fakeNexus) serve(w http.ResponseWriter, r *http.Request) {
 		reply(map[string]any{"categories": []map[string]any{{"category_id": 7, "name": "User Interface", "parent_category": false}}})
 		return
 	}
+	if path == "/user/endorsements.json" {
+		out := []map[string]any{{"mod_id": 22, "domain_name": "skyrim", "status": "Endorsed"}} // другая игра
+		for id, status := range f.endorsed {
+			out = append(out, map[string]any{"mod_id": id, "domain_name": testDomain, "status": status})
+		}
+		reply(out)
+		return
+	}
 	rest, ok := strings.CutPrefix(path, "/games/"+testDomain+"/mods/")
 	if !ok {
 		w.WriteHeader(http.StatusNotFound)
@@ -183,6 +197,24 @@ func (f *fakeNexus) serve(w http.ResponseWriter, r *http.Request) {
 		reply(map[string]any{"mod_id": modID, "name": m.name, "version": "0", "author": "Автор " + m.name, "uploaded_by": "uploader",
 			"uploaded_users_profile_url": "https://www.nexusmods.com/users/" + strconv.Itoa(modID*10),
 			"endorsement_count":          modID * 100, "mod_downloads": modID * 5000, "category_id": 7, "mod_unique_downloads": modID * 3000})
+	case len(parts) == 2 && (parts[1] == "endorse" || parts[1] == "abstain"):
+		var body struct{ Version string }
+		json.NewDecoder(r.Body).Decode(&body)
+		if r.Method != http.MethodPost || r.Header.Get("Content-Type") != "application/json" {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		if f.refuse != "" {
+			w.WriteHeader(http.StatusForbidden)
+			reply(map[string]string{"message": f.refuse})
+			return
+		}
+		status := "Abstained"
+		if parts[1] == "endorse" {
+			status = "Endorsed"
+		}
+		f.endorsed[modID], f.versions[modID] = status, body.Version
+		reply(map[string]string{"message": "Updated to: " + status, "status": status})
 	case len(parts) == 2 && parts[1] == "files":
 		updates := []map[string]int{}
 		for _, u := range m.updates {
@@ -429,7 +461,7 @@ func TestUpdates(t *testing.T) {
 		t.Errorf("шаг после ответа: %+v", s)
 	}
 	// Три запроса: категории игры (один раз), файлы мода и, один раз, его страница.
-	if rep.Mods != 1 || rep.Unknown != 1 || rep.Updates != 1 || rep.Requests != 3 {
+	if rep.Mods != 1 || rep.Unknown != 1 || rep.Updates != 1 || rep.Requests != 4 {
 		t.Errorf("первая проверка: %+v", rep)
 	}
 	if m := findMod(t, rep.State, "score_board"); m.Author != "Автор Scoreboard" || m.AuthorURL != "https://www.nexusmods.com/users/220" {
@@ -470,7 +502,7 @@ func TestUpdates(t *testing.T) {
 	if len(steps) != 1 || steps[0].Total != 0 || strings.Join(steps[0].Unchanged, ",") != "score_board" {
 		t.Errorf("расклад второй проверки: %+v", steps)
 	}
-	if err != nil || rep.Requests != 1 || f.apiRequests()-before != 1 || rep.Updates != 1 {
+	if err != nil || rep.Requests != 2 || f.apiRequests()-before != 2 || rep.Updates != 1 {
 		t.Errorf("вторая проверка: %+v, %v, запросов %d", rep, err, f.apiRequests()-before)
 	}
 
@@ -512,7 +544,7 @@ func TestUpdates(t *testing.T) {
 	f.file(101).Category = "OLD_VERSION"
 	f.mods[22].updates = append(f.mods[22].updates, [2]int{101, 102})
 	f.changed[22] = time.Now().Unix()
-	if rep, err = a.CheckUpdates(ctx, nil); err != nil || rep.Updates != 1 || rep.Requests != 2 {
+	if rep, err = a.CheckUpdates(ctx, nil); err != nil || rep.Updates != 1 || rep.Requests != 3 {
 		t.Fatalf("третья проверка: %+v, %v", rep, err)
 	}
 	if m := findMod(t, rep.State, "scoreboard_skins"); m.Available != "" {
@@ -663,5 +695,97 @@ func TestCleanDownloads(t *testing.T) {
 	left := snapshot(t, dir)
 	if _, ok := left["1-old.zip.part"]; ok || len(left) != 2 {
 		t.Errorf("после уборки в загрузках: %v", left)
+	}
+}
+
+func TestEndorse(t *testing.T) {
+	a, f, _ := nexusApp(t)
+	ctx := context.Background()
+	f.add(t, 22, "Scoreboard", fakeFile{ID: 1, Name: "Scoreboard", Version: "1.4.0", Category: "MAIN", FileName: "Scoreboard-22-1-4-0.zip"},
+		map[string]string{"Scoreboard/Scoreboard.mod": "return {}"})
+	a.addArchive(modZip(t, "Local", `return {}`))
+
+	if _, err := a.Endorse(ctx, "local", true); err == nil {
+		t.Error("одобрение без ключа прошло")
+	}
+	login(t, a)
+	if _, err := a.InstallLink(ctx, link(22, 1), nil); err != nil {
+		t.Fatal(err)
+	}
+	if m := findMod(t, state(t, a), "scoreboard"); m.Endorsed || m.Endorsements != 2200 {
+		t.Fatalf("до одобрения: %+v", m)
+	}
+	// Мод без номера на Nexus одобрить нельзя.
+	if _, err := a.Endorse(ctx, "local", true); err == nil || !strings.Contains(err.Error(), "номер на Nexus") {
+		t.Errorf("одобрение мода не с Nexus: %v", err)
+	}
+
+	res, err := a.Endorse(ctx, "scoreboard", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m := findMod(t, res.State, "scoreboard"); !m.Endorsed || m.Endorsements != 2201 || !strings.Contains(res.Message, "«Scoreboard» одобрен") {
+		t.Errorf("после одобрения: %+v, %q", m, res.Message)
+	}
+	// Nexus получил версию, которой пользуется владелец ключа.
+	if f.endorsed[22] != "Endorsed" || f.versions[22] != "1.4.0" {
+		t.Errorf("на Nexus: %q с версией %q", f.endorsed[22], f.versions[22])
+	}
+	// Повторное одобрение счётчик не накручивает; отметка переживает перезапуск.
+	if res, _ = a.Endorse(ctx, "scoreboard", true); findMod(t, res.State, "scoreboard").Endorsements != 2201 {
+		t.Error("повторное одобрение изменило счётчик")
+	}
+	if m := findMod(t, state(t, NewWith(a.home, a.game)), "scoreboard"); !m.Endorsed {
+		t.Error("после перезапуска одобрение забыто")
+	}
+
+	res, err = a.Endorse(ctx, "scoreboard", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m := findMod(t, res.State, "scoreboard"); m.Endorsed || m.Endorsements != 2200 || !strings.Contains(res.Message, "снято") {
+		t.Errorf("после снятия: %+v, %q", m, res.Message)
+	}
+
+	// Отказ Nexus передаётся его словами, отметка не меняется.
+	f.refuse = "TOO_SOON_AFTER_DOWNLOAD"
+	if _, err := a.Endorse(ctx, "scoreboard", true); err == nil || !strings.Contains(err.Error(), "TOO_SOON_AFTER_DOWNLOAD") || !strings.Contains(err.Error(), "Nexus не принял одобрение «Scoreboard»") {
+		t.Errorf("отказ Nexus: %v", err)
+	}
+	if findMod(t, state(t, a), "scoreboard").Endorsed {
+		t.Error("после отказа мод отмечен одобренным")
+	}
+
+	// Проверка обновлений узнаёт одобрения, сделанные на сайте; чужая игра не в счёт.
+	f.refuse = ""
+	f.endorsed[22] = "Endorsed"
+	rep, err := a.CheckUpdates(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !findMod(t, rep.State, "scoreboard").Endorsed || findMod(t, rep.State, "local").Endorsed {
+		t.Error("проверка обновлений не узнала одобрение с сайта")
+	}
+}
+
+func TestDownloadSpeed(t *testing.T) {
+	a, _ := newApp(t)
+	d := a.startDownload(1, 2)
+	a.progressDownload(d, 1000, 9000)
+	if d.Speed != 0 {
+		t.Errorf("скорость до второго замера: %d", d.Speed)
+	}
+	// Секунду спустя скачано ещё 4000 байт.
+	d.sampleAt = d.sampleAt.Add(-time.Second)
+	a.progressDownload(d, 5000, 9000)
+	if d.Speed < 3900 || d.Speed > 4000 {
+		t.Errorf("скорость = %d байт/с, ждали около 4000", d.Speed)
+	}
+	if got := a.Downloads()[0]; got.Speed != d.Speed || got.Done != 5000 {
+		t.Errorf("в списке загрузок: %+v", got)
+	}
+	a.finishDownload(d, "готово", nil)
+	if d.Speed != 0 {
+		t.Error("у законченной загрузки осталась скорость")
 	}
 }
