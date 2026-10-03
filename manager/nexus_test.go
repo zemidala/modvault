@@ -176,7 +176,7 @@ func (f *fakeNexus) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	switch {
 	case len(parts) == 1:
-		reply(map[string]any{"mod_id": modID, "name": m.name, "version": "0"})
+		reply(map[string]any{"mod_id": modID, "name": m.name, "version": "0", "author": "Автор " + m.name, "uploaded_by": "uploader"})
 	case len(parts) == 2 && parts[1] == "files":
 		updates := []map[string]int{}
 		for _, u := range m.updates {
@@ -411,8 +411,15 @@ func TestUpdates(t *testing.T) {
 	if s := steps[1]; !s.Finished || s.Done != 1 || s.Available != "1.5.0" || s.Missing {
 		t.Errorf("шаг после ответа: %+v", s)
 	}
-	if rep.Mods != 1 || rep.Unknown != 1 || rep.Updates != 1 || rep.Requests != 1 {
+	// Два запроса: файлы мода и, один раз, его страница — ради автора.
+	if rep.Mods != 1 || rep.Unknown != 1 || rep.Updates != 1 || rep.Requests != 2 {
 		t.Errorf("первая проверка: %+v", rep)
+	}
+	if m := findMod(t, rep.State, "score_board"); m.Author != "Автор Scoreboard" {
+		t.Errorf("автор после проверки: %+v", m)
+	}
+	if m := findMod(t, rep.State, "flux"); m.Author != "" {
+		t.Errorf("автор мода с диска: %+v", m)
 	}
 	if !strings.Contains(rep.Message, "Есть обновление: 1") || !strings.Contains(rep.Message, "осталось: 2000") {
 		t.Errorf("сообщение: %q", rep.Message)

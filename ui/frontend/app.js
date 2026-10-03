@@ -416,7 +416,7 @@ function renderMods() {
   body.replaceChildren();
 
   state.mods.forEach((mod, index) => {
-    if (query && !mod.name.toLowerCase().includes(query)) return;
+    if (query && !mod.name.toLowerCase().includes(query) && !(mod.author || "").toLowerCase().includes(query)) return;
 
     const row = el("tr");
     row.tabIndex = 0;
@@ -449,6 +449,8 @@ function renderMods() {
 
     const nameCell = el("td", "name", mod.name);
     nameCell.title = mod.name + ((mod.sets || []).length ? " — в наборах: " + mod.sets.join(", ") : "");
+    const authorCell = el("td", "author", mod.author || "—");
+    authorCell.title = mod.author || (mod.nexusId ? "Автор станет известен после проверки обновлений" : "У мода нет номера на Nexus: автор неизвестен");
     const versionCell = el("td", "version", mod.version);
     versionCell.title = mod.version;
     const updateTd = el("td", "update");
@@ -464,7 +466,7 @@ function renderMods() {
     });
     if (!sets.length) setsCell.append("—");
 
-    row.append(el("td", "num", String(index + 1)), toggleCell, nameCell, versionCell, updateTd, setsCell, stateCell);
+    row.append(el("td", "num", String(index + 1)), toggleCell, nameCell, authorCell, versionCell, updateTd, setsCell, stateCell);
 
     const select = () => {
       selectedId = mod.id === selectedId ? null : mod.id;
@@ -507,6 +509,9 @@ function renderCard() {
 
   $("card-name").textContent = mod.name;
   $("card-source").textContent = mod.source;
+  $("card-author-label").hidden = !mod.author;
+  $("card-author").hidden = !mod.author;
+  $("card-author").textContent = mod.author || "";
   $("card-version").textContent = mod.version;
   $("card-files").textContent = String(mod.files);
   $("card-versions").textContent = String(mod.versions);

@@ -245,6 +245,11 @@ func (a *Manager) installFile(ctx context.Context, c *nexus.Client, domain strin
 		info.Name = fmt.Sprintf("Nexus %d", modID)
 	}
 	info.Name = a.nexusName(info.Name, modID, file, files)
+	// Автор известен из того же ответа Nexus: запоминаем, чтобы не спрашивать снова.
+	if known := a.loadUpdates(); known.Authors[modID] != firstNonEmpty(mod.Author, mod.UploadedBy) || len(known.Authors) == 0 {
+		known.Authors[modID] = firstNonEmpty(mod.Author, mod.UploadedBy)
+		a.saveUpdates(known)
+	}
 
 	synced := a.inSync() // до обновления: потом профиль уже отличается от игры
 	v, prev, err := a.addVersion(archive, info)
@@ -391,6 +396,9 @@ type updates struct {
 	Checked time.Time `json:"checked"`
 	// Mods — последний файл на Nexus для мода хранилища.
 	Mods map[string]update `json:"mods"`
+	// Authors — автор мода по его номеру на Nexus; пустая строка — Nexus
+	// автора не назвал или мода там больше нет.
+	Authors map[int]string `json:"authors"`
 }
 
 func (a *Manager) updatesPath() string {
@@ -405,7 +413,10 @@ func (a *Manager) loadUpdates() updates {
 		json.Unmarshal(data, &u)
 	}
 	if u.Mods == nil {
-		u = updates{Mods: map[string]update{}}
+		u.Mods = map[string]update{}
+	}
+	if u.Authors == nil {
+		u.Authors = map[int]string{}
 	}
 	return u
 }
@@ -534,16 +545,30 @@ func (a *Manager) CheckUpdates(ctx context.Context, progress func(CheckProgress)
 		}
 	}
 
-	ids := make([]int, 0, len(ask))
+	// У кого автор ещё неизвестен: о таких модах спрашиваем страницу мода —
+	// один раз, дальше автор берётся из сохранённого.
+	wantAuthor := map[int]bool{}
+	for _, t := range targets {
+		if _, ok := cache.Authors[t.nexusID]; !ok {
+			wantAuthor[t.nexusID] = true
+		}
+	}
+
+	ids := make([]int, 0, len(ask)+len(wantAuthor))
 	for id := range ask {
 		ids = append(ids, id)
+	}
+	for id := range wantAuthor {
+		if !ask[id] {
+			ids = append(ids, id)
+		}
 	}
 	sort.Ints(ids)
 	// Расклад до первого запроса о моде: кто в очереди, а о ком уже известно,
 	// что с прошлой проверки он не менялся.
 	plan := CheckProgress{Total: len(ids)}
 	for _, t := range targets {
-		if ask[t.nexusID] {
+		if ask[t.nexusID] || wantAuthor[t.nexusID] {
 			plan.Queued = append(plan.Queued, t.modID)
 		} else {
 			plan.Unchanged = append(plan.Unchanged, t.modID)
@@ -563,29 +588,51 @@ func (a *Manager) CheckUpdates(ctx context.Context, progress func(CheckProgress)
 			}
 		}
 		progress(step)
-
-		files, err := c.Files(ctx, domain, id)
-		rep.Requests++
 		step.Done, step.Finished = i+1, true
-		if errors.Is(err, nexus.ErrNotFound) || errors.Is(err, nexus.ErrForbidden) {
-			step.Missing = true // мод убран с Nexus или скрыт автором
-			progress(step)
-			continue
+
+		gone := func(err error) bool {
+			return errors.Is(err, nexus.ErrNotFound) || errors.Is(err, nexus.ErrForbidden)
 		}
-		if err != nil {
-			failure = err
-			break
-		}
-		for _, t := range targets {
-			if t.nexusID != id {
+		if ask[id] {
+			files, err := c.Files(ctx, domain, id)
+			rep.Requests++
+			if gone(err) {
+				step.Missing = true // мод убран с Nexus или скрыт автором
+				cache.Authors[id] = ""
+				progress(step)
 				continue
 			}
-			if latest, ok := files.Latest(t.fileID); ok {
-				found := update{NexusID: id, FileID: latest.ID, Version: firstNonEmpty(latest.Version, latest.ModVersion)}
-				cache.Mods[t.modID] = found
-				if found.newerThan(t.v) {
-					step.Available = found.Version
+			if err != nil {
+				failure = err
+				break
+			}
+			for _, t := range targets {
+				if t.nexusID != id {
+					continue
 				}
+				if latest, ok := files.Latest(t.fileID); ok {
+					cache.Mods[t.modID] = update{NexusID: id, FileID: latest.ID, Version: firstNonEmpty(latest.Version, latest.ModVersion)}
+				}
+			}
+		}
+		if wantAuthor[id] {
+			info, err := c.Mod(ctx, domain, id)
+			rep.Requests++
+			switch {
+			case gone(err):
+				cache.Authors[id] = ""
+			case err != nil:
+				failure = err
+			default:
+				cache.Authors[id] = firstNonEmpty(info.Author, info.UploadedBy)
+			}
+			if failure != nil {
+				break
+			}
+		}
+		for _, t := range targets {
+			if found, ok := cache.Mods[t.modID]; ok && t.nexusID == id && found.newerThan(t.v) {
+				step.Available = found.Version
 			}
 		}
 		progress(step)

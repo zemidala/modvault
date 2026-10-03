@@ -166,6 +166,9 @@ type ModInfo struct {
 	ID      int    `json:"mod_id"`
 	Name    string `json:"name"`
 	Version string `json:"version"`
+	// Author — автор, как он назван на странице; UploadedBy — кто выложил.
+	Author     string `json:"author"`
+	UploadedBy string `json:"uploaded_by"`
 }
 
 // Mod возвращает сведения о моде.

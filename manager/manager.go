@@ -80,6 +80,7 @@ type Mod struct {
 	Version   string `json:"version"`
 	Available string `json:"available"`
 	Source    string `json:"source"`
+	Author    string `json:"author"`  // автор по сведениям Nexus; пусто — неизвестен
 	NexusID   int    `json:"nexusId"` // номер мода на Nexus; 0 — неизвестен
 	Files     int    `json:"files"`
 	Versions  int    `json:"versions"`

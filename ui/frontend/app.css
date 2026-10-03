@@ -236,11 +236,17 @@ main section { display: flex; flex-direction: column; gap: 8px; }
 .col-num { width: 52px; }
 .col-toggle { width: 68px; }
 /* Название мода получает всё, что осталось от узких столбцов. */
+.col-num { width: 44px; }
+.col-toggle { width: 60px; }
+.col-author { width: 110px; }
 .col-version { width: 100px; }
-.col-update { width: 130px; }
-.col-sets { width: 150px; }
-.col-state { width: 170px; }
+.col-update { width: 120px; }
+.col-sets { width: 110px; }
+.col-state { width: 165px; }
 @media (min-width: 1500px) {
+  .col-num { width: 52px; }
+  .col-toggle { width: 68px; }
+  .col-author { width: 180px; }
   .col-version { width: 130px; }
   .col-update { width: 160px; }
   .col-sets { width: 240px; }
@@ -254,6 +260,7 @@ main section { display: flex; flex-direction: column; gap: 8px; }
 .version { font-variant-numeric: tabular-nums; }
 .update { font-variant-numeric: tabular-nums; color: var(--muted); }
 .sets { font-size: 13px; color: var(--muted); }
+.author { font-size: 13px; color: var(--muted); }
 .sets .set-current { color: var(--parchment); }
 .update[data-level="ok"] { color: var(--ok); }
 .update[data-level="warn"], .update[data-level="busy"] { color: var(--orange-text); }
@@ -374,6 +381,7 @@ tr[data-enabled="false"] .name, tr[data-enabled="false"] .version { color: var(-
   .col-update { width: 120px; }
   /* В узком окне наборы мода видны в подсказке к его названию. */
   .col-sets, .mods td.sets { display: none; }
+  .col-author, .mods td.author { display: none; }
 }
 
 .status-command {

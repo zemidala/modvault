@@ -52,8 +52,8 @@
       <div class="heading"><h1>Порядок загрузки</h1><span class="rule"></span><span class="diamond"></span></div>
       <div class="pinned">
       <div class="toolbar">
-        <label class="field">Поиск по названию
-          <input type="search" id="search" placeholder="Название мода" autocomplete="off">
+        <label class="field">Поиск по названию или автору
+          <input type="search" id="search" placeholder="Название мода или автор" autocomplete="off">
         </label>
         <button class="ghost" id="check-updates">Проверить обновления</button>
         <button class="ghost" id="sort">Отсортировать по правилам</button>
@@ -78,7 +78,7 @@
       <div class="frame">
         <table class="mods">
           <thead>
-            <tr><th class="col-num">№</th><th class="col-toggle">Вкл.</th><th>Мод</th><th class="col-version">Версия</th><th class="col-update">Обновление</th><th class="col-sets">Наборы</th><th class="col-state">Состояние</th></tr>
+            <tr><th class="col-num">№</th><th class="col-toggle">Вкл.</th><th>Мод</th><th class="col-author">Автор</th><th class="col-version">Версия</th><th class="col-update">Обновление</th><th class="col-sets">Наборы</th><th class="col-state">Состояние</th></tr>
           </thead>
           <tbody id="mods"></tbody>
         </table>
@@ -99,6 +99,7 @@
     </div>
     <div class="rule"></div>
     <dl class="facts">
+      <dt id="card-author-label">Автор</dt><dd id="card-author"></dd>
       <dt>Установлена</dt><dd id="card-version"></dd>
       <dt id="card-available-label">Доступна</dt><dd id="card-available" class="warn"></dd>
       <dt>Файлов</dt><dd id="card-files"></dd>
