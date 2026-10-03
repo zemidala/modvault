@@ -111,7 +111,7 @@ func (d *Darktide) Generate(ctx game.Context) ([]game.Generated, []game.Notice, 
 	if err != nil {
 		return nil, notices, err
 	}
-	out = append(out, game.Generated{Path: loadOrderPath, Src: src})
+	out = append(out, game.Generated{Path: loadOrderPath, Src: src, Title: i18n.T("Порядок загрузки модов")})
 
 	patched, notice, err := d.bundle(ctx)
 	if err != nil {
@@ -121,7 +121,7 @@ func (d *Darktide) Generate(ctx game.Context) ([]game.Generated, []game.Notice, 
 		notices = append(notices, *notice)
 	}
 	if patched != "" {
-		out = append(out, game.Generated{Path: bundleDBPath, Src: patched})
+		out = append(out, game.Generated{Path: bundleDBPath, Src: patched, Title: i18n.T("База бандлов игры с патчем для модов")})
 	}
 	return out, notices, nil
 }

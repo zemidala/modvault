@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/zemidala/modvault/core/deploy"
 	"github.com/zemidala/modvault/game/darktide"
 )
 
@@ -270,5 +271,46 @@ func TestMissingGameDir(t *testing.T) {
 	s := state(t, NewAt(home))
 	if !strings.Contains(issueTitles(s), "Развёртывание недоступно") || s.Status[0].Level != LevelError {
 		t.Errorf("пропавшая папка игры: %s, %+v", issueTitles(s), s.Status[0])
+	}
+}
+
+// Служебный файл в плане назван по сути, а не как мод, и план говорит, что
+// на его месте сейчас файл Vortex.
+func TestServicePlanLine(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, "mods"), 0o755)
+	os.WriteFile(filepath.Join(dir, "mods", "mod_load_order.txt"), []byte("-- File managed by Vortex mod manager\r\nFlux\r\n"), 0o644)
+	a := &Manager{service: map[string]string{"mods/mod_load_order.txt": "Порядок загрузки модов"}}
+	a.settings.GameDir = dir
+	got := []string{
+		a.serviceLine(deploy.Change{Kind: deploy.Replace, Path: "mods/mod_load_order.txt", ModID: generatedMod}),
+		a.serviceLine(deploy.Change{Kind: deploy.Add, Path: "bundle_database.data", ModID: generatedMod}),
+	}
+	want := []string{
+		"Порядок загрузки модов (mods/mod_load_order.txt) — заменить: сейчас в игре файл от Vortex",
+		"Служебный файл Modvault (bundle_database.data) — положить",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("строки плана: %q", got)
+	}
+}
+
+// Файл, который перезаписал Vortex, назван так, а не «изменён вне программы».
+func TestVortexDrift(t *testing.T) {
+	a, _, g := newGame(t)
+	a.addArchive(writeZip(t, "dml.zip", dmlArchive))
+	a.setGame(g)
+	if _, err := a.Deploy(); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(g, "mods", "mod_load_order.txt")
+	os.Remove(target)
+	os.WriteFile(target, []byte("-- File managed by Vortex mod manager\r\nFlux\r\n"), 0o644)
+	s := state(t, a)
+	if titles := issueTitles(s); !strings.Contains(titles, "1 файл перезаписал Vortex") || strings.Contains(titles, "вне программы") {
+		t.Errorf("замечания: %s", titles)
+	}
+	if !strings.Contains(strings.Join(s.Plan, " | "), "сейчас в игре файл от Vortex") {
+		t.Errorf("план: %v", s.Plan)
 	}
 }

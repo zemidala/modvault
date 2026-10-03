@@ -377,12 +377,15 @@ func (a *Manager) FilesReport() (FilesReport, error) {
 		return rep, err
 	}
 	names := a.modNames()
-	var changed, updated, missing int
+	var changed, updated, missing, vortex int
 	for _, d := range plan.Drift {
 		switch {
 		case d.Missing:
 			missing++
 			rep.Lines = append(rep.Lines, i18n.Sprintf("пропал: %s — %s", d.Path, names(d.ModID)))
+		case a.byVortex(d.Path):
+			vortex++
+			rep.Lines = append(rep.Lines, i18n.Sprintf("перезаписан Vortex: %s — %s", d.Path, names(d.ModID)))
 		case d.Updated:
 			updated++
 			rep.Lines = append(rep.Lines, i18n.Sprintf("обновлён игрой: %s — %s", d.Path, names(d.ModID)))
@@ -394,6 +397,10 @@ func (a *Manager) FilesReport() (FilesReport, error) {
 	sort.Strings(rep.Lines)
 
 	var notes []string
+	if vortex > 0 {
+		notes = append(notes, i18n.Sprintf("%d %s Vortex: похоже, он снова развернул моды и всё ещё считает игру своей. Развёртывание вернёт файлы Modvault, а файлы Vortex сохранит. Чтобы это не повторялось, не развёртывайте моды в Vortex — или верните игру ему кнопкой «Вернуть Vortex».",
+			vortex, plural(vortex, "файл перезаписал", "файла перезаписал", "файлов перезаписал")))
+	}
 	if changed > 0 {
 		notes = append(notes, i18n.Sprintf("%d %s в папке игры не такие, какими их положила программа: их изменили или заменили вне Modvault — другой менеджер модов, ручная правка или сам мод. Ничего не потеряется: при развёртывании изменённые файлы будут сохранены в папке %s, а на их место лягут файлы из хранилища. Если правки нужны — сначала скопируйте эти файлы.",
 			changed, plural(changed, "файл мода", "файла модов", "файлов модов"), a.deployer.DisplacedDir()))

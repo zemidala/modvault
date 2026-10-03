@@ -145,8 +145,9 @@ type Manager struct {
 	game      game.Game
 	settings  settings
 	deployer  *deploy.Deployer
-	deployErr error           // почему нельзя развёртывать в выбранную папку
-	recovery  deploy.Recovery // что сделано с прерванным развёртыванием при запуске
+	deployErr error             // почему нельзя развёртывать в выбранную папку
+	recovery  deploy.Recovery   // что сделано с прерванным развёртыванием при запуске
+	service   map[string]string // служебный файл в игре → что это за файл
 
 	keys      nexus.Keys     // где лежит ключ Nexus
 	protocol  nexus.Protocol // кто открывает ссылки nxm://; nil — этим не управляем

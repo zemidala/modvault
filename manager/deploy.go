@@ -315,7 +315,9 @@ func (a *Manager) sources(p profile.Profile) ([]deploy.Source, []game.Notice, er
 	}
 	if len(generated) > 0 {
 		s := deploy.Source{ModID: generatedMod, VersionID: "1"}
+		a.service = map[string]string{}
 		for _, g := range generated {
+			a.service[g.Path] = g.Title
 			hash, size, err := fsx.HashFile(g.Src)
 			if err != nil {
 				return nil, notices, err
@@ -335,7 +337,7 @@ func (a *Manager) modNames() func(string) string {
 			names[m.ID] = m.Latest().Name
 		}
 	}
-	names[generatedMod] = i18n.T("Modvault (служебные файлы)")
+	names[generatedMod] = i18n.T("служебный файл Modvault")
 	return func(id string) string {
 		if name, ok := names[id]; ok {
 			return name
@@ -510,8 +512,8 @@ func (a *Manager) realState() (State, error) {
 	s.Issues = append(s.Issues, orderIssues...)
 	s.OrderNote = note
 	if plan != nil {
-		s.Issues = append(s.Issues, driftIssues(plan, names, a.deployer.DisplacedDir())...)
-		s.Plan, s.PlanTitle = planLines(plan, names)
+		s.Issues = append(s.Issues, a.driftIssues(plan, names)...)
+		s.Plan, s.PlanTitle = planLines(plan, names, a.serviceLine)
 	}
 	var conflictList []ConflictInfo
 	if plan != nil {
@@ -540,12 +542,15 @@ const driftFiles = 2
 
 // driftIssues сообщает о файлах модов, которые тронули вне программы: какие
 // это файлы, чьи и что с ними сделает развёртывание.
-func driftIssues(plan *deploy.Plan, names func(string) string, displaced string) []Issue {
-	var changed, updated, missing []deploy.Drift
+func (a *Manager) driftIssues(plan *deploy.Plan, names func(string) string) []Issue {
+	displaced := a.deployer.DisplacedDir()
+	var changed, updated, missing, vortex []deploy.Drift
 	for _, d := range plan.Drift {
 		switch {
 		case d.Missing:
 			missing = append(missing, d)
+		case a.byVortex(d.Path):
+			vortex = append(vortex, d)
 		case d.Updated:
 			updated = append(updated, d)
 		default:
@@ -559,11 +564,25 @@ func driftIssues(plan *deploy.Plan, names func(string) string, displaced string)
 				parts = append(parts, i18n.Sprintf("и ещё %d", len(list)-driftFiles))
 				break
 			}
+			if title := a.service[d.Path]; d.ModID == generatedMod && title != "" {
+				parts = append(parts, i18n.Sprintf("%s (%s)", d.Path, title))
+				continue
+			}
 			parts = append(parts, i18n.Sprintf("%s (мод «%s»)", d.Path, names(d.ModID)))
 		}
 		return strings.Join(parts, ", ")
 	}
 	var out []Issue
+	if len(vortex) > 0 {
+		n := len(vortex)
+		out = append(out, Issue{
+			Title:   i18n.Sprintf("%d %s Vortex", n, plural(n, "файл перезаписал", "файла перезаписал", "файлов перезаписал")),
+			Detail:  i18n.Sprintf("%s. Похоже, Vortex снова развернул моды: он всё ещё считает игру своей. Развёртывание вернёт файлы Modvault, а файлы Vortex сохранит. Чтобы это не повторялось, не развёртывайте моды в Vortex — или верните игру ему кнопкой «Вернуть Vortex»", files(vortex)),
+			Level:   LevelWarn,
+			Action:  i18n.T("Показать файлы"),
+			Command: "ShowFiles",
+		})
+	}
 	if len(changed) > 0 {
 		n := len(changed)
 		out = append(out, Issue{
@@ -598,7 +617,47 @@ func driftIssues(plan *deploy.Plan, names func(string) string, displaced string)
 }
 
 // planLines описывает план по модам: «Scoreboard — положить 3 файла».
-func planLines(plan *deploy.Plan, names func(string) string) ([]string, string) {
+// vortexMark — первая строка файлов, которые пишет Vortex.
+const vortexMark = "managed by Vortex"
+
+// byVortex сообщает, что файл в игре записал Vortex: у его служебных файлов
+// первая строка с отметкой.
+func (a *Manager) byVortex(rel string) bool {
+	f, err := os.Open(filepath.Join(a.settings.GameDir, filepath.FromSlash(rel)))
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+	head := make([]byte, 256)
+	n, _ := f.Read(head)
+	return strings.Contains(string(head[:n]), vortexMark)
+}
+
+// serviceLine описывает изменение служебного файла: «Порядок загрузки модов
+// (mods/mod_load_order.txt) — заменить: сейчас в игре файл от Vortex».
+func (a *Manager) serviceLine(c deploy.Change) string {
+	title := a.service[c.Path]
+	if title == "" {
+		title = i18n.T("Служебный файл Modvault")
+	}
+	var action string
+	switch c.Kind {
+	case deploy.Add:
+		action = i18n.T("положить")
+	case deploy.Replace:
+		action = i18n.T("заменить")
+		if a.byVortex(c.Path) {
+			action = i18n.T("заменить: сейчас в игре файл от Vortex")
+		}
+	default:
+		action = i18n.T("убрать")
+	}
+	return i18n.Sprintf("%s (%s) — %s", title, c.Path, action)
+}
+
+// Служебные файлы в плане идут каждый своей строкой: это не мод, и
+// пользователю важно, что именно меняется.
+func planLines(plan *deploy.Plan, names func(string) string, service func(deploy.Change) string) ([]string, string) {
 	if plan.Empty() {
 		return []string{}, ""
 	}
@@ -614,7 +673,12 @@ func planLines(plan *deploy.Plan, names func(string) string) ([]string, string) 
 		}
 		return c
 	}
+	var serviceLines []string
 	for _, c := range plan.Changes {
+		if c.ModID == generatedMod {
+			serviceLines = append(serviceLines, service(c))
+			continue
+		}
 		switch c.Kind {
 		case deploy.Add:
 			get(c.ModID).add++
@@ -642,6 +706,7 @@ func planLines(plan *deploy.Plan, names func(string) string) ([]string, string) 
 		}
 		lines = append(lines, names(id)+" — "+strings.Join(parts, ", "))
 	}
+	lines = append(lines, serviceLines...)
 	n := len(plan.Changes)
 	return lines, i18n.Sprintf("План развёртывания: %d %s", n, plural(n, "изменение", "изменения", "изменений"))
 }

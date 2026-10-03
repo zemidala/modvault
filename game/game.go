@@ -47,8 +47,9 @@ type ModInfo struct {
 
 // Generated — служебный файл, который ложится в игру вместе с модами.
 type Generated struct {
-	Path string // в игре
-	Src  string // готовый файл на диске
+	Path  string // в игре
+	Src   string // готовый файл на диске
+	Title string // что это за файл — для плана развёртывания
 }
 
 // Level — важность замечания.
