@@ -4,6 +4,8 @@
 package main
 
 import (
+	"os"
+
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
@@ -14,8 +16,16 @@ import (
 
 func main() {
 	app := ui.NewApp(manager.New())
+	// Windows запускает программу со ссылкой nxm:// в аргументах, когда на
+	// сайте Nexus нажата кнопка загрузки.
+	app.Queue(os.Args[1:])
 
 	err := wails.Run(&options.App{
+		// Окно одно: вторая копия отдаёт свои аргументы первой и закрывается.
+		SingleInstanceLock: &options.SingleInstanceLock{
+			UniqueId:               "modvault-7c1f4a52-9d0e-4b7b-a6c3-2f5e8d1b0a94",
+			OnSecondInstanceLaunch: func(data options.SecondInstanceData) { app.Open(data.Args) },
+		},
 		Title:     "Modvault",
 		Width:     1280,
 		Height:    900,

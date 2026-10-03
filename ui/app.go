@@ -8,12 +8,16 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"os"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
 	"github.com/zemidala/modvault/core/fsx"
 	"github.com/zemidala/modvault/manager"
+	"github.com/zemidala/modvault/nexus"
 )
 
 //go:embed all:frontend
@@ -32,6 +36,10 @@ func Assets() fs.FS {
 type App struct {
 	ctx context.Context
 	m   *manager.Manager
+
+	mu      sync.Mutex
+	ready   bool     // страница готова принимать события
+	pending []string // аргументы запуска, которые ждут готовности страницы
 }
 
 func NewApp(m *manager.Manager) *App {
@@ -92,6 +100,10 @@ type Ask struct {
 	Message string `json:"message"`
 	OK      string `json:"ok"`     // подпись кнопки действия
 	Danger  bool   `json:"danger"` // действие необратимо
+	// Input — у вопроса есть поле ввода; Placeholder — подсказка в нём.
+	// Введённое на экране не показывается: это поле для ключей.
+	Input       bool   `json:"input"`
+	Placeholder string `json:"placeholder"`
 }
 
 // RemoveAsk — вопрос перед удалением мода.
@@ -234,3 +246,144 @@ func (a *App) SortAsk() (Ask, error) {
 
 // Sort расставляет моды по правилам.
 func (a *App) Sort() (manager.State, error) { return a.m.Sort() }
+
+// NexusKeyAsk — вопрос с полем для ключа Nexus.
+func (a *App) NexusKeyAsk() Ask {
+	ask := Ask{Title: "Ключ Nexus Mods", OK: "Сохранить", Input: true, Placeholder: "Personal API Key"}
+	ask.Message = "Ключ нужен, чтобы ставить моды кнопкой «Mod Manager Download» на сайте и проверять обновления.\n\n" +
+		"Где взять: nexusmods.com → настройки учётной записи → API Keys → Personal API Key.\n\n" +
+		"Ключ хранится в учётных данных Windows; в файлы программы он не попадает."
+	if user := a.m.NexusUser(); user != "" {
+		ask.Message = fmt.Sprintf("Сейчас сохранён ключ пользователя %s.\n\nВведите другой ключ, чтобы заменить его, или оставьте поле пустым, чтобы программа забыла ключ.", user)
+	}
+	return ask
+}
+
+// NexusLogin проверяет и запоминает ключ; пустой ключ — забыть сохранённый.
+func (a *App) NexusLogin(key string) (manager.State, error) {
+	if strings.TrimSpace(key) == "" {
+		if a.m.NexusUser() == "" {
+			return a.m.State()
+		}
+		return a.m.NexusLogout()
+	}
+	return a.m.NexusLogin(a.ctx, key)
+}
+
+// CheckUpdates проверяет на Nexus, вышли ли новые версии модов.
+func (a *App) CheckUpdates() (manager.UpdateReport, error) { return a.m.CheckUpdates(a.ctx) }
+
+// UpdateMod обновляет мод; без Premium открывает страницу файлов мода в браузере.
+func (a *App) UpdateMod(id string) (manager.UpdateResult, error) {
+	res, err := a.m.UpdateMod(a.ctx, id, a.progress())
+	if err == nil && res.URL != "" {
+		runtime.BrowserOpenURL(a.ctx, res.URL)
+	}
+	return res, err
+}
+
+// OpenNexus открывает страницу мода в браузере.
+func (a *App) OpenNexus(id string) error {
+	page, err := a.m.ModPage(id)
+	if err != nil {
+		return err
+	}
+	runtime.BrowserOpenURL(a.ctx, page)
+	return nil
+}
+
+// NxmAsk — вопрос перед тем, как сменить программу, открывающую ссылки nxm://.
+func (a *App) NxmAsk() Ask {
+	owner, ours := a.m.NxmOwner()
+	if ours {
+		return Ask{
+			Title:   "Ссылки с сайта Nexus",
+			Message: "Сейчас кнопку «Mod Manager Download» на сайте обслуживает Modvault.\n\nВернуть её программе, которая обслуживала раньше? Если такой не было, кнопка перестанет работать.",
+			OK:      "Вернуть",
+		}
+	}
+	who := "Сейчас её обслуживает другая программа; вернуть ей кнопку можно тем же щелчком."
+	switch owner {
+	case "никто":
+		who = "Сейчас её никто не обслуживает."
+	case "Vortex":
+		who = "Сейчас её обслуживает Vortex; вернуть ему кнопку можно тем же щелчком."
+	}
+	return Ask{
+		Title:   "Ссылки с сайта Nexus",
+		Message: "Modvault будет скачивать и ставить моды по кнопке «Mod Manager Download» на сайте Nexus.\n\n" + who + "\n\n«Вернуть Vortex» возвращает и кнопку.",
+		OK:      "Открывать в Modvault",
+	}
+}
+
+// ToggleNxm переключает, кто открывает ссылки nxm://: это окно или прежняя программа.
+func (a *App) ToggleNxm() (manager.State, error) {
+	exe, err := os.Executable()
+	if err != nil {
+		return manager.State{}, err
+	}
+	return a.m.ToggleNxm(exe)
+}
+
+// Queue запоминает аргументы запуска: ссылку с сайта окно обработает, когда
+// страница будет готова показать ход загрузки.
+func (a *App) Queue(args []string) {
+	a.mu.Lock()
+	a.pending = append(a.pending, args...)
+	a.mu.Unlock()
+}
+
+// Ready вызывает страница, когда готова принимать события.
+func (a *App) Ready() {
+	a.mu.Lock()
+	args := a.pending
+	a.pending, a.ready = nil, true
+	a.mu.Unlock()
+	a.open(args)
+}
+
+// Open принимает аргументы второй копии программы: Windows запускает её,
+// когда на сайте нажата кнопка загрузки, а работать должна уже открытая.
+func (a *App) Open(args []string) {
+	a.mu.Lock()
+	ready := a.ready
+	if !ready {
+		a.pending = append(a.pending, args...)
+	}
+	a.mu.Unlock()
+	if ready {
+		runtime.WindowUnminimise(a.ctx)
+		runtime.WindowShow(a.ctx)
+		a.open(args)
+	}
+}
+
+func (a *App) open(args []string) {
+	for _, arg := range args {
+		if nexus.IsLink(arg) {
+			go a.install(arg)
+		}
+	}
+}
+
+// install ставит мод по ссылке и сообщает странице, чем кончилось.
+func (a *App) install(link string) {
+	res, err := a.m.InstallLink(a.ctx, link, a.progress())
+	if err != nil {
+		runtime.EventsEmit(a.ctx, "install-failed", err.Error())
+		return
+	}
+	runtime.EventsEmit(a.ctx, "installed", res)
+}
+
+// progress возвращает приёмник хода загрузки, который сообщает о нём
+// странице не чаще нескольких раз в секунду.
+func (a *App) progress() func(manager.Progress) {
+	var last time.Time
+	return func(p manager.Progress) {
+		if now := time.Now(); p.Done == p.Total || now.Sub(last) > 150*time.Millisecond {
+			last = now
+			runtime.EventsEmit(a.ctx, "download", p)
+		}
+	}
+}

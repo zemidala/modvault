@@ -376,6 +376,7 @@ tr[data-enabled="false"] .name, tr[data-enabled="false"] .version { color: var(-
 
 .ask { width: min(620px, 100%); }
 .ask-message { white-space: pre-line; line-height: 1.45; }
+.ask .field { flex: 0 0 auto; }
 .sheet-actions { gap: 8px; }
 .plate.danger { background: var(--error-line); color: var(--parchment); }
 

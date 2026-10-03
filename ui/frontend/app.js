@@ -27,7 +27,8 @@ function toast(text, level, sticky) {
   node.hidden = false;
   clearTimeout(toastTimer);
   // Ошибку читают дольше; сообщение о сбое запуска не гаснет вовсе.
-  if (!sticky) toastTimer = setTimeout(() => { node.hidden = true; }, level === "error" ? 8000 : 3500);
+  // Длинное сообщение тоже читают дольше.
+  if (!sticky) toastTimer = setTimeout(() => { node.hidden = true; }, level === "error" ? 8000 : Math.max(3500, text.length * 60));
 }
 
 // call выполняет запрос к программе, который возвращает новое состояние окна.
@@ -155,6 +156,7 @@ function renderCard() {
   $("card-available").textContent = mod.available;
   $("card-update").hidden = !hasUpdate;
   $("card-update").textContent = "Обновить до " + mod.available;
+  $("card-nexus").hidden = !mod.nexusId;
 
   const hasDeps = mod.dependsOn !== "";
   $("card-depends-label").hidden = !hasDeps;
@@ -209,12 +211,18 @@ function render() {
 }
 
 // ask показывает вопрос в окне программы и ждёт ответа: true — действие
-// подтверждено. Esc и «Отмена» — отказ.
+// подтверждено. Esc и «Отмена» — отказ. У вопроса с полем ввода ответ —
+// введённая строка, а отказ — null.
 function ask(question) {
   return new Promise((resolve) => {
     const box = $("ask");
     $("ask-title").textContent = question.title;
     $("ask-message").textContent = question.message;
+    const input = $("ask-input");
+    const refuse = question.input ? null : false;
+    $("ask-field").hidden = !question.input;
+    $("ask-input-label").textContent = question.placeholder || "";
+    input.value = "";
     const ok = $("ask-ok");
     // Без подписи действия вопрос только сообщает: остаётся одна кнопка.
     ok.hidden = !question.ok;
@@ -226,17 +234,20 @@ function ask(question) {
       box.removeEventListener("keydown", onKey);
       ok.onclick = null;
       $("ask-cancel").onclick = null;
+      input.value = ""; // введённый ключ на странице не остаётся
       resolve(answer);
     };
     const onKey = (event) => {
-      if (event.key === "Escape") done(false);
+      if (event.key === "Escape") done(refuse);
+      else if (event.key === "Enter" && event.target === input) done(input.value);
     };
-    ok.onclick = () => done(true);
-    $("ask-cancel").onclick = () => done(false);
+    ok.onclick = () => done(question.input ? input.value : true);
+    $("ask-cancel").onclick = () => done(refuse);
     box.addEventListener("keydown", onKey);
     box.hidden = false;
     // Необратимое по умолчанию не выбрано: Enter без раздумий его не запустит.
-    (question.danger || !question.ok ? $("ask-cancel") : ok).focus();
+    if (question.input) input.focus();
+    else (question.danger || !question.ok ? $("ask-cancel") : ok).focus();
   });
 }
 
@@ -255,10 +266,48 @@ const commands = {
   IgnoreManagers: () => confirmThen(() => backend().IgnoreManagersAsk(), () => backend().IgnoreManagers()),
   Sort: () => confirmThen(() => backend().SortAsk(), () => backend().Sort()),
   EnableMod: (id) => backend().SetEnabled(id, true),
+  NexusKey: async () => {
+    const key = await ask(await backend().NexusKeyAsk());
+    return key === null ? state : backend().NexusLogin(key);
+  },
+  ToggleNxm: () => confirmThen(() => backend().NxmAsk(), () => backend().ToggleNxm()),
 };
 
 function run(command, arg) {
   if (commands[command]) call(() => commands[command](arg));
+}
+
+// act выполняет запрос, который возвращает новое состояние и сообщение;
+// кнопка на время запроса не нажимается.
+async function act(request, button) {
+  button.disabled = true;
+  try {
+    const res = await request();
+    state = res.state;
+    render();
+    if (res.message) toast(res.message);
+  } catch (err) {
+    toast(String(err), "error");
+  } finally {
+    button.disabled = false;
+  }
+}
+
+// listen подписывает страницу на то, что программа делает сама: загрузки
+// по ссылкам с сайта Nexus.
+function listen() {
+  const events = window.runtime;
+  if (!events) return;
+  events.EventsOn("download", (p) => {
+    const share = p.total > 0 ? ` — ${Math.floor((p.done * 100) / p.total)}%` : "";
+    toast(`Загрузка: ${p.name}${share}`, "info", true);
+  });
+  events.EventsOn("installed", (res) => {
+    state = res.state;
+    render();
+    toast(res.message);
+  });
+  events.EventsOn("install-failed", (message) => toast(message, "error"));
 }
 
 async function deploy() {
@@ -333,6 +382,15 @@ function wire() {
     return res.state;
   }));
   $("card-show-files").addEventListener("click", toggleFiles);
+  $("check-updates").addEventListener("click", () => act(() => backend().CheckUpdates(), $("check-updates")));
+  $("card-update").addEventListener("click", () => act(() => backend().UpdateMod(selectedId), $("card-update")));
+  $("card-nexus").addEventListener("click", async () => {
+    try {
+      await backend().OpenNexus(selectedId);
+    } catch (err) {
+      toast(String(err), "error");
+    }
+  });
   $("deploy").addEventListener("click", deploy);
   $("sort").addEventListener("click", () => run("Sort"));
   $("play").addEventListener("click", async () => {
@@ -362,6 +420,8 @@ async function start() {
   try {
     state = await backend().State();
     render();
+    listen();
+    backend().Ready();
   } catch (err) {
     toast("Программа не может работать с хранилищем: " + err, "error", true);
   }

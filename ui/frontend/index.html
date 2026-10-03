@@ -28,7 +28,7 @@
 
   <nav class="tabs" aria-label="Разделы">
     <button class="tab" data-tab="mods" aria-current="page">Моды</button>
-    <button class="tab" data-tab="downloads" data-stage="7">Загрузки</button>
+    <button class="tab" data-tab="downloads" data-stage="8">Загрузки</button>
     <button class="tab" data-tab="journal" data-stage="3">Журнал</button>
     <button class="tab" data-tab="settings" data-stage="8">Настройки</button>
   </nav>
@@ -54,6 +54,7 @@
         <label class="field">Поиск по названию
           <input type="search" id="search" placeholder="Название мода" autocomplete="off">
         </label>
+        <button class="ghost" id="check-updates">Проверить обновления</button>
         <button class="ghost" id="sort">Отсортировать по правилам</button>
         <button class="ghost" id="add-mod">Добавить мод</button>
       </div>
@@ -90,13 +91,13 @@
       <dt>Состояние</dt><dd id="card-state"></dd>
     </dl>
     <div class="card-actions">
-      <button class="plate" id="card-update" data-stage="7"></button>
+      <button class="plate" id="card-update"></button>
       <button class="ghost" id="card-show-files">Показать файлы</button>
-      <button class="ghost" data-stage="7">Открыть на Nexus</button>
+      <button class="ghost" id="card-nexus">Открыть на Nexus</button>
       <button class="ghost danger" id="card-remove">Удалить мод</button>
     </div>
     <ul class="file-list" id="card-file-list" hidden></ul>
-    <p class="muted small">Прежняя версия остаётся в хранилище, пока новая не развёрнута без ошибок.</p>
+    <p class="muted small">После обновления в хранилище остаётся одна прежняя версия: к ней можно вернуться.</p>
   </aside>
 
 </div>
@@ -123,6 +124,9 @@
   <section class="sheet ask frame" role="alertdialog" aria-modal="true" aria-labelledby="ask-title" aria-describedby="ask-message">
     <div class="heading"><h2 id="ask-title"></h2><span class="rule"></span><span class="diamond"></span></div>
     <p class="ask-message" id="ask-message"></p>
+    <label class="field" id="ask-field" hidden><span id="ask-input-label"></span>
+      <input type="password" id="ask-input" autocomplete="off" spellcheck="false">
+    </label>
     <div class="sheet-actions">
       <button class="ghost" id="ask-cancel">Отмена</button>
       <button class="plate" id="ask-ok"></button>
