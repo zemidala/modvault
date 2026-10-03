@@ -510,7 +510,7 @@ func (a *Manager) realState() (State, error) {
 	s.Issues = append(s.Issues, orderIssues...)
 	s.OrderNote = note
 	if plan != nil {
-		s.Issues = append(s.Issues, driftIssues(plan)...)
+		s.Issues = append(s.Issues, driftIssues(plan, names, a.deployer.DisplacedDir())...)
 		s.Plan, s.PlanTitle = planLines(plan, names)
 	}
 	var conflictList []ConflictInfo
@@ -535,28 +535,63 @@ func (a *Manager) realState() (State, error) {
 	return s, nil
 }
 
-func driftIssues(plan *deploy.Plan) []Issue {
-	changed, missing := 0, 0
+// driftFiles — сколько файлов назвать в замечании поимённо.
+const driftFiles = 2
+
+// driftIssues сообщает о файлах модов, которые тронули вне программы: какие
+// это файлы, чьи и что с ними сделает развёртывание.
+func driftIssues(plan *deploy.Plan, names func(string) string, displaced string) []Issue {
+	var changed, updated, missing []deploy.Drift
 	for _, d := range plan.Drift {
-		if d.Missing {
-			missing++
-		} else {
-			changed++
+		switch {
+		case d.Missing:
+			missing = append(missing, d)
+		case d.Updated:
+			updated = append(updated, d)
+		default:
+			changed = append(changed, d)
 		}
 	}
+	files := func(list []deploy.Drift) string {
+		var parts []string
+		for i, d := range list {
+			if i == driftFiles {
+				parts = append(parts, i18n.Sprintf("и ещё %d", len(list)-driftFiles))
+				break
+			}
+			parts = append(parts, i18n.Sprintf("%s (мод «%s»)", d.Path, names(d.ModID)))
+		}
+		return strings.Join(parts, ", ")
+	}
 	var out []Issue
-	if changed > 0 {
+	if len(changed) > 0 {
+		n := len(changed)
 		out = append(out, Issue{
-			Title:  i18n.Sprintf("%d %s вне программы", changed, plural(changed, "файл мода изменён", "файла модов изменены", "файлов модов изменены")),
-			Detail: i18n.T("При развёртывании они будут сохранены в отдельную папку, а на их место лягут файлы модов"),
-			Level:  LevelError,
+			Title:   i18n.Sprintf("%d %s вне программы", n, plural(n, "файл мода изменён", "файла модов изменены", "файлов модов изменены")),
+			Detail:  i18n.Sprintf("%s. Правки сделал не Modvault: другой менеджер модов, вы сами или сам мод. Развёртывание сохранит копию в папке %s и положит на место файл из хранилища", files(changed), displaced),
+			Level:   LevelError,
+			Action:  i18n.T("Показать файлы"),
+			Command: "ShowFiles",
 		})
 	}
-	if missing > 0 {
+	if len(updated) > 0 {
+		n := len(updated)
 		out = append(out, Issue{
-			Title:  i18n.Sprintf("%d %s из игры", missing, plural(missing, "файл мода пропал", "файла модов пропали", "файлов модов пропали")),
-			Detail: i18n.T("Например, после проверки файлов в Steam. При развёртывании они лягут заново"),
-			Level:  LevelWarn,
+			Title:   i18n.Sprintf("%d %s игра", n, plural(n, "файл мода заменила", "файла модов заменила", "файлов модов заменила")),
+			Detail:  i18n.Sprintf("%s. Игру обновили или проверили её файлы в Steam: новый файл игры станет оригиналом, а развёртывание снова положит поверх него файл мода", files(updated)),
+			Level:   LevelWarn,
+			Action:  i18n.T("Показать файлы"),
+			Command: "ShowFiles",
+		})
+	}
+	if len(missing) > 0 {
+		n := len(missing)
+		out = append(out, Issue{
+			Title:   i18n.Sprintf("%d %s из игры", n, plural(n, "файл мода пропал", "файла модов пропали", "файлов модов пропали")),
+			Detail:  i18n.Sprintf("%s. Например, после проверки файлов в Steam. Развёртывание положит их заново", files(missing)),
+			Level:   LevelWarn,
+			Action:  i18n.T("Показать файлы"),
+			Command: "ShowFiles",
 		})
 	}
 	return out

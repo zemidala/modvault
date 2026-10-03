@@ -8,6 +8,9 @@ var Version = "0.0.0-dev"
 // Name — имя программы для вывода и заголовков запросов.
 const Name = "modvault"
 
+// Project — страница программы на GitHub: загрузки, ошибки, обсуждения.
+const Project = "https://github.com/zemidala/modvault-releases"
+
 // String возвращает строку вида "modvault 0.0.0-dev".
 func String() string {
 	return Name + " " + Version

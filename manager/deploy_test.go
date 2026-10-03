@@ -242,6 +242,14 @@ func TestConflictAndDriftIssues(t *testing.T) {
 	if !strings.Contains(issueTitles(s), "1 файл мода изменён вне программы") || s.Status[2].Level != LevelError {
 		t.Errorf("расхождение: %s, %+v", issueTitles(s), s.Status[2])
 	}
+	// Замечание само объясняет, какой файл, чей и куда он денется.
+	for _, issue := range s.Issues {
+		if strings.Contains(issue.Title, "изменён вне программы") {
+			if !strings.Contains(issue.Detail, "mods/nu/nu.mod (мод «Numeric UI»)") || !strings.Contains(issue.Detail, a.deployer.DisplacedDir()) || issue.Command != "ShowFiles" {
+				t.Errorf("пояснение к расхождению: %+v", issue)
+			}
+		}
+	}
 	res, err := a.Deploy()
 	if err != nil {
 		t.Fatal(err)

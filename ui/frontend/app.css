@@ -196,6 +196,8 @@ main section { display: flex; flex-direction: column; gap: 8px; }
 }
 .issue:last-child { border-bottom: 0; }
 .issue-text { flex: 1 1 300px; min-width: 0; }
+#issues .issue-text { cursor: pointer; }
+#issues .issue-text:hover .issue-title { text-decoration: underline; text-decoration-color: var(--brass-frame); text-underline-offset: 3px; }
 .issue-title { font-weight: 700; }
 .issue-detail { font-size: 13px; color: var(--orange-text); }
 .issue[data-level="error"] .issue-detail { color: var(--error); }
@@ -233,10 +235,9 @@ main section { display: flex; flex-direction: column; gap: 8px; }
 .mods tbody tr:hover { background: rgba(58, 47, 34, 0.5); }
 .mods tbody tr[aria-selected="true"] { background: var(--panel-selected); }
 
-.col-num { width: 52px; }
-.col-toggle { width: 68px; }
-/* Название мода получает всё, что осталось от узких столбцов. */
-.col-num { width: 44px; }
+/* Название мода получает всё, что осталось от узких столбцов. Номеру —
+   место под значок перетаскивания и три цифры. */
+.col-num { width: 72px; }
 .col-toggle { width: 60px; }
 .col-author { width: 110px; }
 .col-category { width: 120px; }
@@ -248,7 +249,7 @@ main section { display: flex; flex-direction: column; gap: 8px; }
 .col-sets { width: 110px; }
 .col-state { width: 165px; }
 @media (min-width: 1800px) {
-  .col-num { width: 52px; }
+  .col-num { width: 76px; }
   .col-toggle { width: 68px; }
   .col-author { width: 150px; }
   .col-category { width: 130px; }

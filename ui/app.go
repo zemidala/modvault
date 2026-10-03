@@ -21,6 +21,7 @@ import (
 
 	"github.com/zemidala/modvault/core/fsx"
 	"github.com/zemidala/modvault/i18n"
+	"github.com/zemidala/modvault/internal/version"
 	"github.com/zemidala/modvault/manager"
 	"github.com/zemidala/modvault/nexus"
 )
@@ -716,6 +717,9 @@ func (a *App) OpenFolder(kind string) error {
 	runtime.BrowserOpenURL(a.ctx, path)
 	return nil
 }
+
+// OpenProject открывает страницу программы на GitHub.
+func (a *App) OpenProject() { runtime.BrowserOpenURL(a.ctx, version.Project) }
 
 // SetFavorite добавляет моды в избранное или убирает из него.
 func (a *App) SetFavorite(ids []string, favorite bool) (manager.State, error) {

@@ -244,6 +244,10 @@ type Change struct {
 	OldID string // для Replace — чей файл лежал
 }
 
+// DisplacedDir — папка, куда развёртывание переносит файлы модов,
+// изменённые вне программы.
+func (d *Deployer) DisplacedDir() string { return filepath.Join(d.state, displacedDir) }
+
 // Drift — расхождение между учётом и диском: файл тронули вне программы.
 type Drift struct {
 	Path  string

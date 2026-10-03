@@ -106,6 +106,7 @@ function wire() {
     }
   });
   $("plan-files").addEventListener("click", showPlanFiles);
+  $("project-link").addEventListener("click", () => backend().OpenProject());
   $("sheet-close").addEventListener("click", () => { $("sheet").hidden = true; });
   $("sheet").addEventListener("click", (event) => {
     if (event.target === $("sheet")) $("sheet").hidden = true;

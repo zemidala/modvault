@@ -66,6 +66,17 @@ function renderStatus() {
   }
 }
 
+// Команды, которые сами только показывают подробности и ничего не меняют.
+const explainCommands = ["ShowFiles", "ChooseWinner", "ShowConflicts"];
+
+// explainIssue показывает пояснение к замечанию: подробный разбор, если он
+// есть, иначе само замечание целиком — с его действием на выбор.
+async function explainIssue(issue) {
+  if (explainCommands.includes(issue.command)) return run(issue.command, issue.arg);
+  const answer = await ask({ title: issue.title, message: issue.detail, ok: issue.command ? issue.action : "" });
+  if (answer === true && issue.command) run(issue.command, issue.arg);
+}
+
 function renderIssues() {
   const box = $("issues");
   box.replaceChildren();
@@ -74,6 +85,8 @@ function renderIssues() {
     row.dataset.level = issue.level;
     const text = el("div", "issue-text");
     text.append(el("div", "issue-title", issue.title), el("div", "issue-detail", issue.detail));
+    text.title = t("Щёлкните, чтобы открыть пояснение");
+    text.addEventListener("click", () => explainIssue(issue));
     row.append(text);
     if (issue.action) {
       const button = el("button", "ghost", issue.action);
