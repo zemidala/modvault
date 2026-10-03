@@ -444,6 +444,7 @@ function renderCard() {
   $("card-update").hidden = !hasUpdate;
   $("card-update").textContent = "Обновить до " + mod.available;
   $("card-nexus").hidden = !mod.nexusId;
+  $("card-message").hidden = !canMessage(mod);
 
   const hasDeps = mod.dependsOn !== "";
   $("card-depends-label").hidden = !hasDeps;

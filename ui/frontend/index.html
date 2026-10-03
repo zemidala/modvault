@@ -164,6 +164,7 @@
       <button class="ghost" id="card-show-files">Показать файлы</button>
       <button class="ghost" id="card-versions-button" aria-haspopup="menu">Версии…</button>
       <button class="ghost" id="card-nexus">Открыть на Nexus</button>
+      <button class="ghost" id="card-message">Написать автору</button>
       <button class="ghost danger" id="card-remove">Удалить мод</button>
     </div>
     <ul class="file-list" id="card-file-list" hidden></ul>
@@ -207,6 +208,23 @@
   </section>
 </div>
 
+<div class="sheet-backdrop" id="compose" hidden>
+  <section class="sheet ask frame" role="dialog" aria-modal="true" aria-labelledby="compose-title">
+    <div class="heading"><h2 id="compose-title"></h2><span class="rule"></span><span class="diamond"></span></div>
+    <p class="ask-message" id="compose-note"></p>
+    <label class="field"><span>Тема</span>
+      <input type="text" id="compose-subject" autocomplete="off" maxlength="200">
+    </label>
+    <label class="field"><span>Текст</span>
+      <textarea id="compose-body" rows="8" maxlength="10000"></textarea>
+    </label>
+    <div class="sheet-actions">
+      <button class="ghost" id="compose-cancel">Отмена</button>
+      <button class="plate" id="compose-send">Отправить</button>
+    </div>
+  </section>
+</div>
+
 <div class="sheet-backdrop" id="sheet" hidden>
   <section class="sheet frame" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
     <div class="heading"><h2 id="sheet-title"></h2><span class="rule"></span><span class="diamond"></span></div>
@@ -223,6 +241,7 @@
 <script src="js/actions.js"></script>
 <script src="js/bisect.js"></script>
 <script src="js/sections.js"></script>
+<script src="js/message.js"></script>
 <script src="js/main.js"></script>
 </body>
 </html>

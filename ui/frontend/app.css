@@ -716,3 +716,12 @@ button.busy::after,
 .endorse:hover { color: var(--orange-text); }
 .endorse[aria-pressed="true"] { color: var(--orange-text); }
 .endorse.busy { opacity: 0.5; }
+
+/* Письмо автору мода. */
+.ask textarea {
+  width: 100%; padding: 8px 10px; resize: vertical; min-height: 120px;
+  border: 1px solid var(--brass-line); background: var(--iron-deep); color: var(--parchment);
+  font: inherit; font-size: 14px; line-height: 1.45;
+}
+.ask textarea:focus { outline: none; border-color: var(--brass); }
+#compose .field { margin-top: 10px; }

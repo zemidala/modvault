@@ -374,6 +374,11 @@ func (a *App) Endorse(id string, endorse bool) (manager.EndorseResult, error) {
 	return a.m.Endorse(a.ctx, id, endorse)
 }
 
+// MessageAuthor отправляет личное сообщение автору мода на Nexus.
+func (a *App) MessageAuthor(id, title, body string) (string, error) {
+	return a.m.MessageAuthor(a.ctx, id, title, body)
+}
+
 // OpenNexus открывает страницу мода в браузере.
 func (a *App) OpenNexus(id string) error {
 	page, err := a.m.ModPage(id)

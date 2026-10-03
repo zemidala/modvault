@@ -43,8 +43,19 @@ func (a *Manager) client() (*nexus.Client, error) {
 	if key == "" {
 		return nil, errNoNexusKey
 	}
-	a.nexus = &nexus.Client{Base: a.nexusBase, Key: key, Version: version.Version}
+	a.nexus = newClient(a.nexusBase, key)
 	return a.nexus, nil
+}
+
+// newClient создаёт клиента Nexus. base — адрес подменного сервера (в
+// тестах); пусто — настоящий Nexus. Оба API подменяются разом: клиент с
+// подменным старым API не должен ходить на настоящий новый.
+func newClient(base, key string) *nexus.Client {
+	c := &nexus.Client{Base: base, Key: key, Version: version.Version}
+	if base != "" {
+		c.Graph = base + "/graphql"
+	}
+	return c
 }
 
 // domain — имя игры в адресах Nexus.
@@ -73,7 +84,7 @@ func (a *Manager) NexusLogin(ctx context.Context, key string) (State, error) {
 	base := a.nexusBase
 	a.mu.Unlock()
 
-	c := &nexus.Client{Base: base, Key: key, Version: version.Version}
+	c := newClient(base, key)
 	user, err := c.Validate(ctx)
 	if err != nil {
 		return State{}, err
@@ -851,6 +862,54 @@ func (a *Manager) UpdateMod(ctx context.Context, id string, progress func(Progre
 	defer a.mu.Unlock()
 	res.State, err = a.state()
 	return res, err
+}
+
+// Пределы сообщения автору: Nexus своих не называет, эти — от нечаянной
+// отправки пустого письма или целого файла.
+const (
+	maxMessageTitle = 200
+	maxMessageBody  = 10000
+)
+
+// MessageAuthor отправляет личное сообщение на Nexus тому, кто выложил мод,
+// от имени владельца ключа. Возвращает сообщение для пользователя. Ответ
+// автора придёт на сайт: входящие через API не читаются.
+func (a *Manager) MessageAuthor(ctx context.Context, id, title, body string) (string, error) {
+	title, body = strings.TrimSpace(title), strings.TrimSpace(body)
+	switch {
+	case title == "":
+		return "", errors.New("введите тему сообщения")
+	case body == "":
+		return "", errors.New("введите текст сообщения")
+	case len([]rune(title)) > maxMessageTitle:
+		return "", fmt.Errorf("тема длиннее %d знаков", maxMessageTitle)
+	case len([]rune(body)) > maxMessageBody:
+		return "", fmt.Errorf("текст длиннее %d знаков", maxMessageBody)
+	}
+	a.mu.Lock()
+	v, err := a.profileVersion(id)
+	c, cerr := a.client()
+	domain, derr := a.domain()
+	a.mu.Unlock()
+	if err := errors.Join(err, cerr, derr); err != nil {
+		return "", err
+	}
+	info, err := c.Mod(ctx, domain, v.NexusID)
+	if err != nil {
+		return "", fmt.Errorf("«%s»: %w", v.Name, err)
+	}
+	if info.Uploader.ID == 0 {
+		return "", fmt.Errorf("Nexus не назвал, кто выложил «%s»: написать некому", v.Name)
+	}
+	if err := c.SendMessage(ctx, info.Uploader.ID, title, body); err != nil {
+		return "", fmt.Errorf("сообщение автору «%s» не отправлено: %w", v.Name, err)
+	}
+	who := firstNonEmpty(info.UploadedBy, info.Author, "автору")
+	msg := fmt.Sprintf("Сообщение отправлено: %s («%s»). Ответ придёт в личные сообщения на сайте Nexus", who, v.Name)
+	a.mu.Lock()
+	a.note(EventNexus, fmt.Sprintf("Отправлено сообщение %s о моде «%s»: %s", who, v.Name, title))
+	a.mu.Unlock()
+	return msg, nil
 }
 
 // EndorseResult — итог одобрения мода.

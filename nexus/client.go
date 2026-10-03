@@ -23,6 +23,10 @@ const protocolVersion = "1.7.3"
 // DefaultBase — адрес API Nexus Mods.
 const DefaultBase = "https://api.nexusmods.com/v1"
 
+// DefaultGraph — адрес нового API Nexus Mods (GraphQL). Личные сообщения
+// есть только в нём.
+const DefaultGraph = "https://api.nexusmods.com/v2/graphql"
+
 var (
 	// ErrNoKey — ключ API не задан.
 	ErrNoKey = errors.New("ключ Nexus не задан")
@@ -47,6 +51,7 @@ type Limits struct {
 // Client — клиент API Nexus Mods. Годится для вызова из разных потоков.
 type Client struct {
 	Base    string // пусто — DefaultBase
+	Graph   string // пусто — DefaultGraph
 	Key     string
 	Version string // версия программы для заголовков запроса
 	HTTP    *http.Client
@@ -213,6 +218,91 @@ func (m ModInfo) AuthorPage(game string) string {
 		return fmt.Sprintf("https://www.nexusmods.com/%s/users/%d", url.PathEscape(game), m.Uploader.ID)
 	}
 	return ""
+}
+
+// graph выполняет запрос к новому API. Ошибка в ответе — ошибка запроса.
+func (c *Client) graph(ctx context.Context, query string, vars map[string]any, out any) error {
+	if c.Key == "" {
+		return ErrNoKey
+	}
+	u := c.Graph
+	if u == "" {
+		u = DefaultGraph
+	}
+	data, err := json.Marshal(map[string]any{"query": query, "variables": vars})
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, bytes.NewReader(data))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("apikey", c.Key)
+	req.Header.Set("User-Agent", "Modvault/"+c.Version)
+	req.Header.Set("Application-Name", "Modvault")
+	req.Header.Set("Application-Version", c.Version)
+	hc := c.HTTP
+	if hc == nil {
+		hc = defaultHTTP
+	}
+	resp, err := hc.Do(req)
+	if err != nil {
+		var uerr *url.Error
+		if errors.As(err, &uerr) {
+			err = uerr.Err
+		}
+		return fmt.Errorf("Nexus недоступен: %w", err)
+	}
+	defer resp.Body.Close()
+	answer, err := io.ReadAll(io.LimitReader(resp.Body, 32<<20))
+	if err != nil {
+		return fmt.Errorf("Nexus недоступен: %w", err)
+	}
+	switch resp.StatusCode {
+	case http.StatusOK:
+	case http.StatusUnauthorized:
+		return ErrUnauthorized
+	case http.StatusTooManyRequests:
+		return ErrRateLimited
+	default:
+		return fmt.Errorf("Nexus ответил %s", resp.Status)
+	}
+	var reply struct {
+		Data   json.RawMessage `json:"data"`
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+	}
+	if err := json.Unmarshal(answer, &reply); err != nil {
+		return fmt.Errorf("непонятный ответ Nexus: %w", err)
+	}
+	if len(reply.Errors) > 0 {
+		return fmt.Errorf("%w: %s", ErrForbidden, reply.Errors[0].Message)
+	}
+	if err := json.Unmarshal(reply.Data, out); err != nil {
+		return fmt.Errorf("непонятный ответ Nexus: %w", err)
+	}
+	return nil
+}
+
+// SendMessage отправляет личное сообщение пользователю Nexus с номером to
+// от имени владельца ключа. Ответ придёт на сайт: прочитать входящие
+// через API нельзя.
+func (c *Client) SendMessage(ctx context.Context, to int, title, body string) error {
+	var out struct {
+		CreateMessage struct {
+			Success bool `json:"success"`
+		} `json:"createMessage"`
+	}
+	const query = "mutation($to: [Int!]!, $title: String!, $body: String!) { createMessage(to: $to, title: $title, body: $body) { success } }"
+	if err := c.graph(ctx, query, map[string]any{"to": []int{to}, "title": title, "body": body}, &out); err != nil {
+		return err
+	}
+	if !out.CreateMessage.Success {
+		return errors.New("Nexus не принял сообщение")
+	}
+	return nil
 }
 
 // Одобрение мода пользователем, как его называет Nexus.

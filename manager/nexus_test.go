@@ -56,6 +56,8 @@ type fakeNexus struct {
 	endorsed map[int]string
 	refuse   string
 	versions map[int]string
+	// messages — личные сообщения, принятые новым API: "кому|тема|текст".
+	messages []string
 }
 
 func newFakeNexus(t *testing.T) *fakeNexus {
@@ -112,6 +114,29 @@ func (f *fakeNexus) serve(w http.ResponseWriter, r *http.Request) {
 	defer f.mu.Unlock()
 	path := r.URL.Path
 
+	if path == "/graphql" {
+		var q struct {
+			Query     string
+			Variables struct {
+				To    []int
+				Title string
+				Body  string
+			}
+		}
+		json.NewDecoder(r.Body).Decode(&q)
+		switch {
+		case r.Header.Get("apikey") != "good":
+			w.WriteHeader(http.StatusUnauthorized)
+		case !strings.Contains(q.Query, "createMessage") || len(q.Variables.To) != 1:
+			json.NewEncoder(w).Encode(map[string]any{"errors": []map[string]string{{"message": "bad query"}}})
+		case f.refuse != "":
+			json.NewEncoder(w).Encode(map[string]any{"errors": []map[string]string{{"message": f.refuse}}})
+		default:
+			f.messages = append(f.messages, fmt.Sprintf("%d|%s|%s", q.Variables.To[0], q.Variables.Title, q.Variables.Body))
+			json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"createMessage": map[string]bool{"success": true}}})
+		}
+		return
+	}
 	if id, ok := strings.CutPrefix(path, "/cdn/"); ok {
 		n, _ := strconv.Atoi(id)
 		file := f.file(n)
@@ -196,6 +221,7 @@ func (f *fakeNexus) serve(w http.ResponseWriter, r *http.Request) {
 	case len(parts) == 1:
 		reply(map[string]any{"mod_id": modID, "name": m.name, "version": "0", "author": "Автор " + m.name, "uploaded_by": "uploader",
 			"uploaded_users_profile_url": "https://www.nexusmods.com/users/" + strconv.Itoa(modID*10),
+			"user":                       map[string]int{"member_id": modID * 10},
 			"endorsement_count":          modID * 100, "mod_downloads": modID * 5000, "category_id": 7, "mod_unique_downloads": modID * 3000})
 	case len(parts) == 2 && (parts[1] == "endorse" || parts[1] == "abstain"):
 		var body struct{ Version string }
@@ -792,5 +818,51 @@ func TestDownloadSpeed(t *testing.T) {
 	a.finishDownload(d, "готово", nil)
 	if d.Speed != 0 {
 		t.Error("у законченной загрузки осталась скорость")
+	}
+}
+
+func TestMessageAuthor(t *testing.T) {
+	a, f, home := nexusApp(t)
+	ctx := context.Background()
+	f.add(t, 22, "Scoreboard", fakeFile{ID: 1, Name: "Scoreboard", Version: "1.4.0", Category: "MAIN", FileName: "Scoreboard-22-1-4-0.zip"},
+		map[string]string{"Scoreboard/Scoreboard.mod": "return {}"})
+	a.addArchive(modZip(t, "Local", `return {}`))
+	login(t, a)
+	if _, err := a.InstallLink(ctx, link(22, 1), nil); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, bad := range [][2]string{{"", "текст"}, {"тема", "  "}, {strings.Repeat("я", maxMessageTitle+1), "текст"}} {
+		if _, err := a.MessageAuthor(ctx, "scoreboard", bad[0], bad[1]); err == nil {
+			t.Errorf("принято сообщение с темой %q и текстом %q", bad[0], bad[1])
+		}
+	}
+	if _, err := a.MessageAuthor(ctx, "local", "тема", "текст"); err == nil {
+		t.Error("сообщение автору мода не с Nexus отправлено")
+	}
+	if len(f.messages) != 0 {
+		t.Fatalf("ушли сообщения: %v", f.messages)
+	}
+
+	msg, err := a.MessageAuthor(ctx, "scoreboard", " Ошибка в 1.4.0 ", "После обновления игры мод падает.\nЖурнал приложу.")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Письмо ушло тому, кто выложил мод (номер 220), без лишних пробелов.
+	if len(f.messages) != 1 || f.messages[0] != "220|Ошибка в 1.4.0|После обновления игры мод падает.\nЖурнал приложу." {
+		t.Errorf("на Nexus ушло: %q", f.messages)
+	}
+	if !strings.Contains(msg, "Сообщение отправлено: uploader") || !strings.Contains(msg, "на сайте Nexus") {
+		t.Errorf("сообщение пользователю: %q", msg)
+	}
+	// В журнале — кому и о чём, но не сам текст письма.
+	journal, _ := os.ReadFile(filepath.Join(home, journalFile))
+	if !strings.Contains(string(journal), "Ошибка в 1.4.0") || strings.Contains(string(journal), "Журнал приложу") {
+		t.Errorf("журнал: %s", journal)
+	}
+
+	f.refuse = "You cannot message this user"
+	if _, err := a.MessageAuthor(ctx, "scoreboard", "тема", "текст"); err == nil || !strings.Contains(err.Error(), "You cannot message this user") {
+		t.Errorf("отказ Nexus: %v", err)
 	}
 }

@@ -79,6 +79,15 @@ function wire() {
   $("card-show-files").addEventListener("click", toggleFiles);
   $("check-updates").addEventListener("click", () => checkUpdates(false));
   $("card-update").addEventListener("click", () => act(() => backend().UpdateMod(selectedId), $("card-update"), "Обновление: запрос к Nexus…"));
+  $("card-message").addEventListener("click", () => {
+    const mod = state.mods.find((m) => m.id === selectedId);
+    if (mod) compose(mod);
+  });
+  $("compose-cancel").addEventListener("click", closeCompose);
+  $("compose-send").addEventListener("click", sendCompose);
+  $("compose").addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeCompose();
+  });
   $("card-nexus").addEventListener("click", async () => {
     try {
       await backend().OpenNexus(selectedId);

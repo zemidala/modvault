@@ -208,6 +208,9 @@ async function openRowMenu(mod, x, y) {
       action: () => endorse(mod, $("set-button")),
     });
   }
+  if (!many && canMessage(mod)) {
+    items.push({ label: "✉ Написать автору…", action: () => compose(mod) });
+  }
   if (!many && mod.versions > 1) {
     items.push({ separator: true });
     items.push({ label: "Версии…", hint: `в хранилище: ${mod.versions}`, action: () => openVersions(mod, { x, y }) });
