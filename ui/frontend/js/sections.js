@@ -154,7 +154,11 @@ function renderSettings() {
     const track = el("span", "switch-track");
     track.append(el("span", "switch-knob"));
     toggle.append(track);
-    toggle.addEventListener("click", () => call(() => backend().SetSetting(item.key, !item.on)));
+    toggle.addEventListener("click", async () => {
+      await call(() => backend().SetSetting(item.key, !item.on));
+      // Язык окна задаётся при загрузке страницы: открываем её заново.
+      if (item.key === "english" && state.settings.some((s) => s.key === "english" && s.on !== item.on)) location.reload();
+    });
     row.append(text, toggle);
     box.append(row);
   }

@@ -632,7 +632,9 @@ func (a *App) UseVersion(id, versionID string) (manager.SetResult, error) {
 }
 
 // setFilter — файлы наборов в окнах выбора файла.
-var setFilter = []runtime.FileFilter{{DisplayName: i18n.T("Набор Modvault (*.modvault-set.json)"), Pattern: "*.modvault-set.json;*.json"}}
+func setFilter() []runtime.FileFilter {
+	return []runtime.FileFilter{{DisplayName: i18n.T("Набор Modvault (*.modvault-set.json)"), Pattern: "*.modvault-set.json;*.json"}}
+}
 
 // ExportSet спрашивает, куда сохранить текущий набор, и записывает его в файл.
 func (a *App) ExportSet() (manager.SetResult, error) {
@@ -643,7 +645,7 @@ func (a *App) ExportSet() (manager.SetResult, error) {
 	path, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
 		Title:           i18n.T("Сохранить набор в файл"),
 		DefaultFilename: st.Profile + ".modvault-set.json",
-		Filters:         setFilter,
+		Filters:         setFilter(),
 	})
 	if err != nil || path == "" {
 		return manager.SetResult{State: st}, err
@@ -654,7 +656,7 @@ func (a *App) ExportSet() (manager.SetResult, error) {
 
 // ImportSet спрашивает файл набора и создаёт набор по нему.
 func (a *App) ImportSet() (manager.ImportResult, error) {
-	path, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{Title: i18n.T("Загрузить набор из файла"), Filters: setFilter})
+	path, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{Title: i18n.T("Загрузить набор из файла"), Filters: setFilter()})
 	if err != nil || path == "" {
 		return manager.ImportResult{Missing: []manager.MissingMod{}}, err
 	}

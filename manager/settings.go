@@ -46,17 +46,12 @@ func (a *Manager) settingsList() []Setting {
 			On:     !a.settings.LaunchViaLauncher,
 		},
 	}
-	// Язык меняется при следующем запуске: часть строк составляется при
-	// загрузке программы. Название — на обоих языках, чтобы его нашёл любой.
-	english := Setting{
+	// Название — на обоих языках, чтобы его нашёл любой.
+	list = append(list, Setting{
 		Key: SettingEnglish, Title: "English interface · Английский интерфейс",
-		Detail: i18n.T("Окно и сообщения программы — на английском. Язык сменится после перезапуска программы."),
-		On:     i18n.Saved() == i18n.English,
-	}
-	if i18n.Saved() != i18n.Language() {
-		english.Detail = i18n.T("Язык выбран. Перезапустите программу, чтобы он сменился.")
-	}
-	list = append(list, english)
+		Detail: i18n.T("Окно и сообщения программы — на английском. Язык меняется сразу."),
+		On:     i18n.Language() == i18n.English,
+	})
 	if owner, ours := a.nxmOwner(); owner != "" {
 		detail := i18n.T("Кнопка «Mod Manager Download» на сайте Nexus ставит мод в Modvault.")
 		if !ours {
@@ -92,6 +87,9 @@ func (a *Manager) SetSetting(key string, on bool) (State, error) {
 		if err := i18n.Save(code); err != nil {
 			return State{}, err
 		}
+		// Язык меняется сразу; пример модов составлен на прежнем языке.
+		i18n.Use(code)
+		a.demo = demoMods()
 		return a.state()
 	default:
 		return State{}, i18n.Errorf("неизвестная настройка %q", key)

@@ -4,8 +4,9 @@
 // служат ключами словаря. Для другого языка строка ищется в словаре; если
 // перевода нет, остаётся русская. Так работают T, Sprintf, Errorf и NewError.
 //
-// Язык выбирается один раз при запуске (см. Language) и до конца работы не
-// меняется: часть строк составляется при загрузке программы.
+// Язык можно сменить на ходу (Use): строки переводятся в момент показа.
+// Поэтому строку нельзя переводить заранее, при загрузке программы, —
+// только там, где она показывается.
 package i18n
 
 import (
@@ -15,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -27,14 +29,16 @@ const (
 // languageFile — где лежит выбор языка: рядом с настройками окна.
 const languageFile = "language"
 
-var current = Russian
+// english — идёт ли программа по-английски. Язык читают из разных потоков,
+// а меняют из настроек.
+var english atomic.Bool
 
 func init() {
 	// В тестах язык всегда исходный: тесты сверяют русские сообщения.
 	if testing.Testing() {
 		return
 	}
-	current = saved()
+	Use(saved())
 }
 
 // saved читает выбранный язык; без выбора — русский.
@@ -82,7 +86,12 @@ func file() (string, error) {
 }
 
 // Language возвращает язык интерфейса этого запуска.
-func Language() string { return current }
+func Language() string {
+	if english.Load() {
+		return English
+	}
+	return Russian
+}
 
 // Saved возвращает язык, выбранный для следующего запуска.
 func Saved() string { return saved() }
@@ -99,13 +108,12 @@ func Save(code string) error {
 	return os.WriteFile(path, []byte(normal(code)+"\n"), 0o644)
 }
 
-// Use задаёт язык этого запуска. Только для тестов и командной строки:
-// строки, составленные при загрузке программы, уже не изменятся.
-func Use(code string) { current = normal(code) }
+// Use задаёт язык интерфейса с этого момента.
+func Use(code string) { english.Store(normal(code) == English) }
 
 // T возвращает строку на языке интерфейса.
 func T(s string) string {
-	if current == English {
+	if english.Load() {
 		if t, ok := en[s]; ok {
 			return t
 		}
@@ -140,7 +148,7 @@ func NewError(text string) error { return &message{text} }
 
 // Quote берёт название в кавычки, принятые в языке интерфейса.
 func Quote(name string) string {
-	if current == English {
+	if english.Load() {
 		return "“" + name + "”"
 	}
 	return "«" + name + "»"
@@ -149,7 +157,7 @@ func Quote(name string) string {
 // Plural выбирает форму слова по числу. Формы даются по-русски: 1 мод,
 // 2 мода, 5 модов; для английского они переводятся парой «one|other».
 func Plural(n int, one, few, many string) string {
-	if current == English {
+	if english.Load() {
 		if t, ok := en[one+"|"+few+"|"+many]; ok {
 			single, other, _ := strings.Cut(t, "|")
 			if n == 1 {

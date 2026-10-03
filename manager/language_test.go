@@ -19,10 +19,11 @@ func languageSetting(t *testing.T, s State) Setting {
 	return Setting{}
 }
 
-// Язык выбирается в настройках и вступает в силу со следующего запуска.
+// Язык выбирается в настройках и меняется сразу, без перезапуска.
 func TestLanguageSetting(t *testing.T) {
 	i18n.UseFile(filepath.Join(t.TempDir(), "language"))
 	defer i18n.UseFile("")
+	defer i18n.Use(i18n.Russian)
 	a, _ := setsApp(t)
 
 	item := languageSetting(t, state(t, a))
@@ -33,15 +34,15 @@ func TestLanguageSetting(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Выбор запомнен, но этот запуск остаётся русским — и говорит об этом.
-	if item = languageSetting(t, s); !item.On || i18n.Saved() != i18n.English || i18n.Language() != i18n.Russian {
+	// Выбор запомнен на следующие запуски, а программа уже говорит по-английски.
+	if item = languageSetting(t, s); !item.On || i18n.Saved() != i18n.English || i18n.Language() != i18n.English {
 		t.Errorf("после выбора: %+v, сохранён %q, идёт %q", item, i18n.Saved(), i18n.Language())
 	}
-	if !strings.Contains(item.Detail, "Перезапустите программу") {
-		t.Errorf("подсказка о перезапуске: %q", item.Detail)
+	if statusValue(s, "Store") == "" || statusValue(s, "Хранилище") != "" || !strings.Contains(item.Detail, "in English") {
+		t.Errorf("состояние после смены языка: %+v, настройка %q", s.Status, item.Detail)
 	}
-	if s, _ = a.SetSetting(SettingEnglish, false); languageSetting(t, s).On || i18n.Saved() != i18n.Russian {
-		t.Error("язык не вернулся к русскому")
+	if s, _ = a.SetSetting(SettingEnglish, false); languageSetting(t, s).On || i18n.Saved() != i18n.Russian || statusValue(s, "Хранилище") == "" {
+		t.Errorf("язык не вернулся к русскому: %+v", s.Status)
 	}
 }
 
