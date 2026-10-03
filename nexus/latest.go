@@ -78,7 +78,7 @@ func (f Files) Find(id int) (File, bool) {
 }
 
 func usable(f File) bool {
-	return f.Category != CategoryOld && f.Category != CategoryArchived && f.Category != ""
+	return f.Category != CategoryOld && f.Category != CategoryArchived && f.Category != CategoryRemoved && f.Category != ""
 }
 
 // Newer сообщает, что версия latest новее установленной. Версии из чисел

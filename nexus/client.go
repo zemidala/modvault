@@ -13,6 +13,11 @@ import (
 	"time"
 )
 
+// Адреса, заголовки и поля ответов сверены с официальным клиентом Nexus
+// (github.com/Nexus-Mods/node-nexus-api, им пользуется Vortex) версии
+// protocolVersion; её же сервер ждёт в заголовке Protocol-Version.
+const protocolVersion = "1.7.3"
+
 // DefaultBase — адрес API Nexus Mods.
 const DefaultBase = "https://api.nexusmods.com/v1"
 
@@ -89,6 +94,7 @@ func (c *Client) get(ctx context.Context, path string, query url.Values, out any
 	req.Header.Set("User-Agent", "Modvault/"+c.Version)
 	req.Header.Set("Application-Name", "Modvault")
 	req.Header.Set("Application-Version", c.Version)
+	req.Header.Set("Protocol-Version", protocolVersion)
 
 	hc := c.HTTP
 	if hc == nil {
@@ -176,6 +182,7 @@ const (
 	CategoryOptional = "OPTIONAL"
 	CategoryOld      = "OLD_VERSION"
 	CategoryMisc     = "MISCELLANEOUS"
+	CategoryRemoved  = "REMOVED"
 	CategoryArchived = "ARCHIVED"
 )
 
@@ -187,8 +194,10 @@ type File struct {
 	ModVersion string `json:"mod_version"`
 	Category   string `json:"category_name"`
 	FileName   string `json:"file_name"`
-	Size       int64  `json:"size_in_bytes"` // 0 — Nexus размера не знает
-	Uploaded   int64  `json:"uploaded_timestamp"`
+	// Size — размер в байтах. В описании клиента Nexus этого поля нет (там
+	// только размер в килобайтах), так что 0 значит «точный размер неизвестен».
+	Size     int64 `json:"size_in_bytes"`
+	Uploaded int64 `json:"uploaded_timestamp"`
 }
 
 // Optional сообщает, что файл — дополнение к моду, а не сам мод.
