@@ -557,6 +557,9 @@ func (a *App) AddDropped(paths []string) (DropResult, error) {
 	return res, err
 }
 
+// FilesReport объясняет состояние файлов модов в игре.
+func (a *App) FilesReport() (manager.FilesReport, error) { return a.m.FilesReport() }
+
 // HideIssue убирает замечание из «Требуют внимания».
 func (a *App) HideIssue(key string) (manager.State, error) { return a.m.HideIssue(key) }
 

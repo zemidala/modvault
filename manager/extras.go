@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/zemidala/modvault/core/deploy"
 	"github.com/zemidala/modvault/core/fsx"
 	"github.com/zemidala/modvault/core/profile"
 	"github.com/zemidala/modvault/core/store"
@@ -343,4 +344,79 @@ func (a *Manager) Folders() map[string]string {
 		add("logs", filepath.Dir(rep.Log))
 	}
 	return out
+}
+
+// FilesReport — подробности о файлах модов в игре: что с ними не так, что
+// это значит и что будет при развёртывании.
+type FilesReport struct {
+	Title string   `json:"title"`
+	Note  string   `json:"note"`
+	Lines []string `json:"lines"`
+}
+
+// FilesReport объясняет пункт «Файлы в игре» строки состояния.
+func (a *Manager) FilesReport() (FilesReport, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	rep := FilesReport{Title: "Файлы в игре", Lines: []string{}}
+	if a.deployer == nil || a.deployErr != nil {
+		rep.Note = "Папка игры не выбрана или недоступна, поэтому программа не знает, какие файлы модов в ней лежат. Выберите папку игры щелчком по пункту «Игра»."
+		return rep, nil
+	}
+	plan, err := a.plan()
+	if err != nil {
+		return rep, err
+	}
+	names := a.modNames()
+	var changed, updated, missing int
+	for _, d := range plan.Drift {
+		switch {
+		case d.Missing:
+			missing++
+			rep.Lines = append(rep.Lines, fmt.Sprintf("пропал: %s — %s", d.Path, names(d.ModID)))
+		case d.Updated:
+			updated++
+			rep.Lines = append(rep.Lines, fmt.Sprintf("обновлён игрой: %s — %s", d.Path, names(d.ModID)))
+		default:
+			changed++
+			rep.Lines = append(rep.Lines, fmt.Sprintf("изменён: %s — %s", d.Path, names(d.ModID)))
+		}
+	}
+	sort.Strings(rep.Lines)
+
+	var notes []string
+	if changed > 0 {
+		notes = append(notes, fmt.Sprintf("%d %s в папке игры не такие, какими их положила программа: их изменили или заменили вне Modvault — другой менеджер модов, ручная правка или сам мод. Ничего не потеряется: при развёртывании изменённые файлы будут сохранены в отдельную папку, а на их место лягут файлы из хранилища. Если правки нужны — сначала скопируйте эти файлы.",
+			changed, plural(changed, "файл мода", "файла модов", "файлов модов")))
+	}
+	if updated > 0 {
+		notes = append(notes, fmt.Sprintf("%d %s заменила сама игра: её обновили или проверили файлы в Steam. Новый файл игры станет оригиналом, поверх него снова ляжет файл мода.",
+			updated, plural(updated, "файл", "файла", "файлов")))
+	}
+	if missing > 0 {
+		notes = append(notes, fmt.Sprintf("%d %s из игры — например, после проверки файлов в Steam. При развёртывании они лягут заново.",
+			missing, plural(missing, "файл мода пропал", "файла модов пропали", "файлов модов пропали")))
+	}
+	if n := len(plan.Changes); n > 0 {
+		notes = append(notes, fmt.Sprintf("Всего ждёт развёртывания: %d %s. Нажмите «Развернуть» внизу окна — игра совпадёт с набором.",
+			n, plural(n, "изменение", "изменения", "изменений")))
+		if len(rep.Lines) == 0 {
+			// Расхождений нет — показываем сам план.
+			for _, c := range plan.Changes {
+				switch c.Kind {
+				case deploy.Add:
+					rep.Lines = append(rep.Lines, fmt.Sprintf("+ %s — %s", c.Path, names(c.ModID)))
+				case deploy.Replace:
+					rep.Lines = append(rep.Lines, fmt.Sprintf("~ %s — %s", c.Path, names(c.ModID)))
+				case deploy.Remove:
+					rep.Lines = append(rep.Lines, fmt.Sprintf("− %s — %s", c.Path, names(c.ModID)))
+				}
+			}
+		}
+	}
+	if len(notes) == 0 {
+		notes = append(notes, "Файлы модов в игре совпадают с набором: всё, что должно лежать в игре, лежит, и ничего не изменено.")
+	}
+	rep.Note = strings.Join(notes, "\n\n")
+	return rep, nil
 }

@@ -148,3 +148,34 @@ func TestFolders(t *testing.T) {
 		t.Errorf("папка журналов без журналов: %v", f)
 	}
 }
+
+func TestFilesReport(t *testing.T) {
+	a, g := setsApp(t)
+	rep, err := a.FilesReport()
+	if err != nil || len(rep.Lines) != 0 || !strings.Contains(rep.Note, "совпадают с набором") {
+		t.Errorf("всё на месте: %+v, %v", rep, err)
+	}
+	// Файл мода изменён вне программы, другой пропал, третий мод ждёт развёртывания.
+	os.WriteFile(filepath.Join(g, "mods", "Plain", "Plain.mod"), []byte("чужая правка"), 0o644)
+	os.Remove(filepath.Join(g, "mods", "Other", "Other.mod"))
+	a.SetEnabled("deep", false)
+	rep, err = a.FilesReport()
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Join(rep.Lines, "\n")
+	if !strings.Contains(lines, "изменён: mods/Plain/Plain.mod — Plain") || !strings.Contains(lines, "пропал: mods/Other/Other.mod — Other") {
+		t.Errorf("строки: %s", lines)
+	}
+	for _, want := range []string{"1 файл мода в папке игры не такие", "Ничего не потеряется", "1 файл мода пропал из игры", "Всего ждёт развёртывания"} {
+		if !strings.Contains(rep.Note, want) {
+			t.Errorf("в пояснении нет %q:\n%s", want, rep.Note)
+		}
+	}
+	// Каждый пункт строки состояния ведёт к подробностям.
+	for _, item := range state(t, a).Status {
+		if item.Command == "" {
+			t.Errorf("пункт «%s» никуда не ведёт", item.Label)
+		}
+	}
+}

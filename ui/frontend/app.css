@@ -694,3 +694,12 @@ button.busy::after,
 .chip[aria-pressed="true"] { border-color: var(--orange-worn); color: var(--orange-text); }
 .filter-count { font-size: 13px; color: var(--orange-text); margin-left: 6px; }
 #issues-hidden { margin: 0; }
+
+/* Пояснение в окне подробностей и подсветка блока, к которому привела ссылка. */
+#sheet-note { white-space: pre-line; line-height: 1.45; }
+#issues-section { scroll-margin-top: 12px; }
+.flash > .frame { animation: flash 1.4s ease-out; }
+@keyframes flash {
+  from { box-shadow: 0 0 0 3px var(--orange-worn); }
+  to { box-shadow: 0 0 0 3px transparent; }
+}

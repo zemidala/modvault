@@ -620,7 +620,7 @@ func (a *Manager) status(s State, mods int, plan *deploy.Plan) []StatusItem {
 		}
 	}
 
-	files := StatusItem{Label: "Файлы в игре", Value: "—", Level: LevelOff}
+	files := StatusItem{Label: "Файлы в игре", Value: "—", Level: LevelOff, Command: "ShowFiles"}
 	if plan != nil {
 		files.Value, files.Level = "совпадают с профилем", LevelOK
 		if !plan.Empty() {
@@ -634,7 +634,7 @@ func (a *Manager) status(s State, mods int, plan *deploy.Plan) []StatusItem {
 		}
 	}
 
-	checks := StatusItem{Label: "Проверки", Value: "замечаний нет", Level: LevelOK}
+	checks := StatusItem{Label: "Проверки", Value: "замечаний нет", Level: LevelOK, Command: "ShowIssues"}
 	if n := len(s.Issues); n > 0 {
 		checks.Value = fmt.Sprintf("%d %s", n, plural(n, "замечание", "замечания", "замечаний"))
 		checks.Level = LevelWarn
@@ -646,7 +646,7 @@ func (a *Manager) status(s State, mods int, plan *deploy.Plan) []StatusItem {
 	}
 	items := []StatusItem{
 		game,
-		{Label: "Хранилище", Value: fmt.Sprintf("%d %s", mods, plural(mods, "мод", "мода", "модов")), Level: LevelOK},
+		{Label: "Хранилище", Value: fmt.Sprintf("%d %s", mods, plural(mods, "мод", "мода", "модов")), Level: LevelOK, Command: "OpenStore"},
 		files,
 		checks,
 	}

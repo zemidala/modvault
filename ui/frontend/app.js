@@ -58,7 +58,7 @@ function renderStatus() {
     value.title = item.value;
     if (item.command) {
       value = el("button", "status-value status-command", item.value);
-      value.title = item.value + " — щёлкните, чтобы изменить";
+      value.title = item.value + " — щёлкните, чтобы открыть подробности";
       value.addEventListener("click", () => run(item.command));
     }
     node.append(el("span", "muted", item.label), value);
@@ -1017,6 +1017,18 @@ const commands = {
     return key === null ? state : backend().NexusLogin(key);
   },
   ToggleNxm: () => confirmThen(() => backend().NxmAsk(), () => backend().ToggleNxm()),
+  ShowFiles: async () => {
+    await showFiles();
+    return state;
+  },
+  ShowIssues: async () => {
+    showIssues();
+    return state;
+  },
+  OpenStore: async () => {
+    await backend().OpenFolder("store");
+    return state;
+  },
   ShowConflicts: async () => {
     await showConflicts();
     return state;
@@ -1094,12 +1106,44 @@ async function deploy() {
   }
 }
 
+// showFiles объясняет пункт «Файлы в игре»: что с файлами модов не так,
+// что это значит и что будет при развёртывании.
+async function showFiles() {
+  try {
+    const rep = await backend().FilesReport();
+    $("sheet-title").textContent = rep.title;
+    $("sheet-note").textContent = rep.note;
+    $("sheet-list").replaceChildren(...rep.lines.map((line) => el("li", "", line)));
+    $("sheet-list").hidden = rep.lines.length === 0;
+    $("sheet").hidden = false;
+    $("sheet-close").focus();
+  } catch (err) {
+    toast(String(err), "error");
+  }
+}
+
+// showIssues ведёт к замечаниям: открывает раздел «Моды» и показывает
+// блок «Требуют внимания».
+function showIssues() {
+  showTab(document.querySelector('.tab[data-tab="mods"]'));
+  const section = $("issues-section");
+  if (section.hidden) {
+    toast("Замечаний нет: всё в порядке");
+    return;
+  }
+  section.scrollIntoView({ behavior: "smooth", block: "start" });
+  section.classList.remove("flash");
+  void section.offsetWidth; // перезапуск подсветки
+  section.classList.add("flash");
+}
+
 async function showPlanFiles() {
   try {
     const lines = await backend().PlanFiles();
     $("sheet-title").textContent = "План по файлам";
     $("sheet-note").textContent = "«+» — файл ляжет в игру, «~» — заменит прежний, «−» — уберётся.";
     $("sheet-list").replaceChildren(...lines.map((line) => el("li", "", line)));
+    $("sheet-list").hidden = false;
     $("sheet").hidden = false;
     $("sheet-close").focus();
   } catch (err) {
@@ -1193,6 +1237,7 @@ async function showConflicts() {
     item.append(button);
     return item;
   }));
+  $("sheet-list").hidden = list.length === 0;
   $("sheet").hidden = false;
   $("sheet-close").focus();
 }
