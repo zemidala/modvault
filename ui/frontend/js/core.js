@@ -1,0 +1,97 @@
+// Страница главного окна. Данные приходят из Go (пакет ui), здесь только показ.
+"use strict";
+
+const $ = (id) => document.getElementById(id);
+
+let state = null;
+let selectedId = null;
+
+// Go-сторона окна. Вне программы (страница открыта в браузере) её нет.
+function backend() {
+  return window.go && window.go.ui && window.go.ui.App;
+}
+
+function el(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+
+let toastTimer = 0;
+function toast(text, level, sticky) {
+  const node = $("toast");
+  node.textContent = text;
+  node.dataset.level = level || "info";
+  node.hidden = false;
+  clearTimeout(toastTimer);
+  // Ошибку читают дольше; сообщение о сбое запуска не гаснет вовсе.
+  // Длинное сообщение тоже читают дольше.
+  if (!sticky) toastTimer = setTimeout(() => { node.hidden = true; }, level === "error" ? 8000 : Math.max(3500, text.length * 60));
+}
+
+// call выполняет запрос к программе, который возвращает новое состояние окна.
+async function call(request) {
+  try {
+    state = await request();
+    render();
+    return true;
+  } catch (err) {
+    toast(String(err), "error");
+    return false;
+  }
+}
+
+// Кнопка, за которой ещё нет ядра, честно говорит, когда заработает.
+function notYet(label, stage) {
+  toast(`«${label}» появится на этапе ${stage}`);
+}
+
+function renderStatus() {
+  const box = $("status");
+  box.replaceChildren();
+  for (const item of state.status) {
+    const node = el("span", "status-item");
+    node.dataset.level = item.level;
+    let value = el("span", "status-value", item.value);
+    value.title = item.value;
+    if (item.command) {
+      value = el("button", "status-value status-command", item.value);
+      value.title = item.value + " — щёлкните, чтобы открыть подробности";
+      value.addEventListener("click", () => run(item.command));
+    }
+    node.append(el("span", "muted", item.label), value);
+    box.append(node);
+  }
+}
+
+function renderIssues() {
+  const box = $("issues");
+  box.replaceChildren();
+  for (const issue of state.issues) {
+    const row = el("div", "issue");
+    row.dataset.level = issue.level;
+    const text = el("div", "issue-text");
+    text.append(el("div", "issue-title", issue.title), el("div", "issue-detail", issue.detail));
+    row.append(text);
+    if (issue.action) {
+      const button = el("button", "ghost", issue.action);
+      button.addEventListener("click", () => (issue.command ? run(issue.command, issue.arg) : notYet(issue.action, issue.stage)));
+      row.append(button);
+    }
+    if (issue.key) {
+      // Замечание, с которым решено жить, можно убрать с глаз.
+      const hide = el("button", "ghost small-button", "Скрыть");
+      hide.title = "Убрать это замечание из списка. Вернуть скрытые можно ссылкой под списком";
+      hide.addEventListener("click", () => call(() => backend().HideIssue(issue.key)));
+      row.append(hide);
+    }
+    box.append(row);
+  }
+  const hidden = state.hiddenIssues || 0;
+  $("issues").hidden = state.issues.length === 0;
+  $("issues-hidden").hidden = hidden === 0;
+  $("issues-hidden-count").textContent = `Скрыто замечаний: ${hidden}`;
+  $("issues-section").hidden = state.issues.length === 0 && hidden === 0;
+}

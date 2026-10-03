@@ -222,19 +222,8 @@ func (a *App) IgnoreManagersAsk() Ask {
 // IgnoreManagers перестаёт учитывать другие менеджеры, кроме Vortex.
 func (a *App) IgnoreManagers() (manager.State, error) { return a.m.IgnoreManagers() }
 
-func plural(n int, one, few, many string) string {
-	n %= 100
-	if n >= 11 && n <= 14 {
-		return many
-	}
-	switch n % 10 {
-	case 1:
-		return one
-	case 2, 3, 4:
-		return few
-	}
-	return many
-}
+// plural выбирает форму слова: 1 мод, 2 мода, 5 модов.
+func plural(n int, one, few, many string) string { return manager.Plural(n, one, few, many) }
 
 // SortAsk показывает, что передвинет сортировка по правилам.
 func (a *App) SortAsk() (Ask, error) {

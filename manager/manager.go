@@ -632,7 +632,9 @@ func (a *Manager) state() (State, error) {
 	return a.realState()
 }
 
-// plural выбирает форму слова по правилам русского языка: 1 мод, 2 мода, 5 модов.
+// Plural выбирает форму слова по правилам русского языка: 1 мод, 2 мода, 5 модов.
+func Plural(n int, one, few, many string) string { return plural(n, one, few, many) }
+
 func plural(n int, one, few, many string) string {
 	n %= 100
 	if n >= 11 && n <= 14 {
