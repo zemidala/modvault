@@ -283,6 +283,16 @@ func (a *App) AddToSet(name string, ids []string) (manager.SetResult, error) {
 	return a.m.AddToSet(name, ids)
 }
 
+// RemoveFromSet выключает моды ids в наборе name.
+func (a *App) RemoveFromSet(name string, ids []string) (manager.SetResult, error) {
+	return a.m.RemoveFromSet(name, ids)
+}
+
+// MoveToSet переносит моды ids из текущего набора в набор name.
+func (a *App) MoveToSet(name string, ids []string) (manager.SetResult, error) {
+	return a.m.MoveToSet(name, ids)
+}
+
 // SetEnabledMany включает или выключает несколько модов текущего набора.
 func (a *App) SetEnabledMany(ids []string, enabled bool) (manager.State, error) {
 	return a.m.SetEnabledMany(ids, enabled)

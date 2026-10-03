@@ -241,6 +241,88 @@ func (a *Manager) AddToSet(name string, ids []string) (SetResult, error) {
 	return SetResult{State: st, Message: strings.TrimSpace(msg)}, err
 }
 
+// disableIn выключает моды ids в профиле и возвращает, сколько их было включено.
+func disableIn(p *profile.Profile, ids []string) int {
+	n := 0
+	for _, id := range ids {
+		if i := p.Index(id); i >= 0 && p.Entries[i].Enabled {
+			p.Entries[i].Enabled = false
+			n++
+		}
+	}
+	return n
+}
+
+// RemoveFromSet выключает моды ids в наборе name; остальное в нём не меняется.
+func (a *Manager) RemoveFromSet(name string, ids []string) (SetResult, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	cur, _, err := a.loadProfile()
+	if err != nil {
+		return SetResult{}, err
+	}
+	p := cur
+	if name != cur.Name {
+		if p, err = a.profiles.Load(name); err != nil {
+			return SetResult{}, fmt.Errorf("набор «%s» не найден", name)
+		}
+	}
+	removed := disableIn(&p, ids)
+	if err := a.profiles.Save(p); err != nil {
+		return SetResult{}, err
+	}
+	st, err := a.state()
+	msg := fmt.Sprintf("Из набора «%s» %s %d %s", name, plural(removed, "убран", "убраны", "убраны"), removed, plural(removed, "мод", "мода", "модов"))
+	if removed == 0 {
+		msg = fmt.Sprintf("В наборе «%s» эти моды и так выключены", name)
+	} else if name == cur.Name && a.deployer != nil {
+		msg += ". Из игры они уйдут по кнопке «Развернуть»"
+	}
+	return SetResult{State: st, Message: msg}, err
+}
+
+// MoveToSet переносит моды ids из текущего набора в набор name: там они
+// включаются вместе с тем, без чего не заработают, а в текущем выключаются.
+func (a *Manager) MoveToSet(name string, ids []string) (SetResult, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	cur, _, err := a.loadProfile()
+	if err != nil {
+		return SetResult{}, err
+	}
+	if name == cur.Name {
+		return SetResult{}, fmt.Errorf("моды уже в наборе «%s»", name)
+	}
+	to, err := a.profiles.Load(name)
+	if err != nil {
+		return SetResult{}, fmt.Errorf("набор «%s» не найден", name)
+	}
+	for _, e := range cur.Entries {
+		if to.Index(e.ModID) < 0 {
+			to.Entries = append(to.Entries, profile.Entry{ModID: e.ModID, VersionID: e.VersionID})
+		}
+	}
+	extra, err := a.withRequired(&to, ids)
+	if err != nil {
+		return SetResult{}, err
+	}
+	// Сначала новый набор, потом старый: при сбое мод окажется в обоих, а не пропадёт.
+	if err := a.profiles.Save(to); err != nil {
+		return SetResult{}, err
+	}
+	disableIn(&cur, ids)
+	if err := a.profiles.Save(cur); err != nil {
+		return SetResult{}, err
+	}
+	st, err := a.state()
+	msg := fmt.Sprintf("В набор «%s» %s %d %s из набора «%s».%s", name, plural(len(ids), "перенесён", "перенесены", "перенесены"),
+		len(ids), plural(len(ids), "мод", "мода", "модов"), cur.Name, requiredNote(extra))
+	if a.deployer != nil {
+		msg += " Из игры они уйдут по кнопке «Развернуть»"
+	}
+	return SetResult{State: st, Message: msg}, err
+}
+
 // SetEnabledMany включает или выключает несколько модов текущего набора разом.
 func (a *Manager) SetEnabledMany(ids []string, enabled bool) (State, error) {
 	a.mu.Lock()

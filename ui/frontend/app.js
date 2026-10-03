@@ -239,7 +239,7 @@ function renderPicked() {
   $("picked-count").textContent = `Выделено: ${n} ${word}`;
 }
 
-// Всплывающее меню под кнопкой. Пункт: {label, hint, current, disabled,
+// Всплывающее меню под кнопкой anchor или в точке {x, y}. Пункт: {label, hint, current, disabled,
 // action, remove, removeTitle}, заголовок {title} или черта {separator}.
 function showMenu(anchor, items) {
   const menu = $("menu");
@@ -278,10 +278,13 @@ function showMenu(anchor, items) {
     menu.append(row);
   }
   menu.hidden = false;
-  const box = anchor.getBoundingClientRect();
-  menu.style.top = `${box.bottom + 4}px`;
-  menu.style.left = `${Math.max(8, Math.min(box.left, window.innerWidth - menu.offsetWidth - 8))}px`;
-  menu.dataset.anchor = anchor.id;
+  // Меню открывается под кнопкой или в точке щелчка и не вылезает за окно.
+  const box = anchor.getBoundingClientRect ? anchor.getBoundingClientRect() : null;
+  const left = box ? box.left : anchor.x;
+  const top = box ? box.bottom + 4 : anchor.y;
+  menu.style.left = `${Math.max(8, Math.min(left, window.innerWidth - menu.offsetWidth - 8))}px`;
+  menu.style.top = `${Math.max(8, Math.min(top, window.innerHeight - menu.offsetHeight - 8))}px`;
+  menu.dataset.anchor = anchor.id || "";
   const first = menu.querySelector("button:not(:disabled)");
   if (first) first.focus();
 }
@@ -367,6 +370,46 @@ async function setPickedEnabled(enabled) {
   if (await call(() => backend().SetEnabledMany(ids, enabled))) clearPicked();
 }
 
+// Меню мода по правой кнопке мыши: убрать из набора, добавить или
+// перенести в другой. Если мод входит в выделение, действие относится ко
+// всем выделенным.
+async function openRowMenu(mod, x, y) {
+  const many = picked.has(mod.id) && picked.size > 1;
+  const ids = many ? [...picked] : [mod.id];
+  const done = async (request) => {
+    if ((await act(request, $("set-button"))) && many) clearPicked();
+  };
+  const current = state.profile;
+  const items = [{ title: many ? `Выделено модов: ${ids.length}` : mod.name }];
+  if (many || mod.enabled) {
+    items.push({ label: `Убрать из набора «${current}»`, action: () => done(() => backend().RemoveFromSet(current, ids)) });
+  }
+  if (many || !mod.enabled) {
+    items.push({ label: `Включить в наборе «${current}»`, action: () => done(() => backend().AddToSet(current, ids)) });
+  }
+
+  const others = ((await loadSets()) || []).filter((set) => !set.current);
+  if (others.length) {
+    items.push({ separator: true }, { title: "Добавить в набор" });
+    for (const set of others) {
+      const inSet = !many && (mod.sets || []).includes(set.name);
+      items.push(inSet
+        ? { label: `✓ ${set.name}`, hint: "убрать", action: () => done(() => backend().RemoveFromSet(set.name, ids)) }
+        : { label: set.name, action: () => done(() => backend().AddToSet(set.name, ids)) });
+    }
+    // Перенести — убрать из текущего набора и включить в другом.
+    if (many || mod.enabled) {
+      items.push({ separator: true }, { title: `Перенести из «${current}» в набор` });
+      for (const set of others) {
+        items.push({ label: set.name, action: () => done(() => backend().MoveToSet(set.name, ids)) });
+      }
+    }
+  }
+  items.push({ separator: true });
+  items.push({ label: "В новый набор…", action: () => newSet(ids) });
+  showMenu({ x, y }, items);
+}
+
 function renderMods() {
   const body = $("mods");
   const query = $("search").value.trim().toLowerCase();
@@ -445,6 +488,10 @@ function renderMods() {
     });
     row.addEventListener("keydown", (event) => {
       if (event.key === "Enter" && event.target === row) select();
+    });
+    row.addEventListener("contextmenu", (event) => {
+      event.preventDefault();
+      openRowMenu(mod, event.clientX, event.clientY);
     });
     body.append(row);
   });
@@ -708,7 +755,7 @@ function wire() {
   document.addEventListener("mousedown", (event) => {
     const menu = $("menu");
     if (menu.hidden || menu.contains(event.target)) return;
-    const anchor = document.getElementById(menu.dataset.anchor);
+    const anchor = menu.dataset.anchor ? document.getElementById(menu.dataset.anchor) : null;
     if (!anchor || !anchor.contains(event.target)) hideMenu();
   });
   document.addEventListener("keydown", (event) => {

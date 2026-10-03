@@ -135,6 +135,53 @@ func TestSets(t *testing.T) {
 		t.Errorf("в другом наборе включено %d", sets[1].Enabled)
 	}
 
+	// Убрать из набора: из другого и из текущего.
+	rm, err := a.RemoveFromSet("Тест", []string{"other", "plain"})
+	if err != nil || !strings.Contains(rm.Message, "убраны 2 мода") || enabledIDs(rm.State) != all {
+		t.Errorf("убрать из другого набора: %v, %q", err, rm.Message)
+	}
+	if sets, _ = a.Sets(); sets[1].Enabled != 2 {
+		t.Errorf("в другом наборе осталось включено %d", sets[1].Enabled)
+	}
+	rm, err = a.RemoveFromSet(mainProfile, []string{"other"})
+	if err != nil || findMod(t, rm.State, "other").Enabled || !strings.Contains(rm.Message, "«Развернуть»") {
+		t.Errorf("убрать из текущего набора: %v, %q", err, rm.Message)
+	}
+	if rm, _ = a.RemoveFromSet(mainProfile, []string{"other"}); !strings.Contains(rm.Message, "и так выключены") {
+		t.Errorf("повторное удаление: %q", rm.Message)
+	}
+	if _, err := a.RemoveFromSet("Нет такого", []string{"other"}); err == nil {
+		t.Error("удаление из несуществующего набора прошло")
+	}
+	if _, err := a.AddToSet(mainProfile, []string{"other"}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Перенести: в текущем наборе мод выключается, в другом включается
+	// вместе с тем, что ему нужно.
+	mv, err := a.MoveToSet("Тест", []string{"needy"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if findMod(t, mv.State, "needy").Enabled || !strings.Contains(mv.Message, "перенесён 1 мод") || !strings.Contains(mv.Message, "Helper") {
+		t.Errorf("перенос: %q, мод %+v", mv.Message, findMod(t, mv.State, "needy"))
+	}
+	if got := strings.Join(findMod(t, mv.State, "needy").Sets, ","); got != "Тест" {
+		t.Errorf("наборы перенесённого мода: %q", got)
+	}
+	if got := strings.Join(findMod(t, mv.State, "helper").Sets, ","); got != "Основной,Тест" {
+		t.Errorf("наборы мода, нужного перенесённому: %q", got)
+	}
+	if _, err := a.MoveToSet(mainProfile, []string{"plain"}); err == nil {
+		t.Error("перенос в тот же набор прошёл")
+	}
+	if _, err := a.MoveToSet("Нет такого", []string{"plain"}); err == nil {
+		t.Error("перенос в несуществующий набор прошёл")
+	}
+	if _, err := a.AddToSet(mainProfile, []string{"needy"}); err != nil {
+		t.Fatal(err)
+	}
+
 	// Копия текущего, переименование, удаление.
 	if _, err := a.CreateSet("Копия", nil); err != nil {
 		t.Fatal(err)
