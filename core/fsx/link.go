@@ -89,3 +89,23 @@ func CopyFile(src, dst string) error {
 	}
 	return w.Commit()
 }
+
+// Move переносит файл src в dst, которого не должно существовать. На одном
+// томе это одно переименование, между томами — атомарная копия и удаление
+// оригинала: обрыв посередине оставит две целые копии, но не половину.
+func Move(src, dst string) error {
+	if _, err := os.Lstat(dst); err == nil {
+		return &os.PathError{Op: "move", Path: dst, Err: fs.ErrExist}
+	}
+	err := withRetry(src, func() error { return os.Rename(src, dst) })
+	if err == nil {
+		return nil
+	}
+	if same, serr := SameVolume(src, dst); serr != nil || same {
+		return err
+	}
+	if err := CopyFile(src, dst); err != nil {
+		return err
+	}
+	return withRetry(src, func() error { return os.Remove(src) })
+}

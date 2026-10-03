@@ -342,3 +342,34 @@ tr[data-enabled="false"] .name, tr[data-enabled="false"] .version { color: var(-
   .card { flex-basis: 260px; }
   .col-state { width: 200px; }
 }
+
+.status-command {
+  padding: 0;
+  border: 0;
+  border-bottom: 1px dashed currentColor;
+  background: transparent;
+  color: inherit;
+}
+.status-command:hover { color: var(--gold); }
+.status-value { max-width: 48ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  background: rgba(7, 8, 11, 0.6);
+}
+.sheet {
+  width: min(900px, 100%);
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 20px;
+}
+.sheet p { margin: 0; }
+.sheet-list { flex: 1 1 auto; overflow-y: auto; min-height: 0; font-variant-numeric: tabular-nums; }
+.sheet-actions { display: flex; justify-content: flex-end; }

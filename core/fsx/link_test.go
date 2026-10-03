@@ -129,3 +129,32 @@ func TestCopyFile(t *testing.T) {
 		t.Errorf("в папке остались лишние файлы: %v", names)
 	}
 }
+
+func TestMove(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "откуда.txt")
+	dst := filepath.Join(dir, "куда.txt")
+	if err := WriteFile(src, []byte("данные")); err != nil {
+		t.Fatal(err)
+	}
+	if err := Move(src, dst); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(src); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("источник остался: %v", err)
+	}
+	if got := readFile(t, dst); got != "данные" {
+		t.Errorf("содержимое = %q", got)
+	}
+
+	other := filepath.Join(dir, "другой.txt")
+	if err := WriteFile(other, []byte("x")); err != nil {
+		t.Fatal(err)
+	}
+	if err := Move(other, dst); !errors.Is(err, fs.ErrExist) {
+		t.Errorf("перенос поверх существующего: %v, want fs.ErrExist", err)
+	}
+	if got := readFile(t, dst); got != "данные" {
+		t.Error("неудачный перенос испортил целевой файл")
+	}
+}

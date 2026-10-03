@@ -64,7 +64,14 @@ function renderStatus() {
   for (const item of state.status) {
     const node = el("span", "status-item");
     node.dataset.level = item.level;
-    node.append(el("span", "muted", item.label), el("span", "status-value", item.value));
+    let value = el("span", "status-value", item.value);
+    value.title = item.value;
+    if (item.command) {
+      value = el("button", "status-value status-command", item.value);
+      value.title = item.value + " — щёлкните, чтобы изменить";
+      value.addEventListener("click", () => run(item.command));
+    }
+    node.append(el("span", "muted", item.label), value);
     box.append(node);
   }
 }
@@ -80,7 +87,7 @@ function renderIssues() {
     row.append(text);
     if (issue.action) {
       const button = el("button", "ghost", issue.action);
-      button.addEventListener("click", () => notYet(issue.action, issue.stage));
+      button.addEventListener("click", () => (issue.command ? run(issue.command) : notYet(issue.action, issue.stage)));
       row.append(button);
     }
     box.append(row);
@@ -210,6 +217,39 @@ function render() {
   renderPlan();
 }
 
+// Команды, которые программа разрешает вызывать из строк состояния и замечаний.
+const commands = { ChooseGame: () => backend().ChooseGame() };
+
+function run(command) {
+  if (commands[command]) call(commands[command]);
+}
+
+async function deploy() {
+  const button = $("deploy");
+  button.disabled = true;
+  try {
+    const res = await backend().Deploy();
+    state = res.state;
+    render();
+    toast(res.message);
+  } catch (err) {
+    toast(String(err), "error");
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function showPlanFiles() {
+  try {
+    const lines = await backend().PlanFiles();
+    $("sheet-list").replaceChildren(...lines.map((line) => el("li", "", line)));
+    $("sheet").hidden = false;
+    $("sheet-close").focus();
+  } catch (err) {
+    toast(String(err), "error");
+  }
+}
+
 function setEnabled(id, enabled) {
   return call(() => backend().SetEnabled(id, enabled));
 }
@@ -248,6 +288,15 @@ function wire() {
   });
   $("card-remove").addEventListener("click", () => call(() => backend().RemoveMod(selectedId)));
   $("card-show-files").addEventListener("click", toggleFiles);
+  $("deploy").addEventListener("click", deploy);
+  $("plan-files").addEventListener("click", showPlanFiles);
+  $("sheet-close").addEventListener("click", () => { $("sheet").hidden = true; });
+  $("sheet").addEventListener("click", (event) => {
+    if (event.target === $("sheet")) $("sheet").hidden = true;
+  });
+  $("sheet").addEventListener("keydown", (event) => {
+    if (event.key === "Escape") $("sheet").hidden = true;
+  });
 }
 
 async function start() {

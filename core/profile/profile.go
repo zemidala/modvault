@@ -32,6 +32,9 @@ type Entry struct {
 type Profile struct {
 	Name    string  `json:"name"`
 	Entries []Entry `json:"mods"`
+	// Winners закрепляет победителя конфликта: путь файла → мод. Без записи
+	// побеждает мод, стоящий ниже в порядке.
+	Winners map[string]string `json:"winners,omitempty"`
 }
 
 // Index возвращает позицию мода в профиле или -1.

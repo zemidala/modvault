@@ -105,8 +105,8 @@
     <div class="plan-title" id="plan-title"></div>
     <div class="muted small" id="plan-detail"></div>
   </div>
-  <button class="ghost" data-stage="3">Показать по файлам</button>
-  <button class="plate" data-stage="3">Развернуть</button>
+  <button class="ghost" id="plan-files">Показать по файлам</button>
+  <button class="plate" id="deploy">Развернуть</button>
 </footer>
 
 <div class="foot">
@@ -117,6 +117,15 @@
 </div>
 
 <div class="toast" id="toast" role="status" hidden></div>
+
+<div class="sheet-backdrop" id="sheet" hidden>
+  <section class="sheet frame" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+    <div class="heading"><h2 id="sheet-title">План по файлам</h2><span class="rule"></span><span class="diamond"></span></div>
+    <p class="muted small">«+» — файл ляжет в игру, «~» — заменит прежний, «−» — уберётся.</p>
+    <ul class="file-list sheet-list" id="sheet-list"></ul>
+    <div class="sheet-actions"><button class="ghost" id="sheet-close">Закрыть</button></div>
+  </section>
+</div>
 
 <script src="app.js"></script>
 </body>

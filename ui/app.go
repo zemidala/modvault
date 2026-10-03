@@ -15,10 +15,10 @@ import (
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
+	"github.com/zemidala/modvault/core/deploy"
 	"github.com/zemidala/modvault/core/fsx"
 	"github.com/zemidala/modvault/core/profile"
 	"github.com/zemidala/modvault/core/store"
-	"github.com/zemidala/modvault/internal/version"
 )
 
 //go:embed all:frontend
@@ -64,6 +64,8 @@ type StatusItem struct {
 	Label string `json:"label"`
 	Value string `json:"value"`
 	Level Level  `json:"level"`
+	// Command — метод App, который вызывает щелчок по значению.
+	Command string `json:"command"`
 }
 
 // Issue — замечание в блоке «Требуют внимания».
@@ -75,6 +77,8 @@ type Issue struct {
 	Action string `json:"action"`
 	// Stage — этап плана, на котором действие заработает.
 	Stage int `json:"stage"`
+	// Command — метод App, который вызывает кнопка; пусто — действие ещё не готово.
+	Command string `json:"command"`
 }
 
 // Mod — строка списка и карточка мода.
@@ -103,6 +107,11 @@ type App struct {
 	profiles *profile.Dir
 	openErr  error // почему не открылись хранилище или профили
 
+	settings  settings
+	deployer  *deploy.Deployer
+	deployErr error           // почему нельзя развёртывать в выбранную папку
+	recovery  deploy.Recovery // что сделано с прерванным развёртыванием при запуске
+
 	demo []demoMod
 }
 
@@ -130,6 +139,12 @@ func NewAppAt(home string) *App {
 	a.store, a.openErr = store.Open(home)
 	if a.openErr == nil {
 		a.profiles, a.openErr = profile.Open(filepath.Join(home, "profiles"))
+	}
+	if a.openErr == nil {
+		a.settings, a.openErr = loadSettings(home)
+	}
+	if a.openErr == nil && a.settings.GameDir != "" {
+		a.openDeployer()
 	}
 	return a
 }
@@ -240,7 +255,7 @@ func (a *App) RemoveMod(id string) (State, error) {
 		return State{}, errors.New("это демонстрационный мод: удалять нечего")
 	}
 
-	if !a.confirm("Удалить мод", fmt.Sprintf("Удалить «%s» из хранилища?\n\nВсе его версии уйдут в Корзину.", a.modName(id))) {
+	if !a.confirm("Удалить мод", fmt.Sprintf("Удалить «%s» из хранилища?\n\nВсе его версии уйдут в Корзину. Если мод развёрнут, его файлы уберутся из игры при следующем развёртывании.", a.modName(id))) {
 		return a.state()
 	}
 	err = a.removeMod(id, false)
@@ -318,7 +333,15 @@ func (a *App) hasMods() (bool, error) {
 		return false, a.openErr
 	}
 	mods, _, err := a.store.List()
-	return len(mods) > 0, err
+	if err != nil || len(mods) > 0 {
+		return len(mods) > 0, err
+	}
+	// Хранилище пусто, но в игре ещё лежат файлы модов: их надо показать и снять.
+	if a.deployer != nil {
+		m, err := a.deployer.Manifest()
+		return err == nil && m.Len() > 0, err
+	}
+	return false, nil
 }
 
 func (a *App) modName(id string) string {
@@ -400,69 +423,6 @@ func (a *App) state() (State, error) {
 		return a.demoState(), nil
 	}
 	return a.realState()
-}
-
-// realState собирает состояние окна из хранилища и профиля.
-func (a *App) realState() (State, error) {
-	p, mods, err := a.loadProfile()
-	if err != nil {
-		return State{}, err
-	}
-	_, problems, err := a.store.List()
-	if err != nil {
-		return State{}, err
-	}
-
-	s := State{
-		Version: version.String(),
-		Home:    a.home,
-		Profile: p.Name,
-		Issues:  []Issue{},
-		Mods:    make([]Mod, 0, len(p.Entries)),
-		Plan:    []string{},
-	}
-	byID := make(map[string]store.Mod, len(mods))
-	for _, m := range mods {
-		byID[m.ID] = m
-	}
-	for _, e := range p.Entries {
-		m := byID[e.ModID]
-		v, err := a.store.Get(e.ModID, e.VersionID)
-		if err != nil {
-			return State{}, err
-		}
-		row := Mod{
-			ID: e.ModID, Name: v.Name, Version: v.Version, Source: v.Source,
-			Files: len(v.Files), Versions: len(m.Versions), Enabled: e.Enabled,
-			State: "В хранилище", Level: LevelOK,
-		}
-		if row.Version == "" {
-			row.Version = "—"
-		}
-		if !e.Enabled {
-			row.State, row.Level = "Выключен", LevelOff
-		}
-		s.Mods = append(s.Mods, row)
-	}
-	for _, problem := range problems {
-		s.Issues = append(s.Issues, Issue{
-			Title: "Запись в хранилище повреждена", Detail: problem.Error(), Level: LevelError,
-		})
-	}
-
-	n := len(mods)
-	checks := StatusItem{Label: "Проверки", Value: "замечаний нет", Level: LevelOK}
-	if k := len(s.Issues); k > 0 {
-		checks.Value = fmt.Sprintf("%d %s", k, plural(k, "замечание", "замечания", "замечаний"))
-		checks.Level = LevelError
-	}
-	s.Status = []StatusItem{
-		{Label: "Игра", Value: "поиск появится на этапе 4", Level: LevelOff},
-		{Label: "Хранилище", Value: fmt.Sprintf("%d %s", n, plural(n, "мод", "мода", "модов")), Level: LevelOK},
-		{Label: "Файлы в игре", Value: "развёртывание появится на этапе 3", Level: LevelOff},
-		checks,
-	}
-	return s, nil
 }
 
 // plural выбирает форму слова по правилам русского языка: 1 мод, 2 мода, 5 модов.
