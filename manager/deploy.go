@@ -39,6 +39,8 @@ type settings struct {
 	// nxm://; NxmPrevious — кто открывал их до этого.
 	NxmCommand  string `json:"nxmCommand,omitempty"`
 	NxmPrevious string `json:"nxmPrevious,omitempty"`
+	// Favorites — избранные моды.
+	Favorites []string `json:"favorites,omitempty"`
 }
 
 func loadSettings(home string) (settings, error) {
@@ -372,6 +374,10 @@ func (a *Manager) realState() (State, error) {
 	}
 	updates := a.loadUpdates()
 	inSets := a.setsByMod(p)
+	favorite := map[string]bool{}
+	for _, id := range a.settings.Favorites {
+		favorite[id] = true
+	}
 	for _, e := range p.Entries {
 		v, err := a.store.Get(e.ModID, e.VersionID)
 		if err != nil {
@@ -384,6 +390,11 @@ func (a *Manager) realState() (State, error) {
 		}
 		if row.Sets == nil {
 			row.Sets = []string{}
+		}
+		row.Favorite = favorite[e.ModID]
+		if st, ok := updates.Stats[v.NexusID]; ok && v.NexusID != 0 && updates.Profiles[v.NexusID] != "" {
+			row.HasStats = true
+			row.Endorsements, row.Downloads, row.UniqueDownloads = st.Endorsements, st.Downloads, st.UniqueDownloads
 		}
 		if u, ok := updates.Mods[e.ModID]; ok && u.newerThan(v) {
 			row.Available = u.Version

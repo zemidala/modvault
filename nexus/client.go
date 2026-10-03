@@ -170,6 +170,11 @@ type ModInfo struct {
 	// Author — автор, как он назван на странице; UploadedBy — кто выложил.
 	Author     string `json:"author"`
 	UploadedBy string `json:"uploaded_by"`
+	// Endorsements — сколько пользователей одобрили мод; Downloads и
+	// UniqueDownloads — сколько раз его скачали всего и сколько разных людей.
+	Endorsements    int `json:"endorsement_count"`
+	Downloads       int `json:"mod_downloads"`
+	UniqueDownloads int `json:"mod_unique_downloads"`
 	// ProfileURL — страница того, кто выложил мод; Uploader — он же по номеру.
 	ProfileURL string `json:"uploaded_users_profile_url"`
 	Uploader   struct {

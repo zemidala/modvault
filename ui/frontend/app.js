@@ -381,6 +381,9 @@ async function openRowMenu(mod, x, y) {
   };
   const current = state.profile;
   const items = [{ title: many ? `Выделено модов: ${ids.length}` : mod.name }];
+  if (many || !mod.favorite) items.push({ label: "★ В избранное", action: () => call(() => backend().SetFavorite(ids, true)) });
+  if (many || mod.favorite) items.push({ label: "☆ Убрать из избранного", action: () => call(() => backend().SetFavorite(ids, false)) });
+  items.push({ separator: true });
   if (many || mod.enabled) {
     items.push({ label: `Убрать из набора «${current}»`, action: () => done(() => backend().RemoveFromSet(current, ids)) });
   }
@@ -415,7 +418,10 @@ function renderMods() {
   const query = $("search").value.trim().toLowerCase();
   body.replaceChildren();
 
-  state.mods.forEach((mod, index) => {
+  // Избранные моды стоят первыми; номер у каждого — его место в порядке загрузки.
+  const shown = state.mods.map((mod, index) => ({ mod, index }));
+  shown.sort((a, b) => Number(b.mod.favorite) - Number(a.mod.favorite) || a.index - b.index);
+  shown.forEach(({ mod, index }) => {
     if (query && !mod.name.toLowerCase().includes(query) && !(mod.author || "").toLowerCase().includes(query)) return;
 
     const row = el("tr");
@@ -447,8 +453,23 @@ function renderMods() {
     stateCell.title = mod.state;
     row.dataset.id = mod.id;
 
-    const nameCell = el("td", "name", mod.name);
+    row.classList.toggle("favorite", !!mod.favorite);
+    const nameCell = el("td", "name");
     nameCell.title = mod.name + ((mod.sets || []).length ? " — в наборах: " + mod.sets.join(", ") : "");
+    const star = el("button", "star", mod.favorite ? "★" : "☆");
+    star.title = mod.favorite ? "Убрать из избранного" : "В избранное: мод будет стоять вверху списка";
+    star.setAttribute("aria-label", star.title);
+    star.setAttribute("aria-pressed", String(!!mod.favorite));
+    star.addEventListener("click", (event) => {
+      event.stopPropagation();
+      call(() => backend().SetFavorite([mod.id], !mod.favorite));
+    });
+    nameCell.append(star, mod.name);
+
+    const ratingCell = el("td", "rating", mod.hasStats ? count(mod.endorsements) : "—");
+    ratingCell.title = mod.hasStats ? `Одобрений на Nexus: ${mod.endorsements.toLocaleString("ru-RU")}` : statsHint(mod);
+    const statsCell = el("td", "stats", mod.hasStats ? count(mod.uniqueDownloads) : "—");
+    statsCell.title = mod.hasStats ? downloadsText(mod) : statsHint(mod);
     const authorCell = el("td", "author");
     authorCell.title = mod.author || (mod.nexusId ? "Автор станет известен после проверки обновлений" : "У мода нет номера на Nexus: автор неизвестен");
     authorCell.append(authorLink(mod) || mod.author || "—");
@@ -467,7 +488,7 @@ function renderMods() {
     });
     if (!sets.length) setsCell.append("—");
 
-    row.append(el("td", "num", String(index + 1)), toggleCell, nameCell, authorCell, versionCell, updateTd, setsCell, stateCell);
+    row.append(el("td", "num", String(index + 1)), toggleCell, nameCell, authorCell, ratingCell, statsCell, versionCell, updateTd, setsCell, stateCell);
 
     const select = () => {
       selectedId = mod.id === selectedId ? null : mod.id;
@@ -502,6 +523,22 @@ function renderMods() {
   $("mods-empty").hidden = body.children.length > 0;
 }
 
+// count сокращает большое число: 1 234 → «1,2 тыс.», 2 500 000 → «2,5 млн».
+function count(n) {
+  const short = (value, unit) => `${value.toFixed(value < 10 ? 1 : 0).replace(".", ",").replace(",0", "")} ${unit}`;
+  if (n >= 1e6) return short(n / 1e6, "млн");
+  if (n >= 1e3) return short(n / 1e3, "тыс.");
+  return String(n);
+}
+
+function downloadsText(mod) {
+  return `${mod.uniqueDownloads.toLocaleString("ru-RU")} человек, всего скачиваний: ${mod.downloads.toLocaleString("ru-RU")}`;
+}
+
+function statsHint(mod) {
+  return mod.nexusId ? "Статистика появится после проверки обновлений" : "У мода нет номера на Nexus: статистики нет";
+}
+
 // authorLink — имя автора ссылкой на его профиль на Nexus; null, если
 // профиль неизвестен.
 function authorLink(mod) {
@@ -523,6 +560,8 @@ function renderCard() {
   const mod = state.mods.find((m) => m.id === selectedId);
   const card = $("card");
   card.hidden = !mod || !$("view-placeholder").hidden;
+  // С открытой карточкой списку тесно: часть столбцов уходит в неё.
+  document.body.classList.toggle("with-card", !card.hidden);
   if (!mod) return;
 
   $("card-name").textContent = mod.name;
@@ -531,6 +570,13 @@ function renderCard() {
   $("card-author").hidden = !mod.author;
   $("card-author").replaceChildren(authorLink(mod) || mod.author || "");
   $("card-version").textContent = mod.version;
+  for (const id of ["card-rating-label", "card-rating", "card-stats-label", "card-stats"]) $(id).hidden = !mod.hasStats;
+  $("card-rating").textContent = mod.hasStats ? mod.endorsements.toLocaleString("ru-RU") : "";
+  $("card-stats").textContent = mod.hasStats ? downloadsText(mod) : "";
+  const sets = mod.sets || [];
+  $("card-sets-label").hidden = !sets.length;
+  $("card-sets").hidden = !sets.length;
+  $("card-sets").textContent = sets.join(", ");
   $("card-files").textContent = String(mod.files);
   $("card-versions").textContent = String(mod.versions);
   $("card-state").textContent = mod.state;

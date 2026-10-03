@@ -177,7 +177,8 @@ func (f *fakeNexus) serve(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case len(parts) == 1:
 		reply(map[string]any{"mod_id": modID, "name": m.name, "version": "0", "author": "Автор " + m.name, "uploaded_by": "uploader",
-			"uploaded_users_profile_url": "https://www.nexusmods.com/users/" + strconv.Itoa(modID*10)})
+			"uploaded_users_profile_url": "https://www.nexusmods.com/users/" + strconv.Itoa(modID*10),
+			"endorsement_count":          modID * 100, "mod_downloads": modID * 5000, "mod_unique_downloads": modID * 3000})
 	case len(parts) == 2 && parts[1] == "files":
 		updates := []map[string]int{}
 		for _, u := range m.updates {
@@ -418,6 +419,12 @@ func TestUpdates(t *testing.T) {
 	}
 	if m := findMod(t, rep.State, "score_board"); m.Author != "Автор Scoreboard" || m.AuthorURL != "https://www.nexusmods.com/users/220" {
 		t.Errorf("автор после проверки: %+v", m)
+	}
+	if m := findMod(t, rep.State, "score_board"); !m.HasStats || m.Endorsements != 2200 || m.Downloads != 110000 || m.UniqueDownloads != 66000 {
+		t.Errorf("статистика после проверки: %+v", m)
+	}
+	if m := findMod(t, rep.State, "flux"); m.HasStats {
+		t.Errorf("статистика мода с диска: %+v", m)
 	}
 	if page, err := a.AuthorPage("score_board"); err != nil || page != "https://www.nexusmods.com/users/220" {
 		t.Errorf("профиль автора: %q, %v", page, err)

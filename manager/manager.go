@@ -83,6 +83,14 @@ type Mod struct {
 	Author    string `json:"author"` // автор по сведениям Nexus; пусто — неизвестен
 	// AuthorURL — профиль автора на Nexus; пусто — неизвестен.
 	AuthorURL string `json:"authorUrl"`
+	// Статистика мода на Nexus: одобрения и скачивания (разными людьми и
+	// всего). HasStats — она известна.
+	HasStats        bool `json:"hasStats"`
+	Endorsements    int  `json:"endorsements"`
+	Downloads       int  `json:"downloads"`
+	UniqueDownloads int  `json:"uniqueDownloads"`
+	// Favorite — мод в избранном: окно показывает такие первыми.
+	Favorite  bool   `json:"favorite"`
 	NexusID   int    `json:"nexusId"` // номер мода на Nexus; 0 — неизвестен
 	Files     int    `json:"files"`
 	Versions  int    `json:"versions"`
@@ -376,6 +384,34 @@ func (a *Manager) pruneVersions(modID, current, prev string) {
 			a.store.Remove(modID, v.ID, false) // Корзина недоступна — версия просто остаётся
 		}
 	}
+}
+
+// SetFavorite добавляет мод в избранное или убирает из него. Избранное
+// одно на все наборы и на порядок загрузки не влияет.
+func (a *Manager) SetFavorite(ids []string, favorite bool) (State, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.openErr != nil {
+		return State{}, a.openErr
+	}
+	change := map[string]bool{}
+	for _, id := range ids {
+		change[id] = true
+	}
+	kept := a.settings.Favorites[:0:0]
+	for _, id := range a.settings.Favorites {
+		if !change[id] {
+			kept = append(kept, id)
+		}
+	}
+	if favorite {
+		kept = append(kept, ids...)
+	}
+	a.settings.Favorites = kept
+	if err := a.saveSettings(); err != nil {
+		return State{}, err
+	}
+	return a.state()
 }
 
 // ModName возвращает название мода.

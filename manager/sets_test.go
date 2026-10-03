@@ -244,3 +244,36 @@ func TestVersionSharedBySets(t *testing.T) {
 		t.Errorf("новый мод включён в старом наборе: %+v", m)
 	}
 }
+
+func TestFavorites(t *testing.T) {
+	a, _ := setsApp(t)
+	order := ids(state(t, a))
+
+	s, err := a.SetFavorite([]string{"plain", "deep"}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !findMod(t, s, "plain").Favorite || !findMod(t, s, "deep").Favorite || findMod(t, s, "other").Favorite {
+		t.Errorf("избранное: %+v", s.Mods)
+	}
+	// Порядок загрузки избранное не меняет, и в игру ничего нести не нужно.
+	if ids(s) != order || s.PlanTitle != "" {
+		t.Errorf("порядок %s, план %q", ids(s), s.PlanTitle)
+	}
+	// Избранное одно на все наборы и переживает перезапуск.
+	a.CreateSet("Тест", []string{"other"})
+	if res, _ := a.SwitchSet("Тест"); !findMod(t, res.State, "plain").Favorite {
+		t.Error("в другом наборе избранное пропало")
+	}
+	if !findMod(t, state(t, NewWith(a.home, a.game)), "deep").Favorite {
+		t.Error("избранное не сохранилось")
+	}
+	// Повторное добавление не плодит записи; убирается разом.
+	a.SetFavorite([]string{"plain"}, true)
+	if s, _ = a.SetFavorite([]string{"plain"}, false); findMod(t, s, "plain").Favorite || !findMod(t, s, "deep").Favorite {
+		t.Errorf("после удаления из избранного: %+v", s.Mods)
+	}
+	if len(a.settings.Favorites) != 1 {
+		t.Errorf("записи избранного: %v", a.settings.Favorites)
+	}
+}

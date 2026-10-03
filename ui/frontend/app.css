@@ -239,6 +239,8 @@ main section { display: flex; flex-direction: column; gap: 8px; }
 .col-num { width: 44px; }
 .col-toggle { width: 60px; }
 .col-author { width: 110px; }
+.col-rating { width: 78px; }
+.col-stats { width: 86px; }
 .col-version { width: 100px; }
 .col-update { width: 120px; }
 .col-sets { width: 110px; }
@@ -247,6 +249,8 @@ main section { display: flex; flex-direction: column; gap: 8px; }
   .col-num { width: 52px; }
   .col-toggle { width: 68px; }
   .col-author { width: 180px; }
+  .col-rating { width: 100px; }
+  .col-stats { width: 110px; }
   .col-version { width: 130px; }
   .col-update { width: 160px; }
   .col-sets { width: 240px; }
@@ -382,6 +386,7 @@ tr[data-enabled="false"] .name, tr[data-enabled="false"] .version { color: var(-
   /* В узком окне наборы мода видны в подсказке к его названию. */
   .col-sets, .mods td.sets { display: none; }
   .col-author, .mods td.author { display: none; }
+  .col-rating, .mods td.rating, .col-stats, .mods td.stats { display: none; }
 }
 
 .status-command {
@@ -572,3 +577,24 @@ button.busy::after,
   text-underline-offset: 3px;
 }
 .link:hover { color: var(--orange-text); text-decoration-color: currentColor; }
+
+/* Рейтинг и скачивания с Nexus. */
+.rating, .stats { font-size: 13px; font-variant-numeric: tabular-nums; color: var(--muted); }
+/* С открытой карточкой мода эти сведения показывает она. */
+.with-card .col-sets, .with-card .mods td.sets,
+.with-card .col-rating, .with-card .mods td.rating,
+.with-card .col-stats, .with-card .mods td.stats { display: none; }
+
+/* Избранное: звёздочка у названия, такие моды стоят первыми. */
+.star {
+  margin-right: 6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-size: 16px;
+  line-height: 1;
+  color: var(--brass-frame);
+}
+.star:hover { color: var(--gold); }
+.star[aria-pressed="true"] { color: var(--gold); }
+.mods tbody tr.favorite .num { color: var(--gold); }

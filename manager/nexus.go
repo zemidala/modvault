@@ -248,6 +248,7 @@ func (a *Manager) installFile(ctx context.Context, c *nexus.Client, domain strin
 	// Автор известен из того же ответа Nexus: запоминаем, чтобы не спрашивать снова.
 	known := a.loadUpdates()
 	known.Authors[modID], known.Profiles[modID] = firstNonEmpty(mod.Author, mod.UploadedBy), mod.AuthorPage(domain)
+	known.Stats[modID] = statsOf(mod, time.Now().UTC())
 	a.saveUpdates(known)
 
 	synced := a.inSync() // до обновления: потом профиль уже отличается от игры
@@ -401,6 +402,24 @@ type updates struct {
 	// Profiles — адрес профиля автора на Nexus; запись есть у каждого мода,
 	// о котором уже спрашивали, даже если адрес пуст.
 	Profiles map[int]string `json:"profiles"`
+	// Stats — одобрения и скачивания мода по его номеру на Nexus.
+	Stats map[int]modStats `json:"stats"`
+}
+
+// modStats — статистика мода на Nexus, какой её застал запрос.
+type modStats struct {
+	Endorsements    int       `json:"endorsements"`
+	Downloads       int       `json:"downloads"`
+	UniqueDownloads int       `json:"uniqueDownloads"`
+	At              time.Time `json:"at"`
+}
+
+// statsAge — как долго статистика считается свежей: чаще её не запрашиваем,
+// чтобы проверка обновлений оставалась быстрой.
+const statsAge = 7 * 24 * time.Hour
+
+func statsOf(m nexus.ModInfo, at time.Time) modStats {
+	return modStats{Endorsements: m.Endorsements, Downloads: m.Downloads, UniqueDownloads: m.UniqueDownloads, At: at}
 }
 
 func (a *Manager) updatesPath() string {
@@ -422,6 +441,9 @@ func (a *Manager) loadUpdates() updates {
 	}
 	if u.Profiles == nil {
 		u.Profiles = map[int]string{}
+	}
+	if u.Stats == nil {
+		u.Stats = map[int]modStats{}
 	}
 	return u
 }
@@ -550,11 +572,14 @@ func (a *Manager) CheckUpdates(ctx context.Context, progress func(CheckProgress)
 		}
 	}
 
-	// У кого автор ещё неизвестен: о таких модах спрашиваем страницу мода —
-	// один раз, дальше автор берётся из сохранённого.
+	// У кого автор ещё неизвестен или статистика устарела: о таких модах
+	// спрашиваем страницу мода. Автор запоминается насовсем, статистика
+	// обновляется не чаще раза в неделю.
 	wantAuthor := map[int]bool{}
 	for _, t := range targets {
-		if _, ok := cache.Profiles[t.nexusID]; !ok {
+		_, known := cache.Profiles[t.nexusID]
+		stats, counted := cache.Stats[t.nexusID]
+		if !known || !counted || started.Sub(stats.At) > statsAge {
 			wantAuthor[t.nexusID] = true
 		}
 	}
@@ -604,6 +629,7 @@ func (a *Manager) CheckUpdates(ctx context.Context, progress func(CheckProgress)
 			if gone(err) {
 				step.Missing = true // мод убран с Nexus или скрыт автором
 				cache.Authors[id], cache.Profiles[id] = "", ""
+				cache.Stats[id] = modStats{At: started}
 				progress(step)
 				continue
 			}
@@ -626,11 +652,13 @@ func (a *Manager) CheckUpdates(ctx context.Context, progress func(CheckProgress)
 			switch {
 			case gone(err):
 				cache.Authors[id], cache.Profiles[id] = "", ""
+				cache.Stats[id] = modStats{At: started}
 			case err != nil:
 				failure = err
 			default:
 				cache.Authors[id] = firstNonEmpty(info.Author, info.UploadedBy)
 				cache.Profiles[id] = info.AuthorPage(domain)
+				cache.Stats[id] = statsOf(info, started)
 			}
 			if failure != nil {
 				break

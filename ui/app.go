@@ -379,6 +379,11 @@ func (a *App) OpenNexus(id string) error {
 	return nil
 }
 
+// SetFavorite добавляет моды в избранное или убирает из него.
+func (a *App) SetFavorite(ids []string, favorite bool) (manager.State, error) {
+	return a.m.SetFavorite(ids, favorite)
+}
+
 // OpenAuthor открывает профиль автора мода на Nexus в браузере.
 func (a *App) OpenAuthor(id string) error {
 	page, err := a.m.AuthorPage(id)
