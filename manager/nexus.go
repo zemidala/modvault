@@ -871,14 +871,17 @@ func (a *Manager) Endorse(ctx context.Context, id string, endorse bool) (Endorse
 	if err := errors.Join(err, cerr, derr); err != nil {
 		return EndorseResult{}, err
 	}
-	if v.NexusID == 0 {
-		return EndorseResult{}, fmt.Errorf("у «%s» нет номера на Nexus: одобрить его нельзя", v.Name)
-	}
 	status, err := c.Endorse(ctx, domain, v.NexusID, v.Version, endorse)
 	if err != nil {
 		what := "одобрение"
 		if !endorse {
 			what = "снятие одобрения"
+		}
+		// Отказ, проверенный на живом Nexus: одобрять можно только то, что
+		// скачано с сайта под этой же учётной записью.
+		if strings.Contains(err.Error(), "NOT_DOWNLOADED_MOD") {
+			return EndorseResult{}, fmt.Errorf("Nexus не принял %s «%s»: по его данным вы этот мод с сайта не скачивали (NOT_DOWNLOADED_MOD). "+
+				"Одобрять можно только моды, скачанные под своей учётной записью — кнопкой на сайте или через программу с вашим ключом", what, v.Name)
 		}
 		return EndorseResult{}, fmt.Errorf("Nexus не принял %s «%s»: %w", what, v.Name, err)
 	}

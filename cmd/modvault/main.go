@@ -142,6 +142,9 @@ Nexus:
   nexus logout              забыть ключ
   nexus check               проверить, вышли ли новые версии модов
   nexus get <ссылка nxm>    скачать и поставить мод по ссылке с сайта
+  nexus endorsed            какие моды вы одобрили
+  nexus endorse <мод>       одобрить мод на Nexus
+  nexus abstain <мод>       снять одобрение
 
   version, help
 
@@ -705,6 +708,30 @@ func (c *cli) nexus(args []string) error {
 				fmt.Fprintf(c.out, "%s: %d%%\n", p.Name, tenth*10)
 			}
 		})
+		if err != nil {
+			return err
+		}
+		fmt.Fprintln(c.out, res.Message)
+		return nil
+	case "endorsed":
+		s, err := m.State()
+		if err != nil {
+			return err
+		}
+		n := 0
+		for _, mod := range s.Mods {
+			if mod.Endorsed {
+				fmt.Fprintf(c.out, "%-30s %s\n", mod.ID, mod.Name)
+				n++
+			}
+		}
+		fmt.Fprintf(c.out, "одобрено модов: %d (список обновляет modvault nexus check)\n", n)
+		return nil
+	case "endorse", "abstain":
+		if err := c.need("nexus "+args[0], args[1:], 1, "<мод>"); err != nil {
+			return err
+		}
+		res, err := m.Endorse(ctx, args[1], args[0] == "endorse")
 		if err != nil {
 			return err
 		}

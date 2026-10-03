@@ -748,9 +748,14 @@ func TestEndorse(t *testing.T) {
 	}
 
 	// Отказ Nexus передаётся его словами, отметка не меняется.
-	f.refuse = "TOO_SOON_AFTER_DOWNLOAD"
-	if _, err := a.Endorse(ctx, "scoreboard", true); err == nil || !strings.Contains(err.Error(), "TOO_SOON_AFTER_DOWNLOAD") || !strings.Contains(err.Error(), "Nexus не принял одобрение «Scoreboard»") {
+	f.refuse = "SOME_OTHER_REASON"
+	if _, err := a.Endorse(ctx, "scoreboard", true); err == nil || !strings.Contains(err.Error(), "SOME_OTHER_REASON") || !strings.Contains(err.Error(), "Nexus не принял одобрение «Scoreboard»") {
 		t.Errorf("отказ Nexus: %v", err)
+	}
+	// Отказ, который Nexus даёт на деле, объясняется по-русски.
+	f.refuse = "NOT_DOWNLOADED_MOD"
+	if _, err := a.Endorse(ctx, "scoreboard", true); err == nil || !strings.Contains(err.Error(), "с сайта не скачивали") {
+		t.Errorf("отказ «мод не скачан»: %v", err)
 	}
 	if findMod(t, state(t, a), "scoreboard").Endorsed {
 		t.Error("после отказа мод отмечен одобренным")
