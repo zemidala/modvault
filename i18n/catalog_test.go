@@ -219,3 +219,18 @@ func TestTranslate(t *testing.T) {
 		t.Errorf("обёрнутая ошибка: %q", err)
 	}
 }
+
+// Пока язык не выбран, интерфейс английский; выбор русского запоминается.
+func TestDefaultLanguage(t *testing.T) {
+	UseFile(filepath.Join(t.TempDir(), "language"))
+	defer UseFile("")
+	if Saved() != English {
+		t.Errorf("без выбора язык %q", Saved())
+	}
+	if err := Save(Russian); err != nil {
+		t.Fatal(err)
+	}
+	if Saved() != Russian {
+		t.Errorf("после выбора русского язык %q", Saved())
+	}
+}

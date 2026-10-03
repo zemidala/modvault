@@ -1,6 +1,7 @@
 // Package i18n — язык интерфейса.
 //
-// Исходный язык программы — русский: строки в коде написаны по-русски и
+// По умолчанию интерфейс английский (Default); русский включается в
+// настройках. Исходный язык кода — русский: строки в коде написаны по-русски и
 // служат ключами словаря. Для другого языка строка ищется в словаре; если
 // перевода нет, остаётся русская. Так работают T, Sprintf, Errorf и NewError.
 //
@@ -41,18 +42,21 @@ func init() {
 	Use(saved())
 }
 
-// saved читает выбранный язык; без выбора — русский.
+// Default — язык, пока пользователь не выбрал другой.
+const Default = English
+
+// saved читает выбранный язык; без выбора — Default.
 func saved() string {
 	if env := os.Getenv("MODVAULT_LANG"); env != "" {
 		return normal(env)
 	}
 	path, err := file()
 	if err != nil {
-		return Russian
+		return Default
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return Russian
+		return Default
 	}
 	return normal(string(data))
 }
