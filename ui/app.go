@@ -85,35 +85,53 @@ func (a *App) ChooseGame() (manager.State, error) {
 	return a.m.SetGame(dir)
 }
 
-// RemoveMod после подтверждения удаляет мод со всеми версиями в Корзину.
-// Если Корзина недоступна, спрашивает, удалять ли насовсем.
-func (a *App) RemoveMod(id string) (manager.State, error) {
-	if !a.confirm("Удалить мод", fmt.Sprintf("Удалить «%s» из хранилища?\n\nВсе его версии уйдут в Корзину. Если мод развёрнут, его файлы уберутся из игры при следующем развёртывании.", a.m.ModName(id))) {
-		return a.m.State()
+// Ask — вопрос пользователю перед действием. Окно рисует его само, в стиле
+// программы: системные окна Windows сюда не подходят.
+type Ask struct {
+	Title   string `json:"title"`
+	Message string `json:"message"`
+	OK      string `json:"ok"`     // подпись кнопки действия
+	Danger  bool   `json:"danger"` // действие необратимо
+}
+
+// RemoveAsk — вопрос перед удалением мода.
+func (a *App) RemoveAsk(id string) Ask {
+	return Ask{
+		Title: "Удалить мод",
+		Message: fmt.Sprintf("Удалить «%s» из хранилища?\n\nВсе его версии уйдут в Корзину. Если мод развёрнут, его файлы уберутся из игры при следующем развёртывании.",
+			a.m.ModName(id)),
+		OK: "Удалить",
 	}
-	s, err := a.m.RemoveMod(id, false)
+}
+
+// RemoveResult — итог удаления. TrashUnavailable — Корзина не приняла мод,
+// он остался на месте, и можно спросить, удалять ли насовсем.
+type RemoveResult struct {
+	State            manager.State `json:"state"`
+	TrashUnavailable bool          `json:"trashUnavailable"`
+	Ask              *Ask          `json:"ask"`
+}
+
+// RemoveMod удаляет мод со всеми версиями: в Корзину или, с permanent, насовсем.
+func (a *App) RemoveMod(id string, permanent bool) (RemoveResult, error) {
+	s, err := a.m.RemoveMod(id, permanent)
 	if errors.Is(err, fsx.ErrTrashUnavailable) {
-		if !a.confirm("Корзина недоступна", "Положить мод в Корзину не удалось.\n\nУдалить его насовсем? Вернуть его будет нельзя.") {
-			return a.m.State()
-		}
-		s, err = a.m.RemoveMod(id, true)
+		s, err = a.m.State()
+		return RemoveResult{State: s, TrashUnavailable: true, Ask: &Ask{
+			Title:   "Корзина недоступна",
+			Message: "Положить мод в Корзину не удалось.\n\nУдалить его насовсем? Вернуть его будет нельзя.",
+			OK:      "Удалить насовсем",
+			Danger:  true,
+		}}, err
 	}
-	return s, err
+	return RemoveResult{State: s}, err
 }
 
-func (a *App) confirm(title, message string) bool {
-	answer, err := runtime.MessageDialog(a.ctx, runtime.MessageDialogOptions{
-		Type: runtime.QuestionDialog, Title: title, Message: message, DefaultButton: "No",
-	})
-	return err == nil && answer == "Yes"
-}
-
-// Adopt показывает, что будет принято у Vortex, и после подтверждения
-// перенимает управление.
-func (a *App) Adopt() (manager.State, error) {
+// AdoptAsk показывает, что будет принято у Vortex.
+func (a *App) AdoptAsk() (Ask, error) {
 	rep, err := a.m.Adopt(true)
 	if err != nil {
-		return manager.State{}, err
+		return Ask{}, err
 	}
 	msg := fmt.Sprintf("Modvault примет у Vortex %d %s (развёрнуто %d) и %d %s в игре.\n\n"+
 		"Файлы игры не изменятся. Vortex будет отсоединён: его учёт развёртывания перейдёт к Modvault, "+
@@ -128,21 +146,22 @@ func (a *App) Adopt() (manager.State, error) {
 		msg += fmt.Sprintf("\n\nВнимание: %d %s в игре отличаются от хранилища Vortex — после усыновления они будут показаны как изменённые вне программы.",
 			len(rep.Problems), plural(len(rep.Problems), "файл", "файла", "файлов"))
 	}
-	if !a.confirm("Перенять управление у Vortex", msg) {
-		return a.m.State()
-	}
+	return Ask{Title: "Перенять управление у Vortex", Message: msg, OK: "Перенять"}, nil
+}
+
+// Adopt перенимает управление у Vortex.
+func (a *App) Adopt() (manager.State, error) {
 	if _, err := a.m.Adopt(false); err != nil {
 		return manager.State{}, err
 	}
 	return a.m.State()
 }
 
-// Release показывает, что изменится, и после подтверждения возвращает
-// управление Vortex.
-func (a *App) Release() (manager.State, error) {
+// ReleaseAsk показывает, что изменится при возврате Vortex.
+func (a *App) ReleaseAsk() (Ask, error) {
 	rep, err := a.m.Release(true)
 	if err != nil {
-		return manager.State{}, err
+		return Ask{}, err
 	}
 	msg := "Игра станет такой, какой её оставил Vortex: файлы модов снова будут ссылками на " + rep.Staging +
 		", порядок загрузки и база бандлов — как были.\n\n"
@@ -150,23 +169,28 @@ func (a *App) Release() (manager.State, error) {
 		msg += fmt.Sprintf("Изменится %d %s в игре. ", rep.Changes, plural(rep.Changes, "файл", "файла", "файлов"))
 	}
 	msg += "Моды останутся в хранилище Modvault, и перенять управление можно будет снова."
-	if !a.confirm("Вернуть управление Vortex", msg) {
-		return a.m.State()
-	}
+	return Ask{Title: "Вернуть управление Vortex", Message: msg, OK: "Вернуть Vortex"}, nil
+}
+
+// Release возвращает управление Vortex.
+func (a *App) Release() (manager.State, error) {
 	if _, err := a.m.Release(false); err != nil {
 		return manager.State{}, err
 	}
 	return a.m.State()
 }
 
-// IgnoreManagers после подтверждения перестаёт учитывать другие менеджеры,
-// кроме Vortex.
-func (a *App) IgnoreManagers() (manager.State, error) {
-	if !a.confirm("Не учитывать другие программы", "Modvault перестанет обращать внимание на другие менеджеры модов в папке игры (кроме Vortex).\n\nПодтвердите, что не пользуетесь ими для этой игры: две программы испортят друг другу учёт.") {
-		return a.m.State()
+// IgnoreManagersAsk — вопрос перед тем, как перестать учитывать другие менеджеры.
+func (a *App) IgnoreManagersAsk() Ask {
+	return Ask{
+		Title:   "Не учитывать другие программы",
+		Message: "Modvault перестанет обращать внимание на другие менеджеры модов в папке игры (кроме Vortex).\n\nПодтвердите, что не пользуетесь ими для этой игры: две программы испортят друг другу учёт.",
+		OK:      "Не учитывать",
 	}
-	return a.m.IgnoreManagers()
 }
+
+// IgnoreManagers перестаёт учитывать другие менеджеры, кроме Vortex.
+func (a *App) IgnoreManagers() (manager.State, error) { return a.m.IgnoreManagers() }
 
 func plural(n int, one, few, many string) string {
 	n %= 100

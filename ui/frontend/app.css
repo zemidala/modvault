@@ -238,7 +238,7 @@ main section { display: flex; flex-direction: column; gap: 8px; }
 .col-version { width: 90px; }
 .col-state { width: 280px; }
 
-.num { font-family: "Forum", serif; font-size: 16px; color: var(--brass); }
+.num { font-variant-numeric: tabular-nums; color: var(--brass); }
 .name { font-weight: 700; }
 .version { font-variant-numeric: tabular-nums; }
 .always { font-size: 12px; color: var(--muted); }
@@ -373,3 +373,8 @@ tr[data-enabled="false"] .name, tr[data-enabled="false"] .version { color: var(-
 .sheet p { margin: 0; }
 .sheet-list { flex: 1 1 auto; overflow-y: auto; min-height: 0; font-variant-numeric: tabular-nums; }
 .sheet-actions { display: flex; justify-content: flex-end; }
+
+.ask { width: min(620px, 100%); }
+.ask-message { white-space: pre-line; line-height: 1.45; }
+.sheet-actions { gap: 8px; }
+.plate.danger { background: var(--error-line); color: var(--parchment); }

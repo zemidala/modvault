@@ -118,6 +118,17 @@
 
 <div class="toast" id="toast" role="status" hidden></div>
 
+<div class="sheet-backdrop" id="ask" hidden>
+  <section class="sheet ask frame" role="alertdialog" aria-modal="true" aria-labelledby="ask-title" aria-describedby="ask-message">
+    <div class="heading"><h2 id="ask-title"></h2><span class="rule"></span><span class="diamond"></span></div>
+    <p class="ask-message" id="ask-message"></p>
+    <div class="sheet-actions">
+      <button class="ghost" id="ask-cancel">Отмена</button>
+      <button class="plate" id="ask-ok"></button>
+    </div>
+  </section>
+</div>
+
 <div class="sheet-backdrop" id="sheet" hidden>
   <section class="sheet frame" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
     <div class="heading"><h2 id="sheet-title">План по файлам</h2><span class="rule"></span><span class="diamond"></span></div>

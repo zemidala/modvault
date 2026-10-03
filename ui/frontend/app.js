@@ -18,17 +18,6 @@ function el(tag, className, text) {
   return node;
 }
 
-function roman(n) {
-  const table = [[1000, "M"], [900, "CM"], [500, "D"], [400, "CD"], [100, "C"], [90, "XC"], [50, "L"], [40, "XL"], [10, "X"], [9, "IX"], [5, "V"], [4, "IV"], [1, "I"]];
-  let out = "";
-  for (const [value, sign] of table) {
-    while (n >= value) {
-      out += sign;
-      n -= value;
-    }
-  }
-  return out;
-}
 
 let toastTimer = 0;
 function toast(text, level, sticky) {
@@ -129,7 +118,7 @@ function renderMods() {
     const stateCell = el("td", "state", mod.state);
     stateCell.dataset.level = mod.level;
 
-    row.append(el("td", "num", roman(index + 1)), toggleCell, el("td", "name", mod.name), el("td", "version", mod.version), stateCell);
+    row.append(el("td", "num", String(index + 1)), toggleCell, el("td", "name", mod.name), el("td", "version", mod.version), stateCell);
 
     const select = () => {
       selectedId = mod.id === selectedId ? null : mod.id;
@@ -217,12 +206,48 @@ function render() {
   renderPlan();
 }
 
+// ask показывает вопрос в окне программы и ждёт ответа: true — действие
+// подтверждено. Esc и «Отмена» — отказ.
+function ask(question) {
+  return new Promise((resolve) => {
+    const box = $("ask");
+    $("ask-title").textContent = question.title;
+    $("ask-message").textContent = question.message;
+    const ok = $("ask-ok");
+    ok.textContent = question.ok || "Да";
+    ok.classList.toggle("danger", !!question.danger);
+    const done = (answer) => {
+      box.hidden = true;
+      box.removeEventListener("keydown", onKey);
+      ok.onclick = null;
+      $("ask-cancel").onclick = null;
+      resolve(answer);
+    };
+    const onKey = (event) => {
+      if (event.key === "Escape") done(false);
+    };
+    ok.onclick = () => done(true);
+    $("ask-cancel").onclick = () => done(false);
+    box.addEventListener("keydown", onKey);
+    box.hidden = false;
+    // Необратимое по умолчанию не выбрано: Enter без раздумий его не запустит.
+    (question.danger ? $("ask-cancel") : ok).focus();
+  });
+}
+
+// confirmThen спрашивает вопрос, полученный от программы, и при согласии
+// выполняет действие; при отказе состояние остаётся прежним.
+async function confirmThen(question, action) {
+  if (!(await ask(await question()))) return state;
+  return action();
+}
+
 // Команды, которые программа разрешает вызывать из строк состояния и замечаний.
 const commands = {
   ChooseGame: () => backend().ChooseGame(),
-  Adopt: () => backend().Adopt(),
-  Release: () => backend().Release(),
-  IgnoreManagers: () => backend().IgnoreManagers(),
+  Adopt: () => confirmThen(() => backend().AdoptAsk(), () => backend().Adopt()),
+  Release: () => confirmThen(() => backend().ReleaseAsk(), () => backend().Release()),
+  IgnoreManagers: () => confirmThen(() => backend().IgnoreManagersAsk(), () => backend().IgnoreManagers()),
 };
 
 function run(command) {
@@ -291,7 +316,15 @@ function wire() {
       if (after !== before || wasDemo !== state.demo) toast("Мод добавлен в хранилище");
     }
   });
-  $("card-remove").addEventListener("click", () => call(() => backend().RemoveMod(selectedId)));
+  $("card-remove").addEventListener("click", () => call(async () => {
+    const id = selectedId;
+    if (!(await ask(await backend().RemoveAsk(id)))) return state;
+    let res = await backend().RemoveMod(id, false);
+    if (res.trashUnavailable && (await ask(res.ask))) {
+      res = await backend().RemoveMod(id, true);
+    }
+    return res.state;
+  }));
   $("card-show-files").addEventListener("click", toggleFiles);
   $("deploy").addEventListener("click", deploy);
   $("play").addEventListener("click", async () => {
