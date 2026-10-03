@@ -251,7 +251,7 @@ func (a *App) Sort() (manager.State, error) { return a.m.Sort() }
 func (a *App) NexusKeyAsk() Ask {
 	ask := Ask{Title: "Ключ Nexus Mods", OK: "Сохранить", Input: true, Placeholder: "Personal API Key"}
 	ask.Message = "Ключ нужен, чтобы ставить моды кнопкой «Mod Manager Download» на сайте и проверять обновления.\n\n" +
-		"Где взять: nexusmods.com → настройки учётной записи → API Keys → Personal API Key.\n\n" +
+		"Где взять: nexusmods.com → настройки сайта (Site preferences) → страница API Access → Personal API Key.\n\n" +
 		"Ключ хранится в учётных данных Windows; в файлы программы он не попадает."
 	if user := a.m.NexusUser(); user != "" {
 		ask.Message = fmt.Sprintf("Сейчас сохранён ключ пользователя %s.\n\nВведите другой ключ, чтобы заменить его, или оставьте поле пустым, чтобы программа забыла ключ.", user)

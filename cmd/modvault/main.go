@@ -619,7 +619,7 @@ func (c *cli) nexus(args []string) error {
 		}
 		return nil
 	case "login":
-		fmt.Fprint(c.out, "Ключ API (nexusmods.com → настройки учётной записи → API Keys → Personal API Key): ")
+		fmt.Fprint(c.out, "Ключ API (nexusmods.com → Site preferences → API Access → Personal API Key): ")
 		key, err := bufio.NewReader(stdin).ReadString('\n')
 		if err != nil && key == "" {
 			return errors.New("ключ не введён")
