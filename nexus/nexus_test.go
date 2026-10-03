@@ -43,6 +43,29 @@ func TestParseLink(t *testing.T) {
 	}
 }
 
+func TestAuthorPage(t *testing.T) {
+	page := func(profile string, member int) string {
+		m := ModInfo{ProfileURL: profile}
+		m.Uploader.ID = member
+		return m.AuthorPage("g")
+	}
+	if got := page("https://www.nexusmods.com/users/7", 7); got != "https://www.nexusmods.com/users/7" {
+		t.Errorf("адрес из ответа: %q", got)
+	}
+	if got := page("https://next.nexusmods.com/profile/zd", 0); got != "https://next.nexusmods.com/profile/zd" {
+		t.Errorf("адрес нового сайта: %q", got)
+	}
+	// Чужой или небезопасный адрес не открывается: берётся профиль по номеру.
+	for _, bad := range []string{"https://evil.example/users/7", "http://www.nexusmods.com/users/7", "https://nexusmods.com.evil.example/x", "file:///C:/x", ""} {
+		if got := page(bad, 7); got != "https://www.nexusmods.com/g/users/7" {
+			t.Errorf("%q: %q", bad, got)
+		}
+	}
+	if got := page("javascript:alert(1)", 0); got != "" {
+		t.Errorf("без номера и адреса: %q", got)
+	}
+}
+
 func TestNewer(t *testing.T) {
 	for _, tt := range []struct {
 		installed, latest string

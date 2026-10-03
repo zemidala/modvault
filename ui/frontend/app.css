@@ -555,3 +555,20 @@ button.busy::after,
   background: var(--panel);
   box-shadow: inset 0 -1px 0 var(--brass-line);
 }
+
+/* Ссылка в тексте: автор мода. */
+.link {
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+  color: var(--gold);
+  text-decoration: underline;
+  text-decoration-color: var(--brass-frame);
+  text-underline-offset: 3px;
+}
+.link:hover { color: var(--orange-text); text-decoration-color: currentColor; }

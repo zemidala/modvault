@@ -449,8 +449,9 @@ function renderMods() {
 
     const nameCell = el("td", "name", mod.name);
     nameCell.title = mod.name + ((mod.sets || []).length ? " — в наборах: " + mod.sets.join(", ") : "");
-    const authorCell = el("td", "author", mod.author || "—");
+    const authorCell = el("td", "author");
     authorCell.title = mod.author || (mod.nexusId ? "Автор станет известен после проверки обновлений" : "У мода нет номера на Nexus: автор неизвестен");
+    authorCell.append(authorLink(mod) || mod.author || "—");
     const versionCell = el("td", "version", mod.version);
     versionCell.title = mod.version;
     const updateTd = el("td", "update");
@@ -501,6 +502,23 @@ function renderMods() {
   $("mods-empty").hidden = body.children.length > 0;
 }
 
+// authorLink — имя автора ссылкой на его профиль на Nexus; null, если
+// профиль неизвестен.
+function authorLink(mod) {
+  if (!mod.author || !mod.authorUrl) return null;
+  const link = el("button", "link", mod.author);
+  link.title = `Открыть профиль ${mod.author} на Nexus`;
+  link.addEventListener("click", async (event) => {
+    event.stopPropagation(); // щелчок по ссылке не выбирает строку
+    try {
+      await backend().OpenAuthor(mod.id);
+    } catch (err) {
+      toast(String(err), "error");
+    }
+  });
+  return link;
+}
+
 function renderCard() {
   const mod = state.mods.find((m) => m.id === selectedId);
   const card = $("card");
@@ -511,7 +529,7 @@ function renderCard() {
   $("card-source").textContent = mod.source;
   $("card-author-label").hidden = !mod.author;
   $("card-author").hidden = !mod.author;
-  $("card-author").textContent = mod.author || "";
+  $("card-author").replaceChildren(authorLink(mod) || mod.author || "");
   $("card-version").textContent = mod.version;
   $("card-files").textContent = String(mod.files);
   $("card-versions").textContent = String(mod.versions);

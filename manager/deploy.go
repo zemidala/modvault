@@ -380,7 +380,7 @@ func (a *Manager) realState() (State, error) {
 		row := Mod{
 			ID: e.ModID, Name: v.Name, Version: v.Version, Source: v.Source, NexusID: v.NexusID,
 			Files: len(v.Files), Versions: len(byID[e.ModID].Versions), Enabled: e.Enabled,
-			Sets: inSets[e.ModID], Author: updates.Authors[v.NexusID],
+			Sets: inSets[e.ModID], Author: updates.Authors[v.NexusID], AuthorURL: updates.Profiles[v.NexusID],
 		}
 		if row.Sets == nil {
 			row.Sets = []string{}

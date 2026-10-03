@@ -246,10 +246,9 @@ func (a *Manager) installFile(ctx context.Context, c *nexus.Client, domain strin
 	}
 	info.Name = a.nexusName(info.Name, modID, file, files)
 	// Автор известен из того же ответа Nexus: запоминаем, чтобы не спрашивать снова.
-	if known := a.loadUpdates(); known.Authors[modID] != firstNonEmpty(mod.Author, mod.UploadedBy) || len(known.Authors) == 0 {
-		known.Authors[modID] = firstNonEmpty(mod.Author, mod.UploadedBy)
-		a.saveUpdates(known)
-	}
+	known := a.loadUpdates()
+	known.Authors[modID], known.Profiles[modID] = firstNonEmpty(mod.Author, mod.UploadedBy), mod.AuthorPage(domain)
+	a.saveUpdates(known)
 
 	synced := a.inSync() // до обновления: потом профиль уже отличается от игры
 	v, prev, err := a.addVersion(archive, info)
@@ -399,6 +398,9 @@ type updates struct {
 	// Authors — автор мода по его номеру на Nexus; пустая строка — Nexus
 	// автора не назвал или мода там больше нет.
 	Authors map[int]string `json:"authors"`
+	// Profiles — адрес профиля автора на Nexus; запись есть у каждого мода,
+	// о котором уже спрашивали, даже если адрес пуст.
+	Profiles map[int]string `json:"profiles"`
 }
 
 func (a *Manager) updatesPath() string {
@@ -417,6 +419,9 @@ func (a *Manager) loadUpdates() updates {
 	}
 	if u.Authors == nil {
 		u.Authors = map[int]string{}
+	}
+	if u.Profiles == nil {
+		u.Profiles = map[int]string{}
 	}
 	return u
 }
@@ -549,7 +554,7 @@ func (a *Manager) CheckUpdates(ctx context.Context, progress func(CheckProgress)
 	// один раз, дальше автор берётся из сохранённого.
 	wantAuthor := map[int]bool{}
 	for _, t := range targets {
-		if _, ok := cache.Authors[t.nexusID]; !ok {
+		if _, ok := cache.Profiles[t.nexusID]; !ok {
 			wantAuthor[t.nexusID] = true
 		}
 	}
@@ -598,7 +603,7 @@ func (a *Manager) CheckUpdates(ctx context.Context, progress func(CheckProgress)
 			rep.Requests++
 			if gone(err) {
 				step.Missing = true // мод убран с Nexus или скрыт автором
-				cache.Authors[id] = ""
+				cache.Authors[id], cache.Profiles[id] = "", ""
 				progress(step)
 				continue
 			}
@@ -620,11 +625,12 @@ func (a *Manager) CheckUpdates(ctx context.Context, progress func(CheckProgress)
 			rep.Requests++
 			switch {
 			case gone(err):
-				cache.Authors[id] = ""
+				cache.Authors[id], cache.Profiles[id] = "", ""
 			case err != nil:
 				failure = err
 			default:
 				cache.Authors[id] = firstNonEmpty(info.Author, info.UploadedBy)
+				cache.Profiles[id] = info.AuthorPage(domain)
 			}
 			if failure != nil {
 				break
@@ -724,6 +730,21 @@ func (a *Manager) ModPage(id string) (string, error) {
 		return "", err
 	}
 	return nexus.ModPage(domain, v.NexusID), nil
+}
+
+// AuthorPage возвращает адрес профиля автора мода на Nexus.
+func (a *Manager) AuthorPage(id string) (string, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	v, err := a.profileVersion(id)
+	if err != nil {
+		return "", err
+	}
+	page := a.loadUpdates().Profiles[v.NexusID]
+	if page == "" {
+		return "", fmt.Errorf("профиль автора «%s» неизвестен: проверьте обновления", v.Name)
+	}
+	return page, nil
 }
 
 // profileVersion возвращает версию мода, выбранную в профиле, если у мода

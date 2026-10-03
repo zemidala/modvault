@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -169,6 +170,25 @@ type ModInfo struct {
 	// Author — автор, как он назван на странице; UploadedBy — кто выложил.
 	Author     string `json:"author"`
 	UploadedBy string `json:"uploaded_by"`
+	// ProfileURL — страница того, кто выложил мод; Uploader — он же по номеру.
+	ProfileURL string `json:"uploaded_users_profile_url"`
+	Uploader   struct {
+		ID int `json:"member_id"`
+	} `json:"user"`
+}
+
+// AuthorPage возвращает адрес профиля автора мода на сайте Nexus или пустую
+// строку, если Nexus его не сообщил. Адрес из ответа принимается, только
+// если он ведёт на сам Nexus: его потом открывает браузер.
+func (m ModInfo) AuthorPage(game string) string {
+	if u, err := url.Parse(m.ProfileURL); err == nil && u.Scheme == "https" &&
+		(u.Host == "nexusmods.com" || strings.HasSuffix(u.Host, ".nexusmods.com")) {
+		return u.String()
+	}
+	if m.Uploader.ID > 0 {
+		return fmt.Sprintf("https://www.nexusmods.com/%s/users/%d", url.PathEscape(game), m.Uploader.ID)
+	}
+	return ""
 }
 
 // Mod возвращает сведения о моде.

@@ -379,6 +379,16 @@ func (a *App) OpenNexus(id string) error {
 	return nil
 }
 
+// OpenAuthor открывает профиль автора мода на Nexus в браузере.
+func (a *App) OpenAuthor(id string) error {
+	page, err := a.m.AuthorPage(id)
+	if err != nil {
+		return err
+	}
+	runtime.BrowserOpenURL(a.ctx, page)
+	return nil
+}
+
 // NxmAsk — вопрос перед тем, как сменить программу, открывающую ссылки nxm://.
 func (a *App) NxmAsk() Ask {
 	owner, ours := a.m.NxmOwner()
