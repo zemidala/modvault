@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -554,6 +555,87 @@ func (a *App) AddDropped(paths []string) (DropResult, error) {
 		res.Message += "Не добавлено: " + strings.Join(problems, "; ")
 	}
 	return res, err
+}
+
+// HideIssue убирает замечание из «Требуют внимания».
+func (a *App) HideIssue(key string) (manager.State, error) { return a.m.HideIssue(key) }
+
+// ShowHiddenIssues возвращает скрытые замечания.
+func (a *App) ShowHiddenIssues() (manager.State, error) { return a.m.ShowHiddenIssues() }
+
+// ModVersions возвращает версии мода в хранилище.
+func (a *App) ModVersions(id string) ([]manager.VersionInfo, error) { return a.m.ModVersions(id) }
+
+// UseVersion выбирает версию мода.
+func (a *App) UseVersion(id, versionID string) (manager.SetResult, error) {
+	return a.m.UseVersion(id, versionID)
+}
+
+// setFilter — файлы наборов в окнах выбора файла.
+var setFilter = []runtime.FileFilter{{DisplayName: "Набор Modvault (*.modvault-set.json)", Pattern: "*.modvault-set.json;*.json"}}
+
+// ExportSet спрашивает, куда сохранить текущий набор, и записывает его в файл.
+func (a *App) ExportSet() (manager.SetResult, error) {
+	st, err := a.m.State()
+	if err != nil {
+		return manager.SetResult{}, err
+	}
+	path, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
+		Title:           "Сохранить набор в файл",
+		DefaultFilename: st.Profile + ".modvault-set.json",
+		Filters:         setFilter,
+	})
+	if err != nil || path == "" {
+		return manager.SetResult{State: st}, err
+	}
+	msg, err := a.m.ExportSet(path)
+	return manager.SetResult{State: st, Message: msg}, err
+}
+
+// ImportSet спрашивает файл набора и создаёт набор по нему.
+func (a *App) ImportSet() (manager.ImportResult, error) {
+	path, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{Title: "Загрузить набор из файла", Filters: setFilter})
+	if err != nil || path == "" {
+		return manager.ImportResult{Missing: []manager.MissingMod{}}, err
+	}
+	return a.m.ImportSet(path)
+}
+
+// maxPages — сколько страниц открывать в браузере за раз.
+const maxPages = 15
+
+// OpenPages открывает в браузере страницы модов на Nexus; посторонние
+// адреса пропускает.
+func (a *App) OpenPages(urls []string) error {
+	opened := 0
+	for _, raw := range urls {
+		u, err := url.Parse(raw)
+		if err != nil || u.Scheme != "https" || !(u.Host == "nexusmods.com" || strings.HasSuffix(u.Host, ".nexusmods.com")) {
+			continue
+		}
+		if opened == maxPages {
+			break
+		}
+		runtime.BrowserOpenURL(a.ctx, u.String())
+		opened++
+	}
+	if opened == 0 {
+		return errors.New("открывать нечего: у этих модов нет страниц на Nexus")
+	}
+	return nil
+}
+
+// Folders возвращает папки, которые можно открыть в Проводнике.
+func (a *App) Folders() map[string]string { return a.m.Folders() }
+
+// OpenFolder открывает в Проводнике папку игры, хранилища или журналов игры.
+func (a *App) OpenFolder(kind string) error {
+	path, ok := a.m.Folders()[kind]
+	if !ok {
+		return errors.New("такой папки нет")
+	}
+	runtime.BrowserOpenURL(a.ctx, path)
+	return nil
 }
 
 // SetFavorite добавляет моды в избранное или убирает из него.

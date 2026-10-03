@@ -80,9 +80,20 @@ function renderIssues() {
       button.addEventListener("click", () => (issue.command ? run(issue.command, issue.arg) : notYet(issue.action, issue.stage)));
       row.append(button);
     }
+    if (issue.key) {
+      // Замечание, с которым решено жить, можно убрать с глаз.
+      const hide = el("button", "ghost small-button", "Скрыть");
+      hide.title = "Убрать это замечание из списка. Вернуть скрытые можно ссылкой под списком";
+      hide.addEventListener("click", () => call(() => backend().HideIssue(issue.key)));
+      row.append(hide);
+    }
     box.append(row);
   }
-  $("issues-section").hidden = state.issues.length === 0;
+  const hidden = state.hiddenIssues || 0;
+  $("issues").hidden = state.issues.length === 0;
+  $("issues-hidden").hidden = hidden === 0;
+  $("issues-hidden-count").textContent = `Скрыто замечаний: ${hidden}`;
+  $("issues-section").hidden = state.issues.length === 0 && hidden === 0;
 }
 
 // Проверка обновлений. checking — общий ход, пока проверка идёт. marks —
@@ -279,7 +290,7 @@ function showMenu(anchor, items) {
     if (item.current) button.setAttribute("aria-current", "true");
     button.disabled = !!item.disabled;
     button.addEventListener("click", () => {
-      hideMenu();
+      if (!item.keep) hideMenu(); // меню с галочками остаётся открытым
       if (item.action) item.action();
     });
     row.append(button);
@@ -338,6 +349,9 @@ async function openSets() {
   items.push({ separator: true });
   items.push({ label: "Новый набор — копия текущего…", action: () => newSet([]) });
   items.push({ label: `Переименовать «${state.profile}»…`, action: renameSet });
+  items.push({ separator: true });
+  items.push({ label: `Сохранить «${state.profile}» в файл…`, hint: "поделиться", action: () => act(() => backend().ExportSet(), $("set-button")) });
+  items.push({ label: "Загрузить набор из файла…", action: importSet });
   showMenu($("set-button"), items);
 }
 
@@ -426,6 +440,10 @@ async function openRowMenu(mod, x, y) {
       }
     }
   }
+  if (!many && mod.versions > 1) {
+    items.push({ separator: true });
+    items.push({ label: "Версии…", hint: `в хранилище: ${mod.versions}`, action: () => openVersions(mod, { x, y }) });
+  }
   items.push({ separator: true });
   items.push({ label: "В новый набор…", action: () => newSet(ids) });
   showMenu({ x, y }, items);
@@ -453,6 +471,8 @@ const sortValue = {
   toggle: (mod) => (mod.enabled ? 0 : 1),
   name: (mod) => mod.name,
   author: (mod) => mod.author || null,
+  category: (mod) => mod.category || null,
+  installed: (mod) => Date.parse(mod.installed) || null,
   rating: (mod) => (mod.hasStats ? mod.endorsements : null),
   stats: (mod) => (mod.hasStats ? mod.uniqueDownloads : null),
   version: (mod) => (mod.version && mod.version !== "—" ? mod.version : null),
@@ -504,6 +524,169 @@ function sortBy(key) {
   renderMods();
 }
 
+// Столбцы таблицы, которые можно скрыть (шестерёнка «Столбцы»). Выбор
+// запоминается; «Установлен» по умолчанию скрыт.
+const columns = [
+  ["author", "Автор"], ["category", "Категория"], ["rating", "Рейтинг"], ["stats", "Скачали"], ["version", "Версия"],
+  ["update", "Обновление"], ["sets", "Наборы"], ["installed", "Установлен"], ["state", "Состояние"],
+];
+let hiddenColumns = new Set(["installed"]);
+try {
+  const saved = JSON.parse(localStorage.getItem("modvault.columns"));
+  if (Array.isArray(saved)) hiddenColumns = new Set(saved);
+} catch (err) {
+  // сохранённого выбора нет — остаются столбцы по умолчанию
+}
+
+// applyColumns прячет скрытые столбцы: правила пишутся в отдельный лист стилей.
+function applyColumns() {
+  let sheet = $("column-rules");
+  if (!sheet) {
+    sheet = document.createElement("style");
+    sheet.id = "column-rules";
+    document.head.append(sheet);
+  }
+  sheet.textContent = [...hiddenColumns]
+    .map((key) => `.mods th[data-sort="${key}"], .mods td.${key} { display: none; }`)
+    .join("\n");
+}
+
+function openColumns() {
+  const items = [{ title: "Столбцы таблицы" }];
+  for (const [key, label] of columns) {
+    const shown = !hiddenColumns.has(key);
+    items.push({
+      label: (shown ? "✓ " : "　 ") + label,
+      current: shown,
+      keep: true,
+      action: () => {
+        if (shown) hiddenColumns.add(key);
+        else hiddenColumns.delete(key);
+        try {
+          localStorage.setItem("modvault.columns", JSON.stringify([...hiddenColumns]));
+        } catch (err) {
+          // не сохранилось — выбор действует до закрытия окна
+        }
+        applyColumns();
+        openColumns();
+      },
+    });
+  }
+  showMenu($("columns-button"), items);
+}
+
+// Быстрые фильтры списка: по состоянию мода и по категории.
+const filterKinds = [
+  ["all", "Все", () => true],
+  ["enabled", "Включённые", (mod) => mod.enabled],
+  ["disabled", "Выключенные", (mod) => !mod.enabled],
+  ["update", "С обновлением", (mod) => !!mod.available],
+  ["errors", "С ошибками", (mod) => mod.runErrors > 0],
+  ["favorite", "Избранные", (mod) => !!mod.favorite],
+];
+let filter = { kind: "all", category: "" };
+
+function passes(mod) {
+  const kind = filterKinds.find((k) => k[0] === filter.kind) || filterKinds[0];
+  return kind[2](mod) && (!filter.category || mod.category === filter.category);
+}
+
+function openCategories() {
+  const counts = new Map();
+  for (const mod of state.mods) if (mod.category) counts.set(mod.category, (counts.get(mod.category) || 0) + 1);
+  const items = [{ title: "Категория на Nexus" }, { label: "Все категории", current: !filter.category, action: () => setFilter({ category: "" }) }];
+  for (const name of [...counts.keys()].sort()) {
+    items.push({ label: name, hint: String(counts.get(name)), current: filter.category === name, action: () => setFilter({ category: name }) });
+  }
+  if (!counts.size) items.push({ label: "Категории появятся после проверки обновлений", disabled: true });
+  showMenu($("filter-category"), items);
+}
+
+function setFilter(change) {
+  filter = { ...filter, ...change };
+  renderMods();
+}
+
+// renderFilters рисует фильтры и пишет, сколько модов показано.
+function renderFilters(shown) {
+  const box = $("filter-chips");
+  box.replaceChildren();
+  for (const [key, label, test] of filterKinds) {
+    const n = state.mods.filter(test).length;
+    if (key !== "all" && n === 0) continue;
+    const chip = el("button", "chip", `${label} ${n}`);
+    chip.setAttribute("aria-pressed", String(filter.kind === key));
+    chip.addEventListener("click", () => setFilter({ kind: key }));
+    box.append(chip);
+  }
+  $("filter-category").textContent = (filter.category || "Категория") + " ▾";
+  $("filter-category").setAttribute("aria-pressed", String(!!filter.category));
+  const filtered = shown !== state.mods.length;
+  $("filter-count").hidden = !filtered;
+  $("filter-count").textContent = `Показано ${shown} из ${state.mods.length}`;
+  $("filter-reset").hidden = !filtered;
+}
+
+function resetFilters() {
+  filter = { kind: "all", category: "" };
+  $("search").value = "";
+  renderMods();
+}
+
+// openVersions показывает версии мода в хранилище: к прежней можно вернуться.
+async function openVersions(mod, anchor) {
+  let versions;
+  try {
+    versions = await backend().ModVersions(mod.id);
+  } catch (err) {
+    toast(String(err), "error");
+    return;
+  }
+  const items = [{ title: `Версии «${mod.name}» в хранилище` }];
+  for (const v of versions) {
+    items.push({
+      label: (v.current ? "✓ " : "") + v.version,
+      hint: "добавлена " + clock(v.added),
+      current: v.current,
+      action: v.current ? null : () => act(() => backend().UseVersion(mod.id, v.id), $("set-button"), "Версия меняется…"),
+    });
+  }
+  if (versions.length < 2) items.push({ label: "Других версий нет: прежняя появится после обновления", disabled: true });
+  showMenu(anchor, items);
+}
+
+// Набор как файл: сохранить свой набор и загрузить чужой.
+async function importSet() {
+  let res;
+  try {
+    res = await backend().ImportSet();
+  } catch (err) {
+    toast(String(err), "error");
+    return;
+  }
+  if (!res.set) return; // файл не выбран
+  state = res.state;
+  render();
+  if (!res.missing.length) {
+    toast(res.message);
+    return;
+  }
+  const links = res.missing.filter((m) => m.url);
+  const list = res.missing.map((m) => `• ${m.name}${m.version ? " " + m.version : ""}${m.url ? "" : " — нет на Nexus, ищите сами"}`).join("\n");
+  const open = await ask({
+    title: "Набор загружен, но модов не хватает",
+    message: `${res.message}.\n\nНе хватает:\n${list}`,
+    ok: links.length ? `Открыть страницы на Nexus (${Math.min(links.length, 15)})` : "",
+  });
+  if (open && links.length) {
+    try {
+      await backend().OpenPages(links.map((m) => m.url));
+    } catch (err) {
+      toast(String(err), "error");
+    }
+  }
+}
+
 function renderMods() {
   const body = $("mods");
   const query = $("search").value.trim().toLowerCase();
@@ -516,6 +699,7 @@ function renderMods() {
   renderSortHeads();
   shown.forEach(({ mod, index }) => {
     if (query && !mod.name.toLowerCase().includes(query) && !(mod.author || "").toLowerCase().includes(query)) return;
+    if (!passes(mod)) return;
 
     const row = el("tr");
     row.tabIndex = 0;
@@ -523,7 +707,7 @@ function renderMods() {
     row.setAttribute("aria-selected", String(mod.id === selectedId));
     row.classList.toggle("picked", picked.has(mod.id));
 
-    const toggleCell = el("td");
+    const toggleCell = el("td", "tgl");
     if (mod.pinned) {
       toggleCell.append(el("span", "always", "всегда"));
     } else {
@@ -565,6 +749,11 @@ function renderMods() {
       nameCell.append(warn);
     }
 
+    const categoryCell = el("td", "category", mod.category || "—");
+    categoryCell.title = mod.category || (mod.nexusId ? "Категория станет известна после проверки обновлений" : "У мода нет номера на Nexus");
+    const installedCell = el("td", "installed", clock(mod.installed));
+    installedCell.title = "Эта версия добавлена " + new Date(mod.installed).toLocaleString("ru-RU");
+
     const ratingCell = el("td", "rating", mod.hasStats ? count(mod.endorsements) : "—");
     ratingCell.title = mod.hasStats ? `Одобрений на Nexus: ${mod.endorsements.toLocaleString("ru-RU")}` : statsHint(mod);
     const statsCell = el("td", "stats", mod.hasStats ? count(mod.uniqueDownloads) : "—");
@@ -587,7 +776,7 @@ function renderMods() {
     });
     if (!sets.length) setsCell.append("—");
 
-    row.append(el("td", "num", String(index + 1)), toggleCell, nameCell, authorCell, ratingCell, statsCell, versionCell, updateTd, setsCell, stateCell);
+    row.append(el("td", "num", String(index + 1)), toggleCell, nameCell, authorCell, categoryCell, ratingCell, statsCell, versionCell, updateTd, setsCell, installedCell, stateCell);
 
     const select = () => {
       selectedId = mod.id === selectedId ? null : mod.id;
@@ -620,6 +809,7 @@ function renderMods() {
   });
 
   $("mods-empty").hidden = body.children.length > 0;
+  renderFilters(body.children.length);
 }
 
 // count сокращает большое число: 1 234 → «1,2 тыс.», 2 500 000 → «2,5 млн».
@@ -669,6 +859,11 @@ function renderCard() {
   $("card-author").hidden = !mod.author;
   $("card-author").replaceChildren(authorLink(mod) || mod.author || "");
   $("card-version").textContent = mod.version;
+  $("card-category-label").hidden = !mod.category;
+  $("card-category").hidden = !mod.category;
+  $("card-category").textContent = mod.category || "";
+  $("card-installed").textContent = new Date(mod.installed).toLocaleString("ru-RU");
+  $("card-versions-button").hidden = mod.versions < 2;
   for (const id of ["card-rating-label", "card-rating", "card-stats-label", "card-stats"]) $(id).hidden = !mod.hasStats;
   $("card-rating").textContent = mod.hasStats ? mod.endorsements.toLocaleString("ru-RU") : "";
   $("card-stats").textContent = mod.hasStats ? downloadsText(mod) : "";
@@ -1116,11 +1311,20 @@ function renderSettings() {
     row.append(text, button);
     links.append(row);
   }
-  const home = el("div", "setting");
-  const homeText = el("div", "setting-text");
-  homeText.append(el("div", "setting-title", "Хранилище модов"), el("div", "setting-detail", state.home));
-  home.append(homeText);
-  links.append(home);
+  // Папки, которые можно открыть в Проводнике.
+  backend().Folders().then((folders) => {
+    const titles = { game: "Папка игры", store: "Хранилище модов", logs: "Журналы игры" };
+    for (const kind of ["game", "store", "logs"]) {
+      if (!folders[kind]) continue;
+      const row = el("div", "setting");
+      const text = el("div", "setting-text");
+      text.append(el("div", "setting-title", titles[kind]), el("div", "setting-detail", folders[kind]));
+      const button = el("button", "ghost", "Открыть");
+      button.addEventListener("click", () => backend().OpenFolder(kind).catch((err) => toast(String(err), "error")));
+      row.append(text, button);
+      links.append(row);
+    }
+  }).catch(() => {});
 }
 
 // renderSetup показывает памятку «Начало работы», пока не всё сделано.
@@ -1199,6 +1403,15 @@ function wire() {
     });
   }
   $("setup-hide").addEventListener("click", () => call(() => backend().HideSetup()));
+  $("issues-show").addEventListener("click", () => call(() => backend().ShowHiddenIssues()));
+  $("columns-button").addEventListener("click", openColumns);
+  $("filter-category").addEventListener("click", openCategories);
+  $("filter-reset").addEventListener("click", resetFilters);
+  $("card-versions-button").addEventListener("click", () => {
+    const mod = state.mods.find((m) => m.id === selectedId);
+    if (mod) openVersions(mod, $("card-versions-button"));
+  });
+  applyColumns();
   $("bisect-start").addEventListener("click", startBisect);
   $("bisect-bad").addEventListener("click", () => bisectStep(() => backend().BisectAnswer(true), $("bisect-bad")));
   $("bisect-good").addEventListener("click", () => bisectStep(() => backend().BisectAnswer(false), $("bisect-good")));

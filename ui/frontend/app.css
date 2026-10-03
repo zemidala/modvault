@@ -239,22 +239,26 @@ main section { display: flex; flex-direction: column; gap: 8px; }
 .col-num { width: 44px; }
 .col-toggle { width: 60px; }
 .col-author { width: 110px; }
+.col-category { width: 120px; }
+.col-installed { width: 100px; }
 .col-rating { width: 78px; }
 .col-stats { width: 86px; }
 .col-version { width: 100px; }
 .col-update { width: 120px; }
 .col-sets { width: 110px; }
 .col-state { width: 165px; }
-@media (min-width: 1500px) {
+@media (min-width: 1800px) {
   .col-num { width: 52px; }
   .col-toggle { width: 68px; }
-  .col-author { width: 180px; }
-  .col-rating { width: 100px; }
-  .col-stats { width: 110px; }
-  .col-version { width: 130px; }
-  .col-update { width: 160px; }
-  .col-sets { width: 240px; }
-  .col-state { width: 240px; }
+  .col-author { width: 150px; }
+  .col-category { width: 130px; }
+  .col-installed { width: 110px; }
+  .col-rating { width: 90px; }
+  .col-stats { width: 100px; }
+  .col-version { width: 120px; }
+  .col-update { width: 150px; }
+  .col-sets { width: 170px; }
+  .col-state { width: 200px; }
 }
 
 .num { font-variant-numeric: tabular-nums; color: var(--brass); }
@@ -387,6 +391,7 @@ tr[data-enabled="false"] .name, tr[data-enabled="false"] .version { color: var(-
   /* В узком окне наборы мода видны в подсказке к его названию. */
   .col-sets, .mods td.sets { display: none; }
   .col-author, .mods td.author { display: none; }
+  .col-category, .mods td.category, .col-installed, .mods td.installed { display: none; }
   .col-rating, .mods td.rating, .col-stats, .mods td.stats { display: none; }
 }
 
@@ -584,6 +589,8 @@ button.busy::after,
 /* Рейтинг и скачивания с Nexus. */
 .rating, .stats { font-size: 13px; font-variant-numeric: tabular-nums; color: var(--muted); }
 /* С открытой карточкой мода эти сведения показывает она. */
+.with-card .col-category, .with-card .mods td.category,
+.with-card .col-installed, .with-card .mods td.installed,
 .with-card .col-sets, .with-card .mods td.sets,
 .with-card .col-rating, .with-card .mods td.rating,
 .with-card .col-stats, .with-card .mods td.stats { display: none; }
@@ -666,3 +673,24 @@ button.busy::after,
 .conflict-open[data-state="open"] .conflict-state { color: var(--orange-text); font-weight: 700; }
 .conflict-mods { font-weight: 700; }
 .conflict-meta { font-size: 13px; color: var(--muted); }
+
+/* Категория и время установки. */
+.category, .installed { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* Быстрые фильтры списка и выбор столбцов. */
+.filters { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.filters .spacer { flex: 1 1 auto; }
+.filter-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  min-height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--brass-dark);
+  border-radius: 15px;
+  background: transparent;
+  font-size: 13px;
+  color: var(--muted);
+}
+.chip:hover { color: var(--parchment); border-color: var(--brass-frame); }
+.chip[aria-pressed="true"] { border-color: var(--orange-worn); color: var(--orange-text); }
+.filter-count { font-size: 13px; color: var(--orange-text); margin-left: 6px; }
+#issues-hidden { margin: 0; }

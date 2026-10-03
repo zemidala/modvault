@@ -66,6 +66,7 @@
     <section id="issues-section" aria-label="Требуют внимания" hidden>
       <div class="heading"><h2>Требуют внимания</h2><span class="rule"></span><span class="diamond"></span></div>
       <div class="frame" id="issues"></div>
+      <p class="muted small" id="issues-hidden" hidden><span id="issues-hidden-count"></span> · <button class="link" id="issues-show">показать</button></p>
     </section>
 
     <section aria-label="Порядок загрузки">
@@ -84,6 +85,14 @@
         <div class="check-text"><span id="check-label"></span><span id="check-count"></span></div>
         <div class="bar" id="check-bar"><div class="bar-fill" id="check-fill"></div></div>
       </div>
+      <div class="filters">
+        <div class="filter-chips" id="filter-chips"></div>
+        <button class="chip" id="filter-category" aria-haspopup="menu">Категория ▾</button>
+        <span class="filter-count" id="filter-count" hidden></span>
+        <button class="chip" id="filter-reset" hidden>Сбросить</button>
+        <span class="spacer"></span>
+        <button class="chip" id="columns-button" aria-haspopup="menu" title="Какие столбцы показывать">⚙ Столбцы</button>
+      </div>
       <div class="picked-bar" id="picked-bar" hidden>
         <span class="picked-count" id="picked-count"></span>
         <button class="ghost" id="picked-new">В новый набор…</button>
@@ -99,7 +108,7 @@
       <div class="frame">
         <table class="mods">
           <thead>
-            <tr><th class="col-num" data-sort="num">№<span class="sort-mark"></span></th><th class="col-toggle" data-sort="toggle">Вкл.<span class="sort-mark"></span></th><th data-sort="name">Мод<span class="sort-mark"></span></th><th class="col-author" data-sort="author">Автор<span class="sort-mark"></span></th><th class="col-rating" data-sort="rating" title="Сколько пользователей Nexus одобрили мод">Рейтинг<span class="sort-mark"></span></th><th class="col-stats" data-sort="stats" title="Сколько разных людей скачали мод с Nexus">Скачали<span class="sort-mark"></span></th><th class="col-version" data-sort="version">Версия<span class="sort-mark"></span></th><th class="col-update" data-sort="update">Обновление<span class="sort-mark"></span></th><th class="col-sets" data-sort="sets">Наборы<span class="sort-mark"></span></th><th class="col-state" data-sort="state">Состояние<span class="sort-mark"></span></th></tr>
+            <tr><th class="col-num" data-sort="num">№<span class="sort-mark"></span></th><th class="col-toggle" data-sort="toggle">Вкл.<span class="sort-mark"></span></th><th data-sort="name">Мод<span class="sort-mark"></span></th><th class="col-author" data-sort="author">Автор<span class="sort-mark"></span></th><th class="col-category" data-sort="category">Категория<span class="sort-mark"></span></th><th class="col-rating" data-sort="rating" title="Сколько пользователей Nexus одобрили мод">Рейтинг<span class="sort-mark"></span></th><th class="col-stats" data-sort="stats" title="Сколько разных людей скачали мод с Nexus">Скачали<span class="sort-mark"></span></th><th class="col-version" data-sort="version">Версия<span class="sort-mark"></span></th><th class="col-update" data-sort="update">Обновление<span class="sort-mark"></span></th><th class="col-sets" data-sort="sets">Наборы<span class="sort-mark"></span></th><th class="col-installed" data-sort="installed" title="Когда эта версия мода добавлена в хранилище">Установлен<span class="sort-mark"></span></th><th class="col-state" data-sort="state">Состояние<span class="sort-mark"></span></th></tr>
           </thead>
           <tbody id="mods"></tbody>
         </table>
@@ -136,8 +145,10 @@
     <div class="rule"></div>
     <dl class="facts">
       <dt id="card-author-label">Автор</dt><dd id="card-author"></dd>
+      <dt id="card-category-label">Категория</dt><dd id="card-category"></dd>
       <dt>Установлена</dt><dd id="card-version"></dd>
       <dt id="card-available-label">Доступна</dt><dd id="card-available" class="warn"></dd>
+      <dt>Установлен</dt><dd id="card-installed"></dd>
       <dt>Файлов</dt><dd id="card-files"></dd>
       <dt>Версий в хранилище</dt><dd id="card-versions"></dd>
       <dt id="card-rating-label">Одобрений</dt><dd id="card-rating"></dd>
@@ -149,6 +160,7 @@
     <div class="card-actions">
       <button class="plate" id="card-update"></button>
       <button class="ghost" id="card-show-files">Показать файлы</button>
+      <button class="ghost" id="card-versions-button" aria-haspopup="menu">Версии…</button>
       <button class="ghost" id="card-nexus">Открыть на Nexus</button>
       <button class="ghost danger" id="card-remove">Удалить мод</button>
     </div>
