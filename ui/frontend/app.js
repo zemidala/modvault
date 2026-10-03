@@ -99,28 +99,37 @@ function updateCell(cell, mod) {
   let level = "off";
   let hint = "";
   let update = ""; // версия, до которой можно обновить
+  // Пока идёт проверка, у мода её отметка; иначе — то, что известно с
+  // прошлой проверки (оно переживает перезапуск программы).
+  let status = mod.updateStatus;
+  if (mark === "checking" || mark === "queued" || mark === "missing") status = mark;
+  else if (mark === "ok") status = mod.available ? "update" : "current";
+  else if (mark) status = "update";
+
   if (!mod.nexusId) {
     text = "—";
     hint = "У мода нет номера на Nexus: проверить его нельзя";
-  } else if (mark === "checking") {
+  } else if (status === "checking") {
     text = "Проверяется";
     level = "busy";
-  } else if (mark === "queued") {
+  } else if (status === "queued") {
     text = "В очереди";
     level = "queued";
-  } else if (mark === "missing") {
+  } else if (status === "missing") {
     text = "Нет на Nexus";
     hint = "Страница мода на Nexus убрана или скрыта автором";
-  } else {
+  } else if (status === "update") {
     update = mark && mark !== "ok" ? mark : mod.available;
-    if (update) {
-      text = update;
-      level = "warn";
-      hint = "На Nexus есть версия " + update;
-    } else if (mark === "ok") {
-      text = "✓ Актуален";
-      level = "ok";
-    }
+    text = update;
+    level = "warn";
+    hint = "На Nexus есть версия " + update;
+  } else if (status === "current") {
+    text = "✓ Актуально";
+    level = "ok";
+    hint = "Установлена последняя версия с Nexus";
+  } else {
+    text = "Не проверен";
+    hint = "Нажмите «Проверить обновления»";
   }
   cell.dataset.level = level;
   cell.title = hint;
@@ -189,24 +198,33 @@ function onCheckStep(step) {
   renderCheck();
 }
 
-async function checkUpdates() {
+// checkUpdates проверяет обновления. quiet — проверка идёт сама, в фоне
+// (при запуске программы): окно не занято, ход виден в столбце
+// «Обновление», а сообщение появляется, только если есть что сказать.
+async function checkUpdates(quiet) {
+  if (checking) return;
   checking = { done: 0, total: 0, name: "" };
   marks.clear();
   for (const mod of state.mods) if (mod.nexusId) marks.set(mod.id, "queued");
   renderCheck();
   renderMods();
+  const button = $("check-updates");
+  button.disabled = true;
+  button.classList.add("busy");
   try {
-    await act(() => backend().CheckUpdates(), $("check-updates"));
+    const res = await backend().CheckUpdates();
+    state = res.state;
+    if (!quiet || res.updates > 0) toast(res.message);
+  } catch (err) {
+    toast((quiet ? "Проверка обновлений при запуске не удалась: " : "") + String(err), "error");
   } finally {
+    button.disabled = false;
+    button.classList.remove("busy");
     checking = null;
-    // Найденную версию дальше показывает само состояние мода; до кого
-    // проверка не дошла (сбой), у того отметка снимается.
-    for (const [id, mark] of marks) {
-      if (mark === "queued" || mark === "checking") marks.delete(id);
-      else if (mark !== "missing") marks.set(id, "ok");
-    }
+    // Итог проверки теперь в состоянии каждого мода: отметки больше не нужны.
+    marks.clear();
+    render();
     renderCheck();
-    renderMods();
   }
 }
 
@@ -856,7 +874,7 @@ function wire() {
     return res.state;
   }));
   $("card-show-files").addEventListener("click", toggleFiles);
-  $("check-updates").addEventListener("click", checkUpdates);
+  $("check-updates").addEventListener("click", () => checkUpdates(false));
   $("card-update").addEventListener("click", () => act(() => backend().UpdateMod(selectedId), $("card-update"), "Обновление: запрос к Nexus…"));
   $("card-nexus").addEventListener("click", async () => {
     try {
@@ -896,6 +914,8 @@ async function start() {
     render();
     listen();
     backend().Ready();
+    // Проверка обновлений при запуске идёт в фоне и окну не мешает.
+    if (state.checkOnStart) checkUpdates(true);
   } catch (err) {
     toast("Программа не может работать с хранилищем: " + err, "error", true);
   }

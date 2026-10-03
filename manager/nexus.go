@@ -249,6 +249,9 @@ func (a *Manager) installFile(ctx context.Context, c *nexus.Client, domain strin
 	known := a.loadUpdates()
 	known.Authors[modID], known.Profiles[modID] = firstNonEmpty(mod.Author, mod.UploadedBy), mod.AuthorPage(domain)
 	known.Stats[modID] = statsOf(mod, time.Now().UTC())
+	// Поставленный файл — последнее, что известно о моде: он актуален, пока
+	// проверка не найдёт новее.
+	delete(known.Gone, modID)
 	a.saveUpdates(known)
 
 	synced := a.inSync() // до обновления: потом профиль уже отличается от игры
@@ -402,6 +405,8 @@ type updates struct {
 	// Profiles — адрес профиля автора на Nexus; запись есть у каждого мода,
 	// о котором уже спрашивали, даже если адрес пуст.
 	Profiles map[int]string `json:"profiles"`
+	// Gone — моды, которых на Nexus больше нет: страница убрана или скрыта.
+	Gone map[int]bool `json:"gone,omitempty"`
 	// Stats — одобрения и скачивания мода по его номеру на Nexus.
 	Stats map[int]modStats `json:"stats"`
 }
@@ -445,6 +450,9 @@ func (a *Manager) loadUpdates() updates {
 	if u.Stats == nil {
 		u.Stats = map[int]modStats{}
 	}
+	if u.Gone == nil {
+		u.Gone = map[int]bool{}
+	}
 	return u
 }
 
@@ -485,6 +493,27 @@ type UpdateReport struct {
 	Unknown  int    `json:"unknown"`  // модов без номера: их проверить нельзя
 	Updates  int    `json:"updates"`  // модов, у которых есть версия новее
 	Requests int    `json:"requests"` // запросов к Nexus
+}
+
+// updateCheckManual — значение настройки «проверять обновления только по кнопке».
+const updateCheckManual = "manual"
+
+// SetUpdateCheck задаёт, когда проверять обновления: при запуске окна
+// (onStart) или только по кнопке.
+func (a *Manager) SetUpdateCheck(onStart bool) (State, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.openErr != nil {
+		return State{}, a.openErr
+	}
+	a.settings.UpdateCheck = updateCheckManual
+	if onStart {
+		a.settings.UpdateCheck = ""
+	}
+	if err := a.saveSettings(); err != nil {
+		return State{}, err
+	}
+	return a.state()
 }
 
 // Сколько живёт итог проверки: у Nexus список «что менялось» есть только
@@ -628,6 +657,7 @@ func (a *Manager) CheckUpdates(ctx context.Context, progress func(CheckProgress)
 			rep.Requests++
 			if gone(err) {
 				step.Missing = true // мод убран с Nexus или скрыт автором
+				cache.Gone[id] = true
 				cache.Authors[id], cache.Profiles[id] = "", ""
 				cache.Stats[id] = modStats{At: started}
 				progress(step)
@@ -637,6 +667,7 @@ func (a *Manager) CheckUpdates(ctx context.Context, progress func(CheckProgress)
 				failure = err
 				break
 			}
+			delete(cache.Gone, id)
 			for _, t := range targets {
 				if t.nexusID != id {
 					continue

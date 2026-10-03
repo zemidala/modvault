@@ -394,6 +394,17 @@ func TestUpdates(t *testing.T) {
 	f.add(t, 22, "Scoreboard", fakeFile{ID: 150, Name: "Scoreboard Skins", Version: "0.1", Category: "OPTIONAL", Uploaded: 30}, map[string]string{"Skins/Skins.mod": "return {}"})
 	f.mods[22].updates = [][2]int{{100, 101}}
 
+	// До первой проверки: мод с Nexus не проверен, окно проверит само при запуске.
+	if s := state(t, a); findMod(t, s, "score_board").UpdateStatus != "unknown" || findMod(t, s, "flux").UpdateStatus != "" || !s.CheckOnStart {
+		t.Errorf("до проверки: %+v, при запуске %v", findMod(t, s, "score_board"), s.CheckOnStart)
+	}
+	if s, _ := a.SetUpdateCheck(false); s.CheckOnStart {
+		t.Error("проверка при запуске не выключилась")
+	}
+	if s, _ := a.SetUpdateCheck(true); !s.CheckOnStart {
+		t.Error("проверка при запуске не включилась")
+	}
+
 	var steps []CheckProgress
 	rep, err := a.CheckUpdates(ctx, func(p CheckProgress) { steps = append(steps, p) })
 	if err != nil {
@@ -438,7 +449,7 @@ func TestUpdates(t *testing.T) {
 	if !strings.Contains(rep.Message, "Есть обновление: 1") || !strings.Contains(rep.Message, "осталось: 2000") {
 		t.Errorf("сообщение: %q", rep.Message)
 	}
-	if m := findMod(t, rep.State, "score_board"); m.Available != "1.5.0" {
+	if m := findMod(t, rep.State, "score_board"); m.Available != "1.5.0" || m.UpdateStatus != "update" {
 		t.Errorf("доступная версия: %+v", m)
 	}
 	if m := findMod(t, state(t, a), "flux"); m.Available != "" || m.NexusID != 0 {
@@ -476,7 +487,7 @@ func TestUpdates(t *testing.T) {
 	if ids(res.State) != "score_board,flux" || !strings.Contains(res.Message, "Обновлён: Score Board до 1.5.0") {
 		t.Errorf("после обновления: моды %s, сообщение %q", ids(res.State), res.Message)
 	}
-	if m := findMod(t, res.State, "score_board"); m.Version != "1.5.0" || m.Versions != 2 || m.Available != "" || !m.Enabled {
+	if m := findMod(t, res.State, "score_board"); m.Version != "1.5.0" || m.Versions != 2 || m.Available != "" || !m.Enabled || m.UpdateStatus != "current" {
 		t.Errorf("обновлённый мод: %+v", m)
 	}
 

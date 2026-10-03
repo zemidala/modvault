@@ -36,14 +36,17 @@ const (
 
 // State — всё, что показывает главное окно.
 type State struct {
-	Version   string       `json:"version"`
-	Demo      bool         `json:"demo"`
-	Home      string       `json:"home"`
-	Profile   string       `json:"profile"`
-	Status    []StatusItem `json:"status"`
-	Issues    []Issue      `json:"issues"`
-	Mods      []Mod        `json:"mods"`
-	PlanTitle string       `json:"planTitle"`
+	Version string `json:"version"`
+	Demo    bool   `json:"demo"`
+	Home    string `json:"home"`
+	Profile string `json:"profile"`
+	// CheckOnStart — окну стоит само проверить обновления при запуске: ключ
+	// Nexus задан, и проверка при запуске не выключена в настройках.
+	CheckOnStart bool         `json:"checkOnStart"`
+	Status       []StatusItem `json:"status"`
+	Issues       []Issue      `json:"issues"`
+	Mods         []Mod        `json:"mods"`
+	PlanTitle    string       `json:"planTitle"`
 	// OrderNote поясняет, кто задаёт порядок загрузки, если не профиль.
 	OrderNote string   `json:"orderNote"`
 	Plan      []string `json:"plan"`
@@ -89,6 +92,11 @@ type Mod struct {
 	Endorsements    int  `json:"endorsements"`
 	Downloads       int  `json:"downloads"`
 	UniqueDownloads int  `json:"uniqueDownloads"`
+	// UpdateStatus — что известно об обновлении с прошлой проверки:
+	// "current" — установлена последняя версия, "update" — есть новее
+	// (она в Available), "missing" — мода на Nexus больше нет, "unknown" —
+	// ещё не проверялся; пусто — у мода нет номера на Nexus.
+	UpdateStatus string `json:"updateStatus"`
 	// Favorite — мод в избранном: окно показывает такие первыми.
 	Favorite  bool   `json:"favorite"`
 	NexusID   int    `json:"nexusId"` // номер мода на Nexus; 0 — неизвестен

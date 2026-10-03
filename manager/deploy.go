@@ -39,6 +39,9 @@ type settings struct {
 	// nxm://; NxmPrevious — кто открывал их до этого.
 	NxmCommand  string `json:"nxmCommand,omitempty"`
 	NxmPrevious string `json:"nxmPrevious,omitempty"`
+	// UpdateCheck — когда проверять обновления модов: "start" или пусто —
+	// сама при запуске окна, "manual" — только по кнопке.
+	UpdateCheck string `json:"updateCheck,omitempty"`
 	// Favorites — избранные моды.
 	Favorites []string `json:"favorites,omitempty"`
 }
@@ -343,12 +346,13 @@ func (a *Manager) realState() (State, error) {
 	names := a.modNames()
 
 	s := State{
-		Version: version.String(),
-		Home:    a.home,
-		Profile: p.Name,
-		Issues:  []Issue{},
-		Mods:    make([]Mod, 0, len(p.Entries)),
-		Plan:    []string{},
+		Version:      version.String(),
+		Home:         a.home,
+		Profile:      p.Name,
+		CheckOnStart: a.settings.NexusUser != "" && a.settings.UpdateCheck != updateCheckManual,
+		Issues:       []Issue{},
+		Mods:         make([]Mod, 0, len(p.Entries)),
+		Plan:         []string{},
 	}
 
 	var plan *deploy.Plan
@@ -396,8 +400,16 @@ func (a *Manager) realState() (State, error) {
 			row.HasStats = true
 			row.Endorsements, row.Downloads, row.UniqueDownloads = st.Endorsements, st.Downloads, st.UniqueDownloads
 		}
-		if u, ok := updates.Mods[e.ModID]; ok && u.newerThan(v) {
-			row.Available = u.Version
+		switch u, checked := updates.Mods[e.ModID]; {
+		case v.NexusID == 0:
+		case updates.Gone[v.NexusID]:
+			row.UpdateStatus = "missing"
+		case checked && u.newerThan(v):
+			row.Available, row.UpdateStatus = u.Version, "update"
+		case checked && u.NexusID == v.NexusID:
+			row.UpdateStatus = "current"
+		default:
+			row.UpdateStatus = "unknown"
 		}
 		if row.Version == "" {
 			row.Version = "—"
