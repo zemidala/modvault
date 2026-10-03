@@ -147,7 +147,7 @@ func (a *Manager) InstallLink(ctx context.Context, raw string, progress func(Pro
 
 // installFile скачивает файл мода во временный файл, сверяет его и только
 // потом кладёт в хранилище. Обрыв на любом шаге хранилище не трогает.
-func (a *Manager) installFile(ctx context.Context, c *nexus.Client, domain string, modID, fileID int, key, expires string, progress func(Progress)) (InstallResult, error) {
+func (a *Manager) installFile(ctx context.Context, c *nexus.Client, domain string, modID, fileID int, key, expires string, progress func(Progress)) (result InstallResult, err error) {
 	if progress == nil {
 		progress = func(Progress) {}
 	}
@@ -169,6 +169,10 @@ func (a *Manager) installFile(ctx context.Context, c *nexus.Client, domain strin
 		delete(a.downloading, fileID)
 		a.mu.Unlock()
 	}()
+
+	// Загрузка видна в разделе «Загрузки», её итог попадает в журнал.
+	track := a.startDownload(modID, fileID)
+	defer func() { a.finishDownload(track, result.Message, err) }()
 
 	files, err := c.Files(ctx, domain, modID)
 	if err != nil {
@@ -204,10 +208,12 @@ func (a *Manager) installFile(ctx context.Context, c *nexus.Client, domain strin
 	if title == "" {
 		title = name
 	}
+	a.describeDownload(track, title, firstNonEmpty(file.Version, file.ModVersion, mod.Version), file.Size)
 	dir := filepath.Join(a.home, downloadsDir)
 	// Номер файла в имени: начатую загрузку другого файла не примут за эту.
 	part := filepath.Join(dir, fmt.Sprintf("%d-%s.part", fileID, name))
 	err = nexus.Download(ctx, urls, part, file.Size, func(done, total int64) {
+		a.progressDownload(track, done, total)
 		progress(Progress{Name: title, Done: done, Total: total})
 	})
 	if err != nil {
@@ -302,6 +308,9 @@ func (a *Manager) deployUpdate(v store.Version, synced bool) string {
 	}
 	if a.deployer == nil {
 		return msg
+	}
+	if a.settings.ManualUpdates {
+		return msg + ". В игру он попадёт по кнопке «Развернуть»"
 	}
 	if !synced {
 		return msg + ". В игру он попадёт по кнопке «Развернуть»: там ждут и другие изменения"
@@ -713,6 +722,7 @@ func (a *Manager) CheckUpdates(ctx context.Context, progress func(CheckProgress)
 		return rep, errors.Join(failure, err)
 	}
 	if failure != nil {
+		a.noteError("Проверка обновлений прервана", failure)
 		return rep, fmt.Errorf("проверка обновлений прервана: %w", failure)
 	}
 	if rep.State, err = a.state(); err != nil {
@@ -734,6 +744,7 @@ func (a *Manager) CheckUpdates(ctx context.Context, progress func(CheckProgress)
 	if l := c.Limits(); l.Known {
 		rep.Message += fmt.Sprintf(" · запросов сегодня осталось: %d", l.Daily)
 	}
+	a.note(EventNexus, "Проверка обновлений: "+rep.Message)
 	return rep, nil
 }
 

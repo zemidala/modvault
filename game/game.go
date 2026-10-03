@@ -13,6 +13,8 @@ import (
 type Install struct {
 	Dir   string `json:"dir"`
 	Store string `json:"store"` // «Steam», «Xbox», «вручную»
+	// ViaLauncher — запускать игру через её лаунчер, а не напрямую.
+	ViaLauncher bool `json:"-"`
 }
 
 // Role — особая роль мода в игре.

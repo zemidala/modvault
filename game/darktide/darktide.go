@@ -155,6 +155,9 @@ func (*Darktide) Launch(inst game.Install) error {
 	if inst.Store != "Steam" {
 		return errors.New("запуск этой версии игры пока не поддерживается: запустите её из приложения Xbox")
 	}
+	if inst.ViaLauncher {
+		return openURL("steam://rungameid/" + SteamAppID) // Steam сам откроет лаунчер игры
+	}
 	// Игра стартует сама, минуя окно лаунчера. Без Steam она не войдёт в
 	// учётную запись, поэтому запускать её без него бессмысленно.
 	if !steamRunning() {

@@ -47,6 +47,10 @@ type State struct {
 	Issues       []Issue      `json:"issues"`
 	Mods         []Mod        `json:"mods"`
 	PlanTitle    string       `json:"planTitle"`
+	// Settings — настройки-переключатели для раздела «Настройки».
+	Settings []Setting `json:"settings"`
+	// Setup — памятка «Начало работы»; пусто, когда всё сделано.
+	Setup []SetupStep `json:"setup"`
 	// OrderNote поясняет, кто задаёт порядок загрузки, если не профиль.
 	OrderNote string   `json:"orderNote"`
 	Plan      []string `json:"plan"`
@@ -137,6 +141,9 @@ type Manager struct {
 	nexus     *nexus.Client  // клиент с ключом; nil — ещё не создан
 	// downloading — номера файлов Nexus, которые сейчас скачиваются.
 	downloading map[int]bool
+	// downloads — загрузки этого запуска программы для раздела «Загрузки».
+	downloads   []*Download
+	downloadSeq int
 
 	demo []demoMod
 }
@@ -292,8 +299,14 @@ func (a *Manager) addArchive(path string) (State, error) {
 		// есть под другим названием, это его новая версия.
 		info.Name = a.nexusName(info.Name, info.NexusID, nexus.File{}, nexus.Files{})
 	}
-	if _, _, err := a.addVersion(path, info); err != nil {
+	v, prev, err := a.addVersion(path, info)
+	if err != nil {
 		return State{}, err
+	}
+	if prev != "" {
+		a.note(EventInstall, fmt.Sprintf("Из архива обновлён «%s» до %s", v.Name, v.Version))
+	} else {
+		a.note(EventInstall, fmt.Sprintf("Из архива добавлен «%s» %s", v.Name, v.Version))
 	}
 	return a.state()
 }
@@ -447,9 +460,11 @@ func (a *Manager) RemoveMod(id string, permanent bool) (State, error) {
 	if !real {
 		return State{}, errors.New("это демонстрационный мод: удалять нечего")
 	}
+	name := a.modName(id)
 	if err := a.removeMod(id, permanent); err != nil {
 		return State{}, err
 	}
+	a.note(EventRemove, "Удалён мод «"+name+"»")
 	return a.state()
 }
 

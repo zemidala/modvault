@@ -46,6 +46,16 @@ func drives() []string {
 	return out
 }
 
+// openURL открывает адрес программой, которая за ним закреплена.
+func openURL(url string) error {
+	verb, _ := windows.UTF16PtrFromString("open")
+	target, err := windows.UTF16PtrFromString(url)
+	if err != nil {
+		return err
+	}
+	return windows.ShellExecute(0, verb, target, nil, nil, windows.SW_SHOWNORMAL)
+}
+
 // hiddenWindow не даёт консольному патчеру мигнуть окном.
 func hiddenWindow() *syscall.SysProcAttr {
 	return &syscall.SysProcAttr{HideWindow: true, CreationFlags: windows.CREATE_NO_WINDOW}

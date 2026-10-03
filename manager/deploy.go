@@ -42,6 +42,12 @@ type settings struct {
 	// UpdateCheck — когда проверять обновления модов: "start" или пусто —
 	// сама при запуске окна, "manual" — только по кнопке.
 	UpdateCheck string `json:"updateCheck,omitempty"`
+	// ManualUpdates — обновлённый мод попадает в игру только по кнопке.
+	ManualUpdates bool `json:"manualUpdates,omitempty"`
+	// LaunchViaLauncher — «Играть» запускает игру через её лаунчер.
+	LaunchViaLauncher bool `json:"launchViaLauncher,omitempty"`
+	// SetupHidden — памятка «Начало работы» скрыта пользователем.
+	SetupHidden bool `json:"setupHidden,omitempty"`
 	// Favorites — избранные моды.
 	Favorites []string `json:"favorites,omitempty"`
 }
@@ -133,7 +139,7 @@ func (a *Manager) setInstall(inst game.Install) error {
 // Play запускает игру.
 func (a *Manager) Play() error {
 	a.mu.Lock()
-	inst := game.Install{Dir: a.settings.GameDir, Store: a.settings.GameStore}
+	inst := game.Install{Dir: a.settings.GameDir, Store: a.settings.GameStore, ViaLauncher: a.settings.LaunchViaLauncher}
 	a.mu.Unlock()
 	if inst.Dir == "" {
 		return errors.New("сначала выберите папку игры")
@@ -191,6 +197,7 @@ func (a *Manager) Deploy() (DeployResult, error) {
 		if res.Displaced != "" {
 			msg += ". Файлы, изменённые вне программы, сохранены в " + res.Displaced
 		}
+		a.note(EventDeploy, fmt.Sprintf("Набор «%s»: %s", a.profileName(), msg))
 	}
 	st, err := a.state()
 	return DeployResult{State: st, Message: msg}, err
@@ -502,6 +509,11 @@ func (a *Manager) realState() (State, error) {
 	}
 
 	s.Status = a.status(s, len(mods), plan)
+	s.Settings = a.settingsList()
+	s.Setup = a.setupSteps()
+	if s.Setup == nil {
+		s.Setup = []SetupStep{}
+	}
 	return s, nil
 }
 
@@ -569,7 +581,7 @@ func conflictIssues(plan *deploy.Plan, names func(string) string) []Issue {
 		out = append(out, Issue{
 			Title:  fmt.Sprintf("%s меняют одни и те же файлы (%d)", strings.Join(modNames, " и "), g.files),
 			Detail: fmt.Sprintf("Конфликт файлов · побеждает %s: %s", names(g.winner), why),
-			Level:  LevelWarn, Action: "Выбрать победителя", Stage: 8,
+			Level:  LevelWarn, Action: "Выбрать победителя", Command: "ChooseWinner", Arg: conflictKey(g.mods),
 		})
 	}
 	return out

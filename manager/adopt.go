@@ -112,7 +112,14 @@ type adoptedMod struct {
 func (a *Manager) Adopt(dryRun bool) (AdoptReport, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	return a.adopt(dryRun)
+	rep, err := a.adopt(dryRun)
+	if !dryRun {
+		if err == nil {
+			a.note(EventVortex, fmt.Sprintf("Управление перенято у Vortex: модов %d, файлов в игре %d", rep.Mods, rep.Files))
+		}
+		a.noteError("Перенять у Vortex", err)
+	}
+	return rep, err
 }
 
 func (a *Manager) adopt(dryRun bool) (AdoptReport, error) {
@@ -505,7 +512,14 @@ type ReleaseReport struct {
 func (a *Manager) Release(dryRun bool) (ReleaseReport, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	return a.release(dryRun)
+	rep, err := a.release(dryRun)
+	if !dryRun {
+		if err == nil {
+			a.note(EventVortex, "Управление возвращено Vortex")
+		}
+		a.noteError("Вернуть Vortex", err)
+	}
+	return rep, err
 }
 
 func (a *Manager) release(dryRun bool) (ReleaseReport, error) {

@@ -206,6 +206,7 @@ func (a *Manager) CreateSet(name string, ids []string) (SetResult, error) {
 		return SetResult{}, err
 	}
 	st, err := a.state()
+	a.note(EventSet, msg)
 	return SetResult{State: st, Message: msg + " Переключиться на него — в меню «Набор»"}, err
 }
 
@@ -381,6 +382,7 @@ func (a *Manager) SwitchSet(name string) (SetResult, error) {
 			msg += ". Привести к нему игру не удалось: " + err.Error() + ". Нажмите «Развернуть», когда причина устранена"
 		}
 	}
+	a.note(EventSet, msg)
 	st, err := a.state()
 	return SetResult{State: st, Message: msg}, err
 }
@@ -402,6 +404,7 @@ func (a *Manager) DeleteSet(name string) (State, error) {
 	if err := a.DeleteProfile(name); err != nil {
 		return State{}, err
 	}
+	a.note(EventSet, "Удалён набор «"+name+"»")
 	return a.State()
 }
 
