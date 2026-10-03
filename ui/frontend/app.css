@@ -424,7 +424,7 @@ tr[data-enabled="false"] .name, tr[data-enabled="false"] .version { color: var(-
 .sheet-actions { display: flex; justify-content: flex-end; }
 
 .ask { width: min(620px, 100%); }
-.ask-message { white-space: pre-line; line-height: 1.45; }
+.ask-message { white-space: pre-line; line-height: 1.45; overflow-y: auto; overflow-wrap: anywhere; user-select: text; }
 .ask .field { flex: 0 0 auto; }
 .sheet-actions { gap: 8px; }
 .plate.danger { background: var(--error-line); color: var(--parchment); }
@@ -648,3 +648,21 @@ button.busy::after,
 .mods th[data-sort]:hover { color: var(--parchment); }
 .mods th[aria-sort="ascending"], .mods th[aria-sort="descending"] { color: var(--gold); }
 .sort-mark { margin-left: 5px; font-size: 9px; }
+
+/* Список конфликтов файлов. */
+.conflict-row { list-style: none; margin: 0 0 6px; }
+.conflict-open {
+  display: grid;
+  grid-template-columns: 130px 1fr;
+  gap: 2px 14px;
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--brass-dark);
+  background: transparent;
+  text-align: left;
+}
+.conflict-open:hover { background: var(--panel-selected); }
+.conflict-state { grid-row: span 2; align-self: center; font-size: 13px; color: var(--ok); }
+.conflict-open[data-state="open"] .conflict-state { color: var(--orange-text); font-weight: 700; }
+.conflict-mods { font-weight: 700; }
+.conflict-meta { font-size: 13px; color: var(--muted); }

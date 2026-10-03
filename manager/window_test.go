@@ -176,7 +176,7 @@ func TestChooseWinner(t *testing.T) {
 			issue = i
 		}
 	}
-	if issue.Arg != "alpha|beta" || issue.Action != "Выбрать победителя" {
+	if issue.Arg != "alpha|beta" || issue.Action != "Разобрать конфликт" {
 		t.Fatalf("замечание о конфликте: %+v", issue)
 	}
 	choice, err := a.WinnerOptions(issue.Arg)
@@ -197,9 +197,25 @@ func TestChooseWinner(t *testing.T) {
 	if choice, _ = a.WinnerOptions(issue.Arg); !choice.Options[0].Current {
 		t.Errorf("закреплённый победитель не отмечен: %+v", choice.Options)
 	}
-	// Возврат к порядку загрузки убирает закрепление.
+	// Выбор запомнен — конфликт больше не требует внимания, но виден в разборе.
+	s := state(t, a)
+	if strings.Contains(issueTitles(s), "меняют одни и те же файлы") {
+		t.Errorf("решённый конфликт остался в замечаниях: %s", issueTitles(s))
+	}
+	if v := statusValue(s, "Конфликты"); v != "1 · все разобраны" {
+		t.Errorf("строка состояния: %q", v)
+	}
+	// Выбор победителя «по порядку загрузки» — тоже решение.
 	if _, err := a.SetWinner(issue.Arg, "beta"); err != nil {
 		t.Fatal(err)
+	}
+	if list, _ := a.Conflicts(); len(list) != 1 || !list[0].Pinned || !list[0].Resolved {
+		t.Errorf("после выбора по порядку загрузки: %+v", list)
+	}
+	// Снятие выбора возвращает конфликт в замечания.
+	s, err = a.UnpinWinner(issue.Arg)
+	if err != nil || !strings.Contains(issueTitles(s), "меняют одни и те же файлы") || statusValue(s, "Конфликты") != "1 · ждут решения: 1" {
+		t.Errorf("после снятия выбора: %v, %s, %q", err, issueTitles(s), statusValue(s, "Конфликты"))
 	}
 	if p, _, _ := a.loadProfile(); len(p.Winners) != 0 {
 		t.Errorf("закрепление осталось: %v", p.Winners)

@@ -211,8 +211,8 @@ func (a *Manager) WinnerOptions(key string) (WinnerChoice, error) {
 }
 
 // SetWinner закрепляет победителя во всех файлах конфликта между модами
-// key. Победитель «по порядку загрузки» закрепления не требует: запись о
-// нём просто убирается.
+// key. Выбор запоминается, даже если победитель и так стоял ниже всех:
+// конфликт считается решённым. Снимает выбор UnpinWinner.
 func (a *Manager) SetWinner(key, winner string) (State, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -246,9 +246,9 @@ func (a *Manager) SetWinner(key, winner string) (State, error) {
 				delete(p.Winners, path)
 			}
 		}
-		if winner != mods[len(mods)-1] {
-			p.Winners[c.Path] = winner
-		}
+		// Запись остаётся и для победителя «по порядку загрузки»: это решение
+		// пользователя, и конфликт больше не ждёт внимания.
+		p.Winners[c.Path] = winner
 	}
 	if err := a.profiles.Save(p); err != nil {
 		return State{}, err

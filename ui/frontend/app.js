@@ -822,6 +822,10 @@ const commands = {
     return key === null ? state : backend().NexusLogin(key);
   },
   ToggleNxm: () => confirmThen(() => backend().NxmAsk(), () => backend().ToggleNxm()),
+  ShowConflicts: async () => {
+    await showConflicts();
+    return state;
+  },
   ChooseWinner: async (key) => {
     const winner = await ask(await backend().WinnerAsk(key));
     return winner === null ? state : backend().SetWinner(key, winner);
@@ -898,6 +902,8 @@ async function deploy() {
 async function showPlanFiles() {
   try {
     const lines = await backend().PlanFiles();
+    $("sheet-title").textContent = "План по файлам";
+    $("sheet-note").textContent = "«+» — файл ляжет в игру, «~» — заменит прежний, «−» — уберётся.";
     $("sheet-list").replaceChildren(...lines.map((line) => el("li", "", line)));
     $("sheet").hidden = false;
     $("sheet-close").focus();
@@ -951,6 +957,49 @@ async function bisectStep(request, button) {
 async function startBisect() {
   if (!(await ask(await backend().BisectAsk()))) return;
   bisectStep(() => backend().StartBisect(), $("bisect-start"));
+}
+
+// Разбор конфликтов файлов: список всех конфликтов набора. Щелчок по
+// конфликту открывает его разбор с советом и выбором победителя.
+async function showConflicts() {
+  let list;
+  try {
+    list = await backend().Conflicts();
+  } catch (err) {
+    toast(String(err), "error");
+    return;
+  }
+  const kinds = {
+    identical: "безвреден: файлы одинаковые",
+    duplicate: "два варианта одного мода",
+    covered: "один мод перекрыт целиком",
+    ordered: "порядок указал автор",
+    overlap: "частичное пересечение",
+  };
+  $("sheet-title").textContent = "Конфликты файлов";
+  $("sheet-note").textContent = list.length
+    ? "Несколько модов кладут в игру один и тот же файл; остаётся вариант победителя. Щёлкните конфликт, чтобы разобрать его."
+    : "Конфликтов нет: моды не меняют одни и те же файлы.";
+  $("sheet-list").replaceChildren(...list.map((c) => {
+    const item = el("li", "conflict-row");
+    const winner = c.mods.find((m) => m.winner);
+    const state = c.kind === "identical" ? "Безвреден" : c.pinned ? "Решён" : "Ждёт решения";
+    const button = el("button", "conflict-open");
+    button.dataset.state = c.resolved ? "resolved" : "open";
+    button.append(
+      el("span", "conflict-state", state),
+      el("span", "conflict-mods", c.mods.map((m) => m.name).join(" и ")),
+      el("span", "conflict-meta", `файлов: ${c.total} · ${kinds[c.kind] || c.kind} · побеждает ${winner ? winner.name : "—"}`),
+    );
+    button.addEventListener("click", () => {
+      $("sheet").hidden = true;
+      run("ChooseWinner", c.key);
+    });
+    item.append(button);
+    return item;
+  }));
+  $("sheet").hidden = false;
+  $("sheet-close").focus();
 }
 
 // Разделы окна: моды, загрузки, журнал, настройки.

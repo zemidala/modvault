@@ -504,11 +504,18 @@ func (a *Manager) realState() (State, error) {
 	s.OrderNote = note
 	if plan != nil {
 		s.Issues = append(s.Issues, driftIssues(plan)...)
-		s.Issues = append(s.Issues, conflictIssues(plan, names)...)
 		s.Plan, s.PlanTitle = planLines(plan, names)
+	}
+	var conflictList []ConflictInfo
+	if plan != nil {
+		conflictList = a.conflicts(plan, p)
+		s.Issues = append(s.Issues, conflictIssues(conflictList)...)
 	}
 
 	s.Status = a.status(s, len(mods), plan)
+	if item, ok := conflictStatus(conflictList); ok {
+		s.Status = append(s.Status, item)
+	}
 	s.Bisect = a.bisectStatus()
 	s.Settings = a.settingsList()
 	s.Setup = a.setupSteps()
@@ -540,49 +547,6 @@ func driftIssues(plan *deploy.Plan) []Issue {
 			Title:  fmt.Sprintf("%d %s из игры", missing, plural(missing, "файл мода пропал", "файла модов пропали", "файлов модов пропали")),
 			Detail: "Например, после проверки файлов в Steam. При развёртывании они лягут заново",
 			Level:  LevelWarn,
-		})
-	}
-	return out
-}
-
-// conflictIssues сводит конфликты по наборам модов: одна строка на набор,
-// а не на каждый файл.
-func conflictIssues(plan *deploy.Plan, names func(string) string) []Issue {
-	type group struct {
-		mods   []string
-		winner string
-		files  int
-	}
-	var order []string
-	groups := map[string]*group{}
-	for _, c := range plan.Conflicts {
-		if c.Winner == generatedMod {
-			continue // служебный файл заменяет образец из архива — так и задумано
-		}
-		k := strings.Join(c.Mods, "\x00") + "\x01" + c.Winner
-		g, ok := groups[k]
-		if !ok {
-			g = &group{mods: c.Mods, winner: c.Winner}
-			groups[k] = g
-			order = append(order, k)
-		}
-		g.files++
-	}
-	out := make([]Issue, 0, len(order))
-	for _, k := range order {
-		g := groups[k]
-		modNames := make([]string, len(g.mods))
-		for i, id := range g.mods {
-			modNames[i] = names(id)
-		}
-		why := "он ниже в порядке загрузки"
-		if g.winner != g.mods[len(g.mods)-1] {
-			why = "он закреплён победителем"
-		}
-		out = append(out, Issue{
-			Title:  fmt.Sprintf("%s меняют одни и те же файлы (%d)", strings.Join(modNames, " и "), g.files),
-			Detail: fmt.Sprintf("Конфликт файлов · побеждает %s: %s", names(g.winner), why),
-			Level:  LevelWarn, Action: "Выбрать победителя", Command: "ChooseWinner", Arg: conflictKey(g.mods),
 		})
 	}
 	return out

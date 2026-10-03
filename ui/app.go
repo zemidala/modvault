@@ -439,29 +439,90 @@ func (a *App) SetSetting(key string, on bool) (manager.State, error) {
 // HideSetup убирает памятку «Начало работы».
 func (a *App) HideSetup() (manager.State, error) { return a.m.HideSetup() }
 
-// WinnerAsk — вопрос, чьи файлы должны победить в конфликте.
+// Conflicts возвращает разбор конфликтов файлов текущего набора.
+func (a *App) Conflicts() ([]manager.ConflictInfo, error) { return a.m.Conflicts() }
+
+// Ответы на вопрос о конфликте, которые не выбирают победителя.
+const (
+	choiceUnpin   = "unpin"    // снять выбор победителя
+	choiceDisable = "disable:" // выключить мод; дальше — его идентификатор
+)
+
+// WinnerAsk разбирает конфликт файлов: что он значит, что советует
+// программа — и спрашивает, как поступить.
 func (a *App) WinnerAsk(key string) (Ask, error) {
-	choice, err := a.m.WinnerOptions(key)
+	c, err := a.m.Conflict(key)
 	if err != nil {
 		return Ask{}, err
 	}
-	ask := Ask{
-		Title: "Победитель в конфликте файлов",
-		Message: fmt.Sprintf("Эти моды кладут в игру %d %s. В игре может лежать только один вариант — выберите, чей.\n\nПо умолчанию побеждает мод, стоящий ниже в порядке загрузки.",
-			choice.Files, plural(choice.Files, "один и тот же файл", "одних и тех же файла", "одних и тех же файлов")),
-	}
-	for _, o := range choice.Options {
-		label := o.Name
-		if o.Default {
-			label += " — по порядку загрузки"
+	var b strings.Builder
+	b.WriteString(c.Advice)
+	b.WriteString("\n\nКто что кладёт в игру:\n")
+	for _, m := range c.Mods {
+		line := fmt.Sprintf("• %s — файлов %d, спорных %d", m.Name, m.Files, m.Shared)
+		switch {
+		case m.Covered:
+			line += ", все достаются другому"
+		case m.Lost == 0:
+			line += ", все остаются за ним"
+		default:
+			line += fmt.Sprintf(", из них теряет %d", m.Lost)
 		}
-		ask.Choices = append(ask.Choices, Choice{Label: label, Value: o.ID, Current: o.Current})
+		b.WriteString(line + "\n")
+	}
+	fmt.Fprintf(&b, "\nСпорные файлы (%d):\n", c.Total)
+	const show = 8
+	for i, f := range c.Files {
+		if i == show {
+			fmt.Fprintf(&b, "…и ещё %d\n", c.Total-show)
+			break
+		}
+		b.WriteString(f + "\n")
+	}
+	if c.Pinned {
+		b.WriteString("\nПобедитель выбран вами: конфликт считается решённым.")
+	}
+
+	ask := Ask{Title: "Конфликт файлов", Message: strings.TrimSpace(b.String())}
+	for _, m := range c.Mods {
+		label := "Побеждает «" + m.Name + "»"
+		var notes []string
+		if m.ID == c.Suggested {
+			notes = append(notes, "рекомендуется")
+		}
+		if m.Winner {
+			notes = append(notes, "сейчас")
+		}
+		if m.Default {
+			notes = append(notes, "по порядку загрузки")
+		}
+		if len(notes) > 0 {
+			label += " — " + strings.Join(notes, ", ")
+		}
+		ask.Choices = append(ask.Choices, Choice{Label: label, Value: m.ID, Current: m.Winner && c.Pinned})
+	}
+	for _, m := range c.Mods {
+		if m.ID == c.Disable {
+			ask.Choices = append(ask.Choices, Choice{Label: "Выключить «" + m.Name + "» — конфликт исчезнет", Value: choiceDisable + m.ID})
+		}
+	}
+	if c.Pinned {
+		ask.Choices = append(ask.Choices, Choice{Label: "Снять выбор: пусть решает порядок загрузки", Value: choiceUnpin})
 	}
 	return ask, nil
 }
 
-// SetWinner закрепляет победителя в конфликте файлов.
-func (a *App) SetWinner(key, winner string) (manager.State, error) { return a.m.SetWinner(key, winner) }
+// SetWinner выполняет решение по конфликту: закрепляет победителя,
+// выключает мод или снимает прежний выбор.
+func (a *App) SetWinner(key, choice string) (manager.State, error) {
+	if choice == choiceUnpin {
+		return a.m.UnpinWinner(key)
+	}
+	if id, ok := strings.CutPrefix(choice, choiceDisable); ok {
+		return a.m.SetEnabled(id, false)
+	}
+	return a.m.SetWinner(key, choice)
+}
 
 // DropResult — итог добавления архивов, брошенных в окно.
 type DropResult struct {
