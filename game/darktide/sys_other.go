@@ -2,15 +2,10 @@
 
 package darktide
 
-import (
-	"errors"
-	"syscall"
-)
+import "syscall"
 
-func steamRoot() string { return "" }
-func drives() []string  { return nil }
-func openURL(string) error {
-	return errors.New("запуск поддерживается только в Windows")
-}
+func steamRoot() string  { return "" }
+func drives() []string   { return nil }
+func steamRunning() bool { return false }
 
 func hiddenWindow() *syscall.SysProcAttr { return nil }

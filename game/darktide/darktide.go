@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -145,8 +146,39 @@ func LoadOrder(mods []game.ModInfo) []byte {
 
 // Launch запускает игру. Через Steam — чтобы работали оверлей и облако.
 func (*Darktide) Launch(inst game.Install) error {
-	if inst.Store == "Steam" {
-		return openURL("steam://rungameid/" + SteamAppID)
+	if inst.Store != "Steam" {
+		return errors.New("запуск этой версии игры пока не поддерживается: запустите её из приложения Xbox")
 	}
-	return errors.New("запуск этой версии игры пока не поддерживается: запустите её из приложения Xbox")
+	// Игра стартует сама, минуя окно лаунчера. Без Steam она не войдёт в
+	// учётную запись, поэтому запускать её без него бессмысленно.
+	if !steamRunning() {
+		return errors.New("Steam не запущен: без него игра не стартует. Запустите Steam и нажмите «Играть» ещё раз")
+	}
+	cmd, err := launchCommand(inst.Dir)
+	if err != nil {
+		return err
+	}
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("игра не запустилась: %w", err)
+	}
+	return cmd.Process.Release() // игра живёт сама по себе, ждать её не нужно
+}
+
+// launchArgs — параметры, с которыми игру запускает её собственный лаунчер.
+// Взяты из настроек лаунчера (launcher/Launcher.exe.config, ExeArgs) и из
+// строки параметров настоящего запуска в журнале игры.
+var launchArgs = []string{"-eac-untrusted", "--bundle-dir", "../bundle", "--ini", "settings", "--lua-heap-mb-size", "2048"}
+
+// launchCommand собирает запуск Darktide.exe напрямую, без лаунчера.
+func launchCommand(dir string) (*exec.Cmd, error) {
+	exe := filepath.Join(dir, filepath.FromSlash(exePath))
+	if _, err := os.Stat(exe); err != nil {
+		return nil, fmt.Errorf("в папке игры нет %s", exePath)
+	}
+	cmd := exec.Command(exe, launchArgs...)
+	cmd.Dir = filepath.Dir(exe) // пути в параметрах заданы от папки binaries
+	// Лаунчер запускается самим Steam и получает номер игры от него; игре,
+	// запущенной напрямую, номер нужно сообщить, иначе она не найдёт Steam.
+	cmd.Env = append(os.Environ(), "SteamAppId="+SteamAppID, "SteamGameId="+SteamAppID)
+	return cmd, nil
 }

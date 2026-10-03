@@ -389,3 +389,29 @@ func TestOriginals(t *testing.T) {
 		t.Errorf("пропатченный .bak принят за оригинал: %v", got)
 	}
 }
+
+func TestLaunchCommand(t *testing.T) {
+	dir := newGame(t, fakeBundle(false))
+	cmd, err := launchCommand(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Запускается сама игра, а не лаунчер, из папки binaries.
+	if cmd.Path != filepath.Join(dir, "binaries", "Darktide.exe") || cmd.Dir != filepath.Join(dir, "binaries") {
+		t.Errorf("запуск %s из %s", cmd.Path, cmd.Dir)
+	}
+	if got := strings.Join(cmd.Args[1:], " "); got != "-eac-untrusted --bundle-dir ../bundle --ini settings --lua-heap-mb-size 2048" {
+		t.Errorf("параметры: %s", got)
+	}
+	env := strings.Join(cmd.Env, ";")
+	if !strings.Contains(env, "SteamAppId=1361210") || !strings.Contains(env, "SteamGameId=1361210") {
+		t.Error("игре не сообщён её номер в Steam")
+	}
+
+	if _, err := launchCommand(t.TempDir()); err == nil {
+		t.Error("запуск из папки без игры собран без ошибки")
+	}
+	if err := New().Launch(game.Install{Dir: dir, Store: "Xbox"}); err == nil {
+		t.Error("запуск версии не из Steam прошёл")
+	}
+}
