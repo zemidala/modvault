@@ -268,7 +268,7 @@ func TestNexusLogin(t *testing.T) {
 	if key, _ := a.keys.Load(); key != "" || a.NexusUser() != "" {
 		t.Errorf("после выхода: ключ %q, имя %q", key, a.NexusUser())
 	}
-	if _, err := a.CheckUpdates(ctx); err == nil {
+	if _, err := a.CheckUpdates(ctx, nil); err == nil {
 		t.Error("проверка обновлений без ключа прошла")
 	}
 }
@@ -392,7 +392,7 @@ func TestUpdates(t *testing.T) {
 	f.add(t, 22, "Scoreboard", fakeFile{ID: 150, Name: "Scoreboard Skins", Version: "0.1", Category: "OPTIONAL", Uploaded: 30}, map[string]string{"Skins/Skins.mod": "return {}"})
 	f.mods[22].updates = [][2]int{{100, 101}}
 
-	rep, err := a.CheckUpdates(ctx)
+	rep, err := a.CheckUpdates(ctx, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -411,7 +411,7 @@ func TestUpdates(t *testing.T) {
 
 	// Вторая проверка спрашивает только «что менялось»: один запрос на всех.
 	before := f.apiRequests()
-	rep, err = a.CheckUpdates(ctx)
+	rep, err = a.CheckUpdates(ctx, nil)
 	if err != nil || rep.Requests != 1 || f.apiRequests()-before != 1 || rep.Updates != 1 {
 		t.Errorf("вторая проверка: %+v, %v, запросов %d", rep, err, f.apiRequests()-before)
 	}
@@ -454,7 +454,7 @@ func TestUpdates(t *testing.T) {
 	f.file(101).Category = "OLD_VERSION"
 	f.mods[22].updates = append(f.mods[22].updates, [2]int{101, 102})
 	f.changed[22] = time.Now().Unix()
-	if rep, err = a.CheckUpdates(ctx); err != nil || rep.Updates != 1 || rep.Requests != 2 {
+	if rep, err = a.CheckUpdates(ctx, nil); err != nil || rep.Updates != 1 || rep.Requests != 2 {
 		t.Fatalf("третья проверка: %+v, %v", rep, err)
 	}
 	if m := findMod(t, rep.State, "scoreboard_skins"); m.Available != "" {

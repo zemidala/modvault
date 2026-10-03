@@ -392,7 +392,11 @@ const updatesHorizon = 27 * 24 * time.Hour
 
 // CheckUpdates узнаёт на Nexus, вышли ли новые версии модов профиля.
 // Первый раз спрашивает о каждом моде, потом — только о менявшихся.
-func (a *Manager) CheckUpdates(ctx context.Context) (UpdateReport, error) {
+// progress сообщает, о скольких модах из total уже спрошено.
+func (a *Manager) CheckUpdates(ctx context.Context, progress func(done, total int)) (UpdateReport, error) {
+	if progress == nil {
+		progress = func(int, int) {}
+	}
 	type target struct {
 		modID   string
 		nexusID int
@@ -472,7 +476,8 @@ func (a *Manager) CheckUpdates(ctx context.Context) (UpdateReport, error) {
 	}
 	sort.Ints(ids)
 	var failure error
-	for _, id := range ids {
+	for i, id := range ids {
+		progress(i, len(ids))
 		files, err := c.Files(ctx, domain, id)
 		rep.Requests++
 		if errors.Is(err, nexus.ErrNotFound) || errors.Is(err, nexus.ErrForbidden) {

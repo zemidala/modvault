@@ -636,7 +636,12 @@ func (c *cli) nexus(args []string) error {
 		fmt.Fprintln(c.out, "ключ Nexus забыт")
 		return nil
 	case "check":
-		rep, err := m.CheckUpdates(ctx)
+		rep, err := m.CheckUpdates(ctx, func(done, total int) {
+			// Строка на каждые 20 модов: видно, что проверка идёт.
+			if done > 0 && done%20 == 0 {
+				fmt.Fprintf(c.out, "проверено %d из %d…\n", done, total)
+			}
+		})
 		if err != nil {
 			return err
 		}

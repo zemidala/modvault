@@ -277,10 +277,13 @@ function run(command, arg) {
   if (commands[command]) call(() => commands[command](arg));
 }
 
-// act выполняет запрос, который возвращает новое состояние и сообщение;
-// кнопка на время запроса не нажимается.
-async function act(request, button) {
+// act выполняет запрос, который возвращает новое состояние и сообщение.
+// Пока он идёт, кнопка не нажимается и по ней бежит полоска, а внизу висит
+// строка busy: долгое действие не должно выглядеть зависшим.
+async function act(request, button, busy) {
   button.disabled = true;
+  button.classList.add("busy");
+  if (busy) toast(busy, "busy", true);
   try {
     const res = await request();
     state = res.state;
@@ -290,6 +293,9 @@ async function act(request, button) {
     toast(String(err), "error");
   } finally {
     button.disabled = false;
+    button.classList.remove("busy");
+    // Строка «идёт работа» не остаётся висеть, если её ничто не сменило.
+    if ($("toast").dataset.level === "busy") $("toast").hidden = true;
   }
 }
 
@@ -300,7 +306,10 @@ function listen() {
   if (!events) return;
   events.EventsOn("download", (p) => {
     const share = p.total > 0 ? ` — ${Math.floor((p.done * 100) / p.total)}%` : "";
-    toast(`Загрузка: ${p.name}${share}`, "info", true);
+    toast(`Загрузка: ${p.name}${share}`, "busy", true);
+  });
+  events.EventsOn("checking", (p) => {
+    toast(`Проверка обновлений: ${p.done} из ${p.total}`, "busy", true);
   });
   events.EventsOn("installed", (res) => {
     state = res.state;
@@ -313,6 +322,8 @@ function listen() {
 async function deploy() {
   const button = $("deploy");
   button.disabled = true;
+  button.classList.add("busy");
+  toast("Развёртывание…", "busy", true);
   try {
     const res = await backend().Deploy();
     state = res.state;
@@ -322,6 +333,8 @@ async function deploy() {
     toast(String(err), "error");
   } finally {
     button.disabled = false;
+    button.classList.remove("busy");
+    if ($("toast").dataset.level === "busy") $("toast").hidden = true;
   }
 }
 
@@ -382,8 +395,8 @@ function wire() {
     return res.state;
   }));
   $("card-show-files").addEventListener("click", toggleFiles);
-  $("check-updates").addEventListener("click", () => act(() => backend().CheckUpdates(), $("check-updates")));
-  $("card-update").addEventListener("click", () => act(() => backend().UpdateMod(selectedId), $("card-update")));
+  $("check-updates").addEventListener("click", () => act(() => backend().CheckUpdates(), $("check-updates"), "Проверка обновлений: запрос к Nexus…"));
+  $("card-update").addEventListener("click", () => act(() => backend().UpdateMod(selectedId), $("card-update"), "Обновление: запрос к Nexus…"));
   $("card-nexus").addEventListener("click", async () => {
     try {
       await backend().OpenNexus(selectedId);

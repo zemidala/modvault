@@ -271,7 +271,12 @@ func (a *App) NexusLogin(key string) (manager.State, error) {
 }
 
 // CheckUpdates проверяет на Nexus, вышли ли новые версии модов.
-func (a *App) CheckUpdates() (manager.UpdateReport, error) { return a.m.CheckUpdates(a.ctx) }
+// О ходе проверки страница узнаёт из событий «checking».
+func (a *App) CheckUpdates() (manager.UpdateReport, error) {
+	return a.m.CheckUpdates(a.ctx, func(done, total int) {
+		runtime.EventsEmit(a.ctx, "checking", map[string]int{"done": done, "total": total})
+	})
+}
 
 // UpdateMod обновляет мод; без Premium открывает страницу файлов мода в браузере.
 func (a *App) UpdateMod(id string) (manager.UpdateResult, error) {
