@@ -1,0 +1,216 @@
+// Страница главного окна. Данные приходят из Go (пакет ui), здесь только показ.
+"use strict";
+
+const $ = (id) => document.getElementById(id);
+
+let state = null;
+let selectedId = null;
+
+// Go-сторона окна. Вне программы (страница открыта в браузере) её нет.
+function backend() {
+  return window.go && window.go.ui && window.go.ui.App;
+}
+
+function el(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+function roman(n) {
+  const table = [[1000, "M"], [900, "CM"], [500, "D"], [400, "CD"], [100, "C"], [90, "XC"], [50, "L"], [40, "XL"], [10, "X"], [9, "IX"], [5, "V"], [4, "IV"], [1, "I"]];
+  let out = "";
+  for (const [value, sign] of table) {
+    while (n >= value) {
+      out += sign;
+      n -= value;
+    }
+  }
+  return out;
+}
+
+let toastTimer = 0;
+function toast(text, level) {
+  const node = $("toast");
+  node.textContent = text;
+  node.dataset.level = level || "info";
+  node.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { node.hidden = true; }, 3500);
+}
+
+// Кнопка, за которой ещё нет ядра, честно говорит, когда заработает.
+function notYet(label, stage) {
+  toast(`«${label}» появится на этапе ${stage}`);
+}
+
+function renderStatus() {
+  const box = $("status");
+  box.replaceChildren();
+  for (const item of state.status) {
+    const node = el("span", "status-item");
+    node.dataset.level = item.level;
+    node.append(el("span", "muted", item.label), el("span", "status-value", item.value));
+    box.append(node);
+  }
+}
+
+function renderIssues() {
+  const box = $("issues");
+  box.replaceChildren();
+  for (const issue of state.issues) {
+    const row = el("div", "issue");
+    row.dataset.level = issue.level;
+    const text = el("div", "issue-text");
+    text.append(el("div", "issue-title", issue.title), el("div", "issue-detail", issue.detail));
+    const button = el("button", "ghost", issue.action);
+    button.addEventListener("click", () => notYet(issue.action, issue.stage));
+    row.append(text, button);
+    box.append(row);
+  }
+  $("issues-section").hidden = state.issues.length === 0;
+}
+
+function renderMods() {
+  const body = $("mods");
+  const query = $("search").value.trim().toLowerCase();
+  body.replaceChildren();
+
+  state.mods.forEach((mod, index) => {
+    if (query && !mod.name.toLowerCase().includes(query)) return;
+
+    const row = el("tr");
+    row.tabIndex = 0;
+    row.dataset.enabled = String(mod.enabled);
+    row.setAttribute("aria-selected", String(mod.id === selectedId));
+
+    const toggleCell = el("td");
+    if (mod.pinned) {
+      toggleCell.append(el("span", "always", "всегда"));
+    } else {
+      const toggle = el("button", "switch");
+      toggle.setAttribute("role", "switch");
+      toggle.setAttribute("aria-checked", String(mod.enabled));
+      toggle.setAttribute("aria-label", (mod.enabled ? "Выключить " : "Включить ") + mod.name);
+      const track = el("span", "switch-track");
+      track.append(el("span", "switch-knob"));
+      toggle.append(track);
+      toggle.addEventListener("click", (event) => {
+        event.stopPropagation();
+        setEnabled(mod.id, !mod.enabled);
+      });
+      toggleCell.append(toggle);
+    }
+
+    const stateCell = el("td", "state", mod.state);
+    stateCell.dataset.level = mod.level;
+
+    row.append(el("td", "num", roman(index + 1)), toggleCell, el("td", "name", mod.name), el("td", "version", mod.version), stateCell);
+
+    const select = () => {
+      selectedId = mod.id === selectedId ? null : mod.id;
+      renderMods();
+      renderCard();
+    };
+    row.addEventListener("click", select);
+    row.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && event.target === row) select();
+    });
+    body.append(row);
+  });
+
+  $("mods-empty").hidden = body.children.length > 0;
+}
+
+function renderCard() {
+  const mod = state.mods.find((m) => m.id === selectedId);
+  const card = $("card");
+  card.hidden = !mod || !$("view-placeholder").hidden;
+  if (!mod) return;
+
+  $("card-name").textContent = mod.name;
+  $("card-source").textContent = mod.source;
+  $("card-version").textContent = mod.version;
+  $("card-files").textContent = String(mod.files);
+  $("card-state").textContent = mod.state;
+
+  const hasUpdate = mod.available !== "";
+  $("card-available-label").hidden = !hasUpdate;
+  $("card-available").hidden = !hasUpdate;
+  $("card-available").textContent = mod.available;
+  $("card-update").hidden = !hasUpdate;
+  $("card-update").textContent = "Обновить до " + mod.available;
+
+  const hasDeps = mod.dependsOn !== "";
+  $("card-depends-label").hidden = !hasDeps;
+  $("card-depends").hidden = !hasDeps;
+  $("card-depends").textContent = mod.dependsOn;
+}
+
+function renderPlan() {
+  $("plan").hidden = state.plan.length === 0;
+  $("plan-title").textContent = state.planTitle;
+  $("plan-detail").textContent = state.plan.join(" · ");
+}
+
+function render() {
+  $("profile").textContent = state.profile;
+  $("version").textContent = state.version;
+  $("demo").hidden = !state.demo;
+  renderStatus();
+  renderIssues();
+  renderMods();
+  renderCard();
+  renderPlan();
+}
+
+async function setEnabled(id, enabled) {
+  try {
+    state = await backend().SetEnabled(id, enabled);
+    render();
+  } catch (err) {
+    toast(String(err), "error");
+  }
+}
+
+function showTab(tab) {
+  for (const button of document.querySelectorAll(".tab")) {
+    if (button === tab) button.setAttribute("aria-current", "page");
+    else button.removeAttribute("aria-current");
+  }
+  const isMods = tab.dataset.tab === "mods";
+  $("view-mods").hidden = !isMods;
+  $("view-placeholder").hidden = isMods;
+  if (!isMods) {
+    $("placeholder-title").textContent = tab.textContent;
+    $("placeholder-text").textContent = `Раздел «${tab.textContent}» появится на этапе ${tab.dataset.stage}.`;
+  }
+  if (state) renderCard();
+}
+
+function wire() {
+  for (const tab of document.querySelectorAll(".tab")) {
+    tab.addEventListener("click", () => showTab(tab));
+  }
+  for (const button of document.querySelectorAll("button[data-stage]:not(.tab)")) {
+    button.addEventListener("click", () => notYet(button.textContent.trim().replace(/:.*/, ""), button.dataset.stage));
+  }
+  $("search").addEventListener("input", renderMods);
+}
+
+async function start() {
+  wire();
+  if (!backend()) {
+    toast("Страница открыта вне программы: данных нет", "error");
+    return;
+  }
+  try {
+    state = await backend().State();
+    render();
+  } catch (err) {
+    toast("Не удалось получить данные: " + err, "error");
+  }
+}
+
+window.addEventListener("load", start);

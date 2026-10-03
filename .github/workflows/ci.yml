@@ -36,3 +36,6 @@ jobs:
 
       - name: Сборка
         run: go build -o bin/modvault.exe ./cmd/modvault
+
+      - name: Сборка окна
+        run: go build -tags "desktop,production" -ldflags "-H windowsgui" -o bin/modvault-gui.exe ./cmd/modvault-gui

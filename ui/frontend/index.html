@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Modvault</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+<header class="band">
+  <span class="brand">
+    <svg class="brand-mark" viewBox="0 0 200 200" role="img" aria-label="Знак ZD">
+      <mask id="zdcut" maskUnits="userSpaceOnUse" x="0" y="0" width="200" height="200">
+        <rect width="200" height="200" fill="#fff"/>
+        <rect x="62" y="73" width="40" height="6" fill="#000"/>
+        <rect x="30" y="121" width="40" height="6" fill="#000"/>
+        <rect x="128" y="50" width="6" height="30" fill="#000"/>
+        <rect x="128" y="120" width="6" height="30" fill="#000"/>
+      </mask>
+      <g fill="currentColor" mask="url(#zdcut)">
+        <path d="M34 56 H98 V76 L60 124 H98 V144 H34 V124 L72 76 H34 Z"/>
+        <path fill-rule="evenodd" d="M108 56 H134 C154 56 166 74 166 100 C166 126 154 144 134 144 H108 Z M128 76 V124 H133 C142 124 146 114 146 100 C146 86 142 76 133 76 Z"/>
+      </g>
+    </svg>
+    <span class="brand-name">MODVAULT</span>
+  </span>
+
+  <nav class="tabs" aria-label="Разделы">
+    <button class="tab" data-tab="mods" aria-current="page">Моды</button>
+    <button class="tab" data-tab="downloads" data-stage="7">Загрузки</button>
+    <button class="tab" data-tab="journal" data-stage="3">Журнал</button>
+    <button class="tab" data-tab="settings" data-stage="8">Настройки</button>
+  </nav>
+
+  <span class="spacer"></span>
+  <button class="band-button" data-stage="2">Профиль: <span id="profile">—</span></button>
+  <button class="plate plate-dark" data-stage="4">Играть</button>
+</header>
+
+<div class="status" id="status" aria-label="Состояние"></div>
+
+<div class="body">
+
+  <main id="view-mods">
+    <section id="issues-section" aria-label="Требуют внимания" hidden>
+      <div class="heading"><h2>Требуют внимания</h2><span class="rule"></span><span class="diamond"></span></div>
+      <div class="frame" id="issues"></div>
+    </section>
+
+    <section aria-label="Порядок загрузки">
+      <div class="heading"><h1>Порядок загрузки</h1><span class="rule"></span><span class="diamond"></span></div>
+      <div class="toolbar">
+        <label class="field">Поиск по названию
+          <input type="search" id="search" placeholder="Название мода" autocomplete="off">
+        </label>
+        <button class="ghost" data-stage="6">Отсортировать по правилам</button>
+        <button class="ghost" data-stage="2">Добавить мод</button>
+      </div>
+      <div class="frame">
+        <table class="mods">
+          <thead>
+            <tr><th class="col-num">№</th><th class="col-toggle">Вкл.</th><th>Мод</th><th class="col-version">Версия</th><th class="col-state">Состояние</th></tr>
+          </thead>
+          <tbody id="mods"></tbody>
+        </table>
+        <p class="empty" id="mods-empty" hidden>Ничего не найдено.</p>
+      </div>
+    </section>
+  </main>
+
+  <main id="view-placeholder" hidden>
+    <div class="heading"><h1 id="placeholder-title"></h1><span class="rule"></span><span class="diamond"></span></div>
+    <p class="placeholder" id="placeholder-text"></p>
+  </main>
+
+  <aside class="card" id="card" aria-label="Выбранный мод" hidden>
+    <div>
+      <h2 class="card-title" id="card-name"></h2>
+      <div class="muted">Источник: <span id="card-source"></span></div>
+    </div>
+    <div class="rule"></div>
+    <dl class="facts">
+      <dt>Установлена</dt><dd id="card-version"></dd>
+      <dt id="card-available-label">Доступна</dt><dd id="card-available" class="warn"></dd>
+      <dt>Файлов в игре</dt><dd id="card-files"></dd>
+      <dt id="card-depends-label">Зависит от</dt><dd id="card-depends"></dd>
+      <dt>Состояние</dt><dd id="card-state"></dd>
+    </dl>
+    <div class="card-actions">
+      <button class="plate" id="card-update" data-stage="7"></button>
+      <button class="ghost" data-stage="2">Показать файлы</button>
+      <button class="ghost" data-stage="7">Открыть на Nexus</button>
+      <button class="ghost danger" data-stage="2">Удалить мод</button>
+    </div>
+    <p class="muted small">Прежняя версия остаётся в хранилище, пока новая не развёрнута без ошибок.</p>
+  </aside>
+
+</div>
+
+<footer class="plan" id="plan" hidden>
+  <div class="plan-text">
+    <div class="plan-title" id="plan-title"></div>
+    <div class="muted small" id="plan-detail"></div>
+  </div>
+  <button class="ghost" data-stage="3">Показать по файлам</button>
+  <button class="plate" data-stage="3">Развернуть</button>
+</footer>
+
+<div class="foot">
+  <span id="demo" hidden>Демонстрационные данные: ядро программы ещё не подключено</span>
+  <span class="spacer"></span>
+  <span id="version"></span>
+</div>
+
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script src="app.js"></script>
+</body>
+</html>

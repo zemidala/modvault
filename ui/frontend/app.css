@@ -1,0 +1,327 @@
+/* Стиль «гримдарк»: тёплый тёмный металл, латунь, пергамент, потёртая оранжевая шапка. */
+
+@font-face { font-family: "Forum"; src: url("fonts/Forum-Regular.ttf"); }
+@font-face { font-family: "PT Sans"; font-weight: 400; src: url("fonts/PTSans-Regular.ttf"); }
+@font-face { font-family: "PT Sans"; font-weight: 700; src: url("fonts/PTSans-Bold.ttf"); }
+@font-face { font-family: "Saira Stencil One"; src: url("fonts/SairaStencilOne-Regular.ttf"); }
+
+:root {
+  --iron-deep: #14110e;
+  --iron: #1b1714;
+  --panel: #26201b;
+  --panel-selected: #3a2f22;
+  --brass-dark: #4a3d24;
+  --brass-line: #5a4a2c;
+  --brass-frame: #6b5830;
+  --brass: #b89650;
+  --gold: #d4b46a;
+  --parchment: #e9dfc8;
+  --muted: #b3a68c;
+  --black: #07080b;
+  --orange-worn: #cf6b35;
+  --orange-text: #e07a40;
+  --ok: #7fbf9a;
+  --error: #e8695c;
+  --error-line: #7a2a24;
+  --cut: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+}
+
+* { box-sizing: border-box; }
+
+html, body { height: 100%; }
+
+body {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--iron);
+  color: var(--parchment);
+  font-family: "PT Sans", "Segoe UI", sans-serif;
+  font-size: 15px;
+  line-height: 1.35;
+  user-select: none;
+  cursor: default;
+}
+
+[hidden] { display: none !important; }
+
+::-webkit-scrollbar { width: 12px; height: 12px; }
+::-webkit-scrollbar-track { background: var(--iron-deep); }
+::-webkit-scrollbar-thumb { background: var(--brass-dark); border: 3px solid var(--iron-deep); }
+::-webkit-scrollbar-thumb:hover { background: var(--brass-frame); }
+
+button { font: inherit; color: inherit; cursor: pointer; }
+button:focus-visible, input:focus-visible, tr:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+
+h1, h2 { margin: 0; font-weight: 400; }
+
+.spacer { flex: 1 1 auto; }
+.muted { color: var(--muted); }
+.small { font-size: 13px; }
+.warn { color: var(--orange-text); }
+.rule { flex: 1 1 auto; height: 1px; background: var(--brass-line); }
+.diamond { width: 7px; height: 7px; background: var(--brass); transform: rotate(45deg); flex: 0 0 auto; }
+
+/* Шапка: выцветшая оранжевая краска */
+
+.band {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  padding: 10px 20px;
+  color: var(--black);
+  background-color: var(--orange-worn);
+  background-image:
+    radial-gradient(ellipse at 12% 20%, rgba(7, 8, 11, 0.16), transparent 45%),
+    radial-gradient(ellipse at 80% 90%, rgba(7, 8, 11, 0.2), transparent 40%),
+    radial-gradient(ellipse at 48% 0%, rgba(255, 255, 255, 0.08), transparent 35%),
+    repeating-linear-gradient(115deg, rgba(7, 8, 11, 0.05) 0 2px, transparent 2px 9px);
+  border-bottom: 3px double var(--black);
+}
+
+.brand { display: flex; align-items: center; gap: 10px; padding-right: 12px; }
+.brand-mark { width: 40px; height: 40px; flex: 0 0 auto; }
+.brand-name { font-family: "Saira Stencil One", sans-serif; font-size: 22px; letter-spacing: 0.06em; }
+
+.tabs { display: flex; flex-wrap: wrap; gap: 4px; }
+.tab {
+  min-height: 44px;
+  padding: 0 14px;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: transparent;
+}
+.tab:hover { border-bottom-color: rgba(7, 8, 11, 0.4); }
+.tab[aria-current="page"] { border-bottom-color: var(--black); font-weight: 700; }
+
+.band-button {
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--black);
+  border-radius: 2px;
+  background: transparent;
+  font-weight: 700;
+}
+.band-button:hover { background: rgba(7, 8, 11, 0.12); }
+
+/* Кнопки */
+
+.plate {
+  min-height: 44px;
+  padding: 0 26px;
+  border: 0;
+  background: var(--orange-worn);
+  color: var(--black);
+  font-family: "Forum", serif;
+  font-size: 18px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  clip-path: var(--cut);
+}
+.plate:hover { filter: brightness(1.12); }
+.plate-dark { background: var(--iron-deep); color: var(--parchment); }
+
+.ghost {
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--brass-frame);
+  border-radius: 2px;
+  background: transparent;
+}
+.ghost:hover { background: var(--panel-selected); }
+.ghost.danger { border-color: var(--error-line); color: var(--error); }
+
+/* Строка состояния */
+
+.status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 28px;
+  padding: 10px 20px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--brass-line);
+  font-size: 14px;
+}
+.status-item { display: flex; align-items: center; gap: 8px; }
+.status-item::before { content: ""; width: 8px; height: 8px; transform: rotate(45deg); background: var(--ok); }
+.status-item[data-level="warn"]::before { background: var(--orange-text); }
+.status-item[data-level="error"]::before { background: var(--error); }
+.status-item[data-level="warn"] .status-value { color: var(--orange-text); }
+.status-item[data-level="error"] .status-value { color: var(--error); }
+
+/* Основная часть */
+
+.body { flex: 1 1 auto; min-height: 0; display: flex; }
+
+main {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+main section { display: flex; flex-direction: column; gap: 8px; }
+
+.heading { display: flex; align-items: center; gap: 12px; }
+.heading h1, .heading h2 {
+  font-family: "Forum", serif;
+  font-size: 20px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+
+.frame {
+  border: 1px solid var(--brass-frame);
+  background: var(--panel);
+  box-shadow: inset 0 0 0 3px var(--panel), inset 0 0 0 4px var(--brass-dark);
+  padding: 4px;
+}
+
+.issue {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 16px;
+  min-height: 52px;
+  padding: 4px 12px;
+  border-bottom: 1px solid var(--brass-dark);
+}
+.issue:last-child { border-bottom: 0; }
+.issue-text { flex: 1 1 300px; min-width: 0; }
+.issue-title { font-weight: 700; }
+.issue-detail { font-size: 13px; color: var(--orange-text); }
+.issue[data-level="error"] .issue-detail { color: var(--error); }
+
+.toolbar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; }
+.field { flex: 1 1 220px; display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: var(--muted); }
+.field input {
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--brass-frame);
+  border-radius: 2px;
+  background: var(--iron-deep);
+  color: var(--parchment);
+  font: inherit;
+  font-size: 15px;
+  user-select: text;
+}
+
+/* Список модов */
+
+.mods { width: 100%; border-collapse: collapse; }
+.mods th {
+  height: 32px;
+  padding: 0 12px;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border-bottom: 1px solid var(--brass-frame);
+}
+.mods td { height: 44px; padding: 0 12px; border-bottom: 1px solid var(--brass-dark); }
+.mods tbody tr:last-child td { border-bottom: 0; }
+.mods tbody tr:hover { background: rgba(58, 47, 34, 0.5); }
+.mods tbody tr[aria-selected="true"] { background: var(--panel-selected); }
+
+.col-num { width: 52px; }
+.col-toggle { width: 68px; }
+.col-version { width: 90px; }
+.col-state { width: 280px; }
+
+.num { font-family: "Forum", serif; font-size: 16px; color: var(--brass); }
+.name { font-weight: 700; }
+.version { font-variant-numeric: tabular-nums; }
+.always { font-size: 12px; color: var(--muted); }
+
+tr[data-enabled="false"] .name, tr[data-enabled="false"] .version { color: var(--muted); }
+
+.state[data-level="ok"] { color: var(--ok); }
+.state[data-level="warn"] { color: var(--orange-text); }
+.state[data-level="error"] { color: var(--error); }
+.state[data-level="off"] { color: var(--muted); }
+
+.switch { width: 44px; height: 44px; padding: 0; border: 0; background: transparent; display: flex; align-items: center; }
+.switch-track {
+  width: 34px;
+  height: 18px;
+  padding: 2px;
+  border-radius: 2px;
+  background: #4a4034;
+  display: flex;
+  justify-content: flex-start;
+}
+.switch-knob { width: 14px; height: 14px; border-radius: 1px; background: var(--muted); }
+.switch[aria-checked="true"] .switch-track { background: var(--orange-worn); justify-content: flex-end; }
+.switch[aria-checked="true"] .switch-knob { background: var(--iron-deep); }
+
+.empty, .placeholder { margin: 0; padding: 16px 12px; color: var(--muted); }
+
+/* Карточка мода */
+
+.card {
+  flex: 0 0 320px;
+  overflow-y: auto;
+  padding: 18px 20px;
+  border-left: 1px solid var(--brass-line);
+  background: var(--panel);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.card .rule { flex: 0 0 1px; }
+.card p { margin: 0; }
+.card-title { font-family: "Forum", serif; font-size: 26px; letter-spacing: 0.04em; color: var(--gold); }
+.facts { margin: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 16px; }
+.facts dt { color: var(--muted); }
+.facts dd { margin: 0; font-variant-numeric: tabular-nums; }
+.card-actions { display: flex; flex-direction: column; gap: 8px; }
+.card-actions .plate { font-family: inherit; font-size: inherit; font-weight: 700; letter-spacing: 0; text-transform: none; }
+
+/* План развёртывания и нижняя строка */
+
+.plan {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  background: var(--iron-deep);
+  border-top: 3px double var(--brass-frame);
+}
+.plan-text { flex: 1 1 320px; min-width: 0; }
+.plan-title { font-family: "Forum", serif; font-size: 18px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--orange-text); }
+
+.foot {
+  display: flex;
+  gap: 12px;
+  padding: 4px 20px;
+  background: var(--iron-deep);
+  border-top: 1px solid var(--brass-dark);
+  font-size: 12px;
+  color: var(--muted);
+}
+#demo { color: var(--orange-text); }
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 84px;
+  transform: translateX(-50%);
+  max-width: 80%;
+  padding: 10px 18px;
+  border: 1px solid var(--brass-frame);
+  background: var(--iron-deep);
+  box-shadow: inset 0 0 0 3px var(--iron-deep), inset 0 0 0 4px var(--brass-dark), 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+.toast[data-level="error"] { border-color: var(--error-line); color: var(--error); }
+
+@media (max-width: 1000px) {
+  .card { flex-basis: 260px; }
+  .col-state { width: 200px; }
+}
