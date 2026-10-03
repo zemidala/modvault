@@ -254,6 +254,9 @@ func NewWith(home string, g game.Game) *Manager {
 	if a.openErr == nil && a.settings.GameDir != "" {
 		a.openDeployer()
 	}
+	if a.openErr == nil {
+		a.cleanDownloads()
+	}
 	return a
 }
 

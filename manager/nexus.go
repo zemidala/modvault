@@ -228,7 +228,9 @@ func (a *Manager) installFile(ctx context.Context, c *nexus.Client, domain strin
 			return InstallResult{}, fmt.Errorf("«%s»: скачанный файл не совпал с тем, что лежит на Nexus; он удалён, попробуйте ещё раз", title)
 		}
 	}
-	archive := filepath.Join(dir, name)
+	// Номер файла и в имени архива: два файла с одним именем, скачанные
+	// разом, не затрут друг друга.
+	archive := filepath.Join(dir, fmt.Sprintf("%d-%s", fileID, name))
 	os.Remove(archive)
 	if err := os.Rename(part, archive); err != nil {
 		return InstallResult{}, err
@@ -280,6 +282,29 @@ func (a *Manager) installFile(ctx context.Context, c *nexus.Client, domain strin
 	}
 	st, err := a.state()
 	return InstallResult{State: st, Message: msg}, err
+}
+
+// partAge — сколько ждёт продолжения недокачанный файл. Ссылка на файл
+// живёт недолго, и к загрузке недельной давности уже не вернутся.
+const partAge = 7 * 24 * time.Hour
+
+// cleanDownloads убирает из папки загрузок давно брошенные недокачанные
+// файлы. Скачанные архивы не трогает: они остаются, только если мод не
+// удалось добавить, и могут понадобиться.
+func (a *Manager) cleanDownloads() {
+	dir := filepath.Join(a.home, downloadsDir)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".part") {
+			continue
+		}
+		if info, err := e.Info(); err == nil && time.Since(info.ModTime()) > partAge {
+			os.Remove(filepath.Join(dir, e.Name()))
+		}
+	}
 }
 
 // inSync сообщает, что игра сейчас совпадает с профилем и развёртывать

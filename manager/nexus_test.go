@@ -644,3 +644,24 @@ func TestToggleNxm(t *testing.T) {
 		t.Errorf("пустой обработчик: %q, %q", p.cmd, statusValue(s, "Ссылки nxm"))
 	}
 }
+
+func TestCleanDownloads(t *testing.T) {
+	a, home := newApp(t)
+	dir := filepath.Join(home, downloadsDir)
+	os.MkdirAll(dir, 0o755)
+	old := time.Now().Add(-partAge - time.Hour)
+	for name, at := range map[string]time.Time{
+		"1-old.zip.part":   old,
+		"2-fresh.zip.part": time.Now(),
+		"3-kept.zip":       old, // архив мода, который не удалось добавить
+	} {
+		path := filepath.Join(dir, name)
+		os.WriteFile(path, []byte("x"), 0o644)
+		os.Chtimes(path, at, at)
+	}
+	NewWith(home, a.game) // уборка — при запуске
+	left := snapshot(t, dir)
+	if _, ok := left["1-old.zip.part"]; ok || len(left) != 2 {
+		t.Errorf("после уборки в загрузках: %v", left)
+	}
+}

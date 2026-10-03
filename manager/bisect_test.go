@@ -26,28 +26,43 @@ func huntWith(t *testing.T, a *Manager, problem func(State) bool) (BisectResult,
 	if err != nil {
 		t.Fatal(err)
 	}
-	for runs := 1; runs < 20; runs++ {
+	seen := map[string]bool{}
+	for runs := 1; runs < 40; runs++ {
 		if res.State.Profile != BisectSet || res.State.Bisect == nil {
 			t.Fatalf("шаг %d: поиск не показан окну: набор %q, ход %+v", runs, res.State.Profile, res.State.Bisect)
 		}
 		if res.State.PlanTitle != "" {
-			t.Fatalf("шаг %d: игра не приведена к половине: %q", runs, res.State.PlanTitle)
+			t.Fatalf("шаг %d: игра не приведена к шагу: %q", runs, res.State.PlanTitle)
+		}
+		if res.Done {
+			t.Fatalf("шаг %d: поиск идёт, а итог отмечен законченным", runs)
+		}
+		// Один и тот же состав модов дважды не запускается.
+		if key := enabledIDs(res.State); seen[key] {
+			t.Fatalf("шаг %d: состав %s уже проверялся", runs, key)
+		} else {
+			seen[key] = true
 		}
 		if res, err = a.BisectAnswer(problem(res.State)); err != nil {
 			t.Fatal(err)
 		}
 		if res.State.Profile != BisectSet {
 			if !res.Done {
-				t.Errorf("поиск закончен, а итог не отмечен: %+v", res.Message)
+				t.Errorf("поиск закончен, а итог не отмечен: %q", res.Message)
 			}
 			return res, runs
-		}
-		if res.Done {
-			t.Fatalf("шаг %d: поиск идёт, а итог отмечен законченным", runs)
 		}
 	}
 	t.Fatal("поиск не закончился")
 	return BisectResult{}, 0
+}
+
+func culpritIDs(res BisectResult) string {
+	ids := make([]string, len(res.Culprits))
+	for i, c := range res.Culprits {
+		ids[i] = c.ID
+	}
+	return strings.Join(ids, ",")
 }
 
 func TestBisect(t *testing.T) {
@@ -58,11 +73,12 @@ func TestBisect(t *testing.T) {
 		all := enabledIDs(state(t, a))
 
 		res, runs := hunt(t, a, culprit)
-		if res.Culprit != culprit || !strings.Contains(res.Message, "Найден сбойный мод") {
+		if res.Culprit != culprit || culpritIDs(res) != culprit || !strings.Contains(res.Message, "Найден сбойный мод") {
 			t.Errorf("%s: найден %q за %d запусков: %s", culprit, res.Culprit, runs, res.Message)
 		}
-		// Три шага деления и, самое большее, один контрольный запуск.
-		if runs > 4 {
+		// Запуск без модов, три шага деления, проверка найденного и, если
+		// проблема до конца ни разу не повторилась, запуск с полным набором.
+		if runs > 6 {
 			t.Errorf("%s: запусков игры %d, а подозреваемых всего пять", culprit, runs)
 		}
 		// Свой набор цел, игра вернулась к нему, временный набор убран.
@@ -94,8 +110,83 @@ func TestBisectLarge(t *testing.T) {
 	}
 	a.Deploy()
 	res, runs := hunt(t, a, "mod27")
-	if res.Culprit != "mod27" || runs > 7 {
+	if res.Culprit != "mod27" || runs > 9 {
 		t.Errorf("найден %q за %d запусков игры: %s", res.Culprit, runs, res.Message)
+	}
+
+	// Сочетание трёх модов: проблема есть, только когда включены все три.
+	trio := []string{"mod03", "mod19", "mod38"}
+	res, runs = huntWith(t, a, func(s State) bool {
+		for _, id := range trio {
+			if !findMod(t, s, id).Enabled {
+				return false
+			}
+		}
+		return true
+	})
+	if len(res.Culprits) != 3 || res.Culprit != "" || !strings.Contains(res.Message, "сочетание модов") {
+		t.Fatalf("сочетание трёх: %q за %d запусков: %s", culpritIDs(res), runs, res.Message)
+	}
+	for _, id := range trio {
+		if !strings.Contains(culpritIDs(res), id) {
+			t.Errorf("в сочетании нет %s: %s", id, culpritIDs(res))
+		}
+	}
+	if runs > 25 {
+		t.Errorf("сочетание трёх из сорока: запусков игры %d", runs)
+	}
+}
+
+// Виновник назван, только если проблема повторилась с ним одним, а
+// сочетание модов находится целиком.
+func TestBisectCombination(t *testing.T) {
+	a, g := setsApp(t)
+	before := snapshot(t, g)
+	// Проблему вызывает сочетание двух модов: по отдельности каждый исправен.
+	res, _ := huntWith(t, a, func(s State) bool {
+		return findMod(t, s, "plain").Enabled && findMod(t, s, "other").Enabled
+	})
+	if got := culpritIDs(res); (got != "plain,other" && got != "other,plain") || res.Culprit != "" {
+		t.Errorf("сочетание модов: найдено %q: %s", got, res.Message)
+	}
+	if !strings.Contains(res.Message, "сочетание модов") || !strings.Contains(res.Message, "«Plain»") || !strings.Contains(res.Message, "«Other»") {
+		t.Errorf("сообщение о сочетании: %s", res.Message)
+	}
+	if res.State.Profile != mainProfile || res.State.Bisect != nil || !sameTree(before, snapshot(t, g)) {
+		t.Errorf("после поиска набор %q, игра не возвращена", res.State.Profile)
+	}
+
+	// Мод и тот, кого он требует: виновники оба, хотя включаются вместе.
+	b, _ := setsApp(t)
+	res, _ = huntWith(t, b, func(s State) bool {
+		return findMod(t, s, "needy").Enabled && findMod(t, s, "plain").Enabled
+	})
+	if got := culpritIDs(res); got != "plain,needy" && got != "needy,plain" {
+		t.Errorf("сочетание с зависимым модом: найдено %q: %s", got, res.Message)
+	}
+}
+
+// Поиск никого не обвиняет, если дело не в модах или проблема непостоянна.
+func TestBisectNoCulprit(t *testing.T) {
+	// Проблема есть и без модов: первый же запуск это показывает.
+	a, g := setsApp(t)
+	before := snapshot(t, g)
+	res, runs := huntWith(t, a, func(State) bool { return true })
+	if runs != 1 || len(res.Culprits) != 0 || !strings.Contains(res.Message, "Дело не в модах") {
+		t.Errorf("проблема без модов: запусков %d, найдено %q: %s", runs, culpritIDs(res), res.Message)
+	}
+	if res.State.Profile != mainProfile || !sameTree(before, snapshot(t, g)) {
+		t.Error("после поиска без виновника игра не возвращена")
+	}
+
+	// Проблема не повторилась ни разу, даже с полным набором.
+	b, _ := setsApp(t)
+	res, runs = huntWith(t, b, func(State) bool { return false })
+	if len(res.Culprits) != 0 || !strings.Contains(res.Message, "С полным набором модов проблема не повторилась") {
+		t.Errorf("проблема не повторяется: найдено %q: %s", culpritIDs(res), res.Message)
+	}
+	if runs > 5 {
+		t.Errorf("проблема не повторяется: запусков %d", runs)
 	}
 }
 
@@ -112,8 +203,13 @@ func TestBisectCancelAndErrors(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if st := res.State.Bisect; st.Step != 1 || st.Suspects != 5 || st.Steps != 4 || st.Origin != mainProfile || len(st.Testing) == 0 {
+	// Первый шаг — без модов набора: в игре только загрузчик и фреймворк.
+	st := res.State.Bisect
+	if st.Step != 1 || st.Suspects != 5 || st.Steps != 5 || st.Origin != mainProfile || st.Kind != "base" || len(st.Testing) != 0 {
 		t.Errorf("ход поиска: %+v", st)
+	}
+	if enabledIDs(res.State) != "dml,dmf" || !strings.Contains(res.Message, "моды набора выключены") {
+		t.Errorf("первый шаг: включены %s, %q", enabledIDs(res.State), res.Message)
 	}
 	if _, err := a.StartBisect(); err == nil {
 		t.Error("второй поиск поверх первого начат")
@@ -136,6 +232,14 @@ func TestBisectCancelAndErrors(t *testing.T) {
 	if st := state(t, b).Bisect; st == nil || st.Step != 1 {
 		t.Fatalf("после перезапуска: %+v", st)
 	}
+	// Второй шаг — деление: включена часть подозреваемых.
+	res, err = b.BisectAnswer(false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st := res.State.Bisect; st.Step != 2 || st.Kind != "search" || len(st.Testing) == 0 || len(st.Testing) >= 5 {
+		t.Errorf("второй шаг: %+v", st)
+	}
 	res, err = b.CancelBisect()
 	if err != nil || res.State.Profile != mainProfile || res.State.Bisect != nil || !strings.Contains(res.Message, "Поиск прерван") {
 		t.Errorf("прерывание: %v, %q", err, res.Message)
@@ -149,43 +253,6 @@ func TestBisectCancelAndErrors(t *testing.T) {
 	b.SwitchSet("Один")
 	if _, err := b.StartBisect(); err == nil {
 		t.Error("поиск среди одного мода начат")
-	}
-}
-
-// Виновник назван, только если проблема повторилась с ним одним.
-func TestBisectConfirm(t *testing.T) {
-	a, g := setsApp(t)
-	before := snapshot(t, g)
-	// Проблему вызывает сочетание двух модов: по отдельности каждый исправен.
-	res, _ := huntWith(t, a, func(s State) bool {
-		return findMod(t, s, "plain").Enabled && findMod(t, s, "other").Enabled
-	})
-	if res.Culprit != "" || !strings.Contains(res.Message, "Одного виновника назвать не удалось") || !strings.Contains(res.Message, "сочетание модов") {
-		t.Errorf("сочетание модов: найден %q: %s", res.Culprit, res.Message)
-	}
-	if res.State.Profile != mainProfile || res.State.Bisect != nil || !sameTree(before, snapshot(t, g)) {
-		t.Errorf("после поиска без виновника набор %q, игра не возвращена", res.State.Profile)
-	}
-
-	// Последний подозреваемый ни разу не был включён один: нужен контрольный
-	// запуск, и в нём включён только он и то, без чего он не работает.
-	b, _ := setsApp(t)
-	step, err := b.StartBisect()
-	if err != nil {
-		t.Fatal(err)
-	}
-	for !step.State.Bisect.Confirm {
-		if step, err = b.BisectAnswer(false); err != nil || step.Done {
-			t.Fatalf("до контрольного запуска не дошло: %v, %q", err, step.Message)
-		}
-	}
-	st := step.State.Bisect
-	if len(st.Testing) != 1 || st.Steps != st.Step || !strings.Contains(step.Message, "контрольный") {
-		t.Errorf("контрольный запуск: %+v, %q", st, step.Message)
-	}
-	last := st.Testing[0]
-	if step, err = b.BisectAnswer(true); err != nil || step.CulpritName != last || !step.Done {
-		t.Errorf("после контрольного запуска: %v, виновник %q, ждали %q", err, step.CulpritName, last)
 	}
 }
 
@@ -213,6 +280,10 @@ func TestBisectHint(t *testing.T) {
 	if st := res.State.Bisect; st.Ran || st.Suggest != "" || !strings.Contains(st.Hint, "ещё не запускалась") {
 		t.Errorf("до запуска игры: %+v", st)
 	}
+	// Второй шаг: часть модов включена.
+	if _, err = a.BisectAnswer(false); err != nil {
+		t.Fatal(err)
+	}
 	after := time.Now().Add(time.Hour)
 
 	st := run("12:00:00.000 <<Crash>>Lua crash in hook\n<<Crash type>>lua<</Crash type>>\n", after)
@@ -234,9 +305,8 @@ func TestBisectHint(t *testing.T) {
 	if st.Crashed || st.Suggest != "" || !strings.Contains(st.Hint, "«"+noisy+"» — 1") {
 		t.Errorf("после запуска с ошибками мода: %+v", st)
 	}
-	// Следующий шаг: прежний журнал к нему не относится... пока игра не запущена снова.
-	res, err = a.BisectAnswer(true)
-	if err != nil {
+	// Следующий шаг: журнал прошлого шага к нему не относится.
+	if _, err = a.BisectAnswer(true); err != nil {
 		t.Fatal(err)
 	}
 	os.Chtimes(path, time.Now().Add(-time.Minute), time.Now().Add(-time.Minute))

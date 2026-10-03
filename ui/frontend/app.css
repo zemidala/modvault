@@ -651,7 +651,7 @@ button.busy::after,
 .bisect-hint { margin-top: 6px; color: var(--muted); }
 .bisect-hint.ran { color: inherit; }
 .bisect-hint.bad { color: var(--orange-text); font-weight: 700; }
-.bisect-actions .plate.suggested { outline: 2px solid var(--parchment); outline-offset: 2px; }
+.bisect-actions .plate.suggested { box-shadow: inset 0 0 0 3px var(--parchment); }
 .bisect-actions .plate { padding: 0 18px; font-family: inherit; font-size: inherit; font-weight: 700; letter-spacing: 0; text-transform: none; }
 
 /* Сортировка по столбцу: название столбца нажимается. */

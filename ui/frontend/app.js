@@ -1155,20 +1155,34 @@ function setEnabled(id, enabled) {
   return call(() => backend().SetEnabled(id, enabled));
 }
 
-// Поиск сбойного мода делением пополам: программа включает половину
-// модов, пользователь запускает игру и отвечает, осталась ли проблема.
+// Поиск сбойного мода делением пополам: программа включает часть модов,
+// пользователь запускает игру и отвечает, осталась ли проблема.
 function renderBisect() {
   const b = state.bisect;
   $("bisect-section").hidden = !b;
   $("bisect-start").hidden = !!b || state.demo;
   if (!b) return;
-  if (b.confirm) {
-    $("bisect-title").textContent = `Шаг ${b.step}, контрольный: в игре включён только «${b.testing.join("», «")}»`;
-    $("bisect-detail").textContent = "Он остался последним под подозрением, но в одиночку ещё не проверялся. Запустите игру: если проблема повторится — виновник он.";
+  const found = b.found.map((name) => `«${name}»`).join(", ");
+  let title = `Шаг ${b.step}: `;
+  let detail = "Запустите игру и посмотрите, повторяется ли проблема. Потом ответьте здесь. ";
+  if (b.kind === "base" && !b.found.length) {
+    title += "моды набора выключены";
+    detail += "В игре только загрузчик модов и фреймворк: если проблема осталась и так, дело не в модах.";
+  } else if (b.kind === "base") {
+    title += `контрольный — включены только ${found}`;
+    detail += b.found.length > 1
+      ? "Если проблема повторится — её вызывают эти моды вместе."
+      : "Если проблема повторится — виновник он. Если нет — её вызывают несколько модов вместе, и поиск продолжится.";
+  } else if (b.kind === "verify") {
+    title += "включены все моды набора";
+    detail += "С частью модов проблема ни разу не повторилась: программа проверяет, что с полным набором она есть.";
   } else {
-    $("bisect-title").textContent = `Шаг ${b.step} из ${b.steps}: под подозрением ${b.suspects}, сейчас включено ${b.testing.length}`;
-    $("bisect-detail").textContent = "Запустите игру и посмотрите, повторяется ли проблема. Потом ответьте здесь — программа сузит круг. Включены: " + b.testing.join(", ") + ".";
+    title = `Шаг ${b.step} из примерно ${b.steps}: под подозрением ${b.suspects}, сейчас включено ${b.testing.length}`;
+    detail += "Программа сузит круг." + (b.found.length ? ` Уже найден ${found} — он включён во всех шагах; ищется, с кем вместе он вызывает проблему.` : "") +
+      " Включены: " + b.testing.join(", ") + ".";
   }
+  $("bisect-title").textContent = title;
+  $("bisect-detail").textContent = detail;
   // Подсказка по журналу игры: что было в запуске после этого шага.
   const hint = $("bisect-hint");
   hint.textContent = b.hint + (b.suggest === "problem" ? " — похоже, проблема осталась." : b.suggest === "ok" ? " — похоже, проблемы нет." : ".");
@@ -1209,14 +1223,24 @@ async function bisectStep(request, button) {
     busyBisect = false;
   }
   // Поиск закончен без виновника: итог не должен мелькнуть и пропасть.
-  if (res && res.done && !res.culprit) {
+  if (res && res.done && !res.culprits.length) {
     await ask({ title: "Поиск сбойного мода закончен", message: res.message });
+  }
+  // Найдено сочетание модов: проблема уходит без любого из них — какой
+  // выключить, решает пользователь.
+  if (res && res.done && res.culprits.length > 1) {
+    const id = await ask({
+      title: "Найдено сочетание модов",
+      message: `Проблему вызывают вместе: ${res.culprits.map((c) => `«${c.name}»`).join(", ")}. По отдельности они её не дают.\n\nЧтобы проблема ушла, достаточно выключить любой из них в наборе «${state.profile}».`,
+      choices: res.culprits.map((c) => ({ label: `Выключить «${c.name}»`, value: c.id })),
+    });
+    if (id) call(() => backend().RemoveFromSet(state.profile, [id]).then((r) => r.state));
   }
   // Виновник найден: предложить сразу выключить его в своём наборе.
   if (res && res.culprit) {
     const yes = await ask({
       title: "Сбойный мод найден",
-      message: `Проблему вызывает «${res.culpritName}».\n\nВыключить его в наборе «${state.profile}»? Остальные моды останутся как были.\n\nЕсли после этого проблема не уйдёт, виновников несколько: запустите поиск ещё раз.`,
+      message: `Проблему вызывает «${res.culpritName}»: она повторилась, когда в игре был включён только он.\n\nВыключить его в наборе «${state.profile}»? Остальные моды останутся как были.`,
       ok: "Выключить",
     });
     if (yes) call(() => backend().RemoveFromSet(state.profile, [res.culprit]).then((r) => r.state));
