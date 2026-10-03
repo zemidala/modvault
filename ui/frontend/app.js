@@ -98,6 +98,7 @@ function updateCell(cell, mod) {
   let text = "";
   let level = "off";
   let hint = "";
+  let update = ""; // версия, до которой можно обновить
   if (!mod.nexusId) {
     text = "—";
     hint = "У мода нет номера на Nexus: проверить его нельзя";
@@ -111,11 +112,11 @@ function updateCell(cell, mod) {
     text = "Нет на Nexus";
     hint = "Страница мода на Nexus убрана или скрыта автором";
   } else {
-    const version = mark && mark !== "ok" ? mark : mod.available;
-    if (version) {
-      text = "↑ " + version;
+    update = mark && mark !== "ok" ? mark : mod.available;
+    if (update) {
+      text = update;
       level = "warn";
-      hint = "На Nexus есть версия " + version;
+      hint = "На Nexus есть версия " + update;
     } else if (mark === "ok") {
       text = "✓ Актуален";
       level = "ok";
@@ -125,7 +126,30 @@ function updateCell(cell, mod) {
   cell.title = hint;
   cell.replaceChildren();
   if (level === "busy" || level === "queued") cell.append(el("span", "spinner"));
+  // Пока идёт проверка, обновлять рано: кнопка появляется с её итогом.
+  if (update && !checking) cell.append(updateButton(mod, update));
   cell.append(text);
+}
+
+// updateButton — значок «обновить» перед новой версией в строке мода.
+function updateButton(mod, version) {
+  const button = el("button", "icon-button");
+  button.title = `Обновить «${mod.name}» до ${version}`;
+  button.setAttribute("aria-label", button.title);
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", "0 0 16 16");
+  svg.setAttribute("aria-hidden", "true");
+  const path = document.createElementNS(ns, "path");
+  // Стрелка вниз в лоток: «скачать новую версию».
+  path.setAttribute("d", "M8 2v7.5M4.5 6.5 8 10l3.5-3.5M3 13h10");
+  svg.append(path);
+  button.append(svg);
+  button.addEventListener("click", (event) => {
+    event.stopPropagation(); // щелчок по значку не выбирает строку
+    act(() => backend().UpdateMod(mod.id), button, "Обновление: запрос к Nexus…");
+  });
+  return button;
 }
 
 // setMark ставит моду отметку и сразу показывает её в его строке.

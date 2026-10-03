@@ -436,3 +436,21 @@ button.busy::after,
   .bar.indeterminate .bar-fill { animation: none; width: 100%; }
   .spinner { animation: none; }
 }
+
+/* Значок «обновить» перед новой версией в строке мода. */
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin-right: 8px;
+  padding: 0;
+  vertical-align: middle;
+  border: 1px solid var(--orange-worn);
+  border-radius: 2px;
+  background: transparent;
+  color: var(--orange-text);
+}
+.icon-button:hover { background: var(--orange-worn); color: var(--black); }
+.icon-button svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
