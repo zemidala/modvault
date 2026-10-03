@@ -357,8 +357,12 @@ func (a *App) Open(args []string) {
 	}
 	a.mu.Unlock()
 	if ready {
-		runtime.WindowUnminimise(a.ctx)
-		runtime.WindowShow(a.ctx)
+		// Восстанавливать только свёрнутое окно: развёрнутое на весь экран
+		// та же команда вернула бы к обычному размеру.
+		if runtime.WindowIsMinimised(a.ctx) {
+			runtime.WindowUnminimise(a.ctx)
+		}
+		runtime.WindowShow(a.ctx) // поверх других окон, размер не меняется
 		a.open(args)
 	}
 }
