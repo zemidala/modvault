@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/zemidala/modvault/game"
 )
@@ -25,6 +26,11 @@ const (
 type Darktide struct {
 	// Patcher патчит bundle_database.data в папке dir; nil — dtkit-patch из игры.
 	Patcher func(gameDir, dir string) error
+	// LogDir — папка журналов игры; пусто — журналы не читаются.
+	LogDir string
+
+	mu      sync.Mutex
+	lastRun *lastRunCache
 }
 
 func New() *Darktide { return &Darktide{} }

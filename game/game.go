@@ -118,4 +118,27 @@ type Game interface {
 	Managers(dir string) []string
 	// Launch запускает игру.
 	Launch(inst Install) error
+	// LastRun рассказывает о последнем запуске игры по её журналу: какие
+	// моды выдали ошибки и упала ли она. ok ложно, если журнала нет.
+	LastRun() (report RunReport, ok bool)
+}
+
+// ModErrors — ошибки одного мода в журнале игры.
+type ModErrors struct {
+	Mod   string // как мод назван в журнале: по папке, из которой грузится
+	Count int
+	First string // текст первой ошибки
+}
+
+// RunReport — что случилось в последнем запуске игры.
+type RunReport struct {
+	Time time.Time // когда журнал дописан в последний раз
+	Log  string    // файл журнала
+	// Crashed — игра упала; CrashKind и CrashText — вид и причина сбоя,
+	// как их записала сама игра.
+	Crashed   bool
+	CrashKind string
+	CrashText string
+	// Mods — моды с ошибками, от самых шумных.
+	Mods []ModErrors
 }

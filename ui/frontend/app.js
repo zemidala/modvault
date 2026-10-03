@@ -483,6 +483,12 @@ function renderMods() {
       call(() => backend().SetFavorite([mod.id], !mod.favorite));
     });
     nameCell.append(star, mod.name);
+    if (mod.runErrors) {
+      // Игра сама записала, что этот мод выдавал ошибки в прошлом запуске.
+      const warn = el("span", "run-errors", `⚠ ${mod.runErrors}`);
+      warn.title = `Ошибок в прошлом запуске игры: ${mod.runErrors}. Первая: ${mod.runError}`;
+      nameCell.append(warn);
+    }
 
     const ratingCell = el("td", "rating", mod.hasStats ? count(mod.endorsements) : "—");
     ratingCell.title = mod.hasStats ? `Одобрений на Nexus: ${mod.endorsements.toLocaleString("ru-RU")}` : statsHint(mod);
@@ -720,6 +726,7 @@ const commands = {
   IgnoreManagers: () => confirmThen(() => backend().IgnoreManagersAsk(), () => backend().IgnoreManagers()),
   Sort: () => confirmThen(() => backend().SortAsk(), () => backend().Sort()),
   EnableMod: (id) => backend().SetEnabled(id, true),
+  DisableMod: (id) => backend().SetEnabled(id, false),
   NexusKey: async () => {
     const key = await ask(await backend().NexusKeyAsk());
     return key === null ? state : backend().NexusLogin(key);

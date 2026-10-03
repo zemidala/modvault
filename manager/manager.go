@@ -92,6 +92,10 @@ type Mod struct {
 	Endorsements    int  `json:"endorsements"`
 	Downloads       int  `json:"downloads"`
 	UniqueDownloads int  `json:"uniqueDownloads"`
+	// RunErrors — сколько ошибок мод выдал в последнем запуске игры;
+	// RunError — текст первой из них.
+	RunErrors int    `json:"runErrors"`
+	RunError  string `json:"runError"`
 	// UpdateStatus — что известно об обновлении с прошлой проверки:
 	// "current" — установлена последняя версия, "update" — есть новее
 	// (она в Available), "missing" — мода на Nexus больше нет, "unknown" —
@@ -195,13 +199,14 @@ func saveLocation(home string) error {
 // игру и кладёт хранилище на её диск, дальше берёт запомненное место.
 func New() *Manager {
 	g := darktide.New()
+	g.LogDir = darktide.DefaultLogDir() // журналы игры читает только настоящий запуск
 	installs, _ := g.Detect()
 	home := DefaultHome()
 	if home == "" {
 		home = chooseHome(installs)
 		saveLocation(home) // не запомнилось — выберем так же в следующий раз
 	}
-	a := NewAt(home)
+	a := NewWith(home, g)
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.keys, a.protocol = nexus.SystemKeys(), nexus.SystemProtocol()

@@ -598,3 +598,6 @@ button.busy::after,
 .star:hover { color: var(--gold); }
 .star[aria-pressed="true"] { color: var(--gold); }
 .mods tbody tr.favorite .num { color: var(--gold); }
+
+/* Мод выдавал ошибки в прошлом запуске игры. */
+.run-errors { margin-left: 8px; font-size: 12px; font-weight: 400; color: var(--error); cursor: help; }

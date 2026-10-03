@@ -485,6 +485,13 @@ func (a *Manager) realState() (State, error) {
 	for _, problem := range problems {
 		s.Issues = append(s.Issues, Issue{Title: "Запись в хранилище повреждена", Detail: problem.Error(), Level: LevelError})
 	}
+	troubles, runIssues := a.runDiagnosis(p)
+	s.Issues = append(s.Issues, runIssues...)
+	for i := range s.Mods {
+		if t, ok := troubles[s.Mods[i].ID]; ok {
+			s.Mods[i].RunErrors, s.Mods[i].RunError = t.count, t.first
+		}
+	}
 	orderIssues, note := a.orderIssues(p)
 	s.Issues = append(s.Issues, orderIssues...)
 	s.OrderNote = note
