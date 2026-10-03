@@ -248,3 +248,23 @@ func role(l game.Layout) game.Role {
 	}
 	return game.RoleNone
 }
+
+// Describe описывает файлы, уже разложенные как в игре: пути остаются
+// прежними, папки модов и роль определяются по ним.
+func Describe(files []string) game.Layout {
+	l := game.Layout{Kind: "файлы уже разложены как в игре", Paths: make(map[string]string, len(files))}
+	folders := map[string]bool{}
+	for _, f := range files {
+		rel := strings.Trim(strings.ReplaceAll(f, `\`, "/"), "/")
+		l.Paths[f] = rel
+		if mod, ok := modFile(rel); ok {
+			folders[mod] = true
+		}
+	}
+	for f := range folders {
+		l.Folders = append(l.Folders, f)
+	}
+	sort.Strings(l.Folders)
+	l.Role = role(l)
+	return l
+}

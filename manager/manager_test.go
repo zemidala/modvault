@@ -2,6 +2,7 @@ package manager
 
 import (
 	"archive/zip"
+	"github.com/zemidala/modvault/game"
 	"os"
 	"path/filepath"
 	"strings"
@@ -254,5 +255,14 @@ func TestPlural(t *testing.T) {
 		if got := plural(n, "мод", "мода", "модов"); got != want {
 			t.Errorf("plural(%d) = %q, want %q", n, got, want)
 		}
+	}
+}
+
+func TestChooseHome(t *testing.T) {
+	if got := chooseHome([]game.Install{{Dir: `G:\SteamLibrary\steamapps\common\Warhammer 40,000 DARKTIDE`}}); got != `G:\Modvault` {
+		t.Errorf("хранилище для игры на G: = %q", got)
+	}
+	if got := chooseHome(nil); filepath.Base(got) != "Modvault" {
+		t.Errorf("без игры = %q", got)
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"path"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/zemidala/modvault/core/fsx"
@@ -194,7 +195,7 @@ type Plan struct {
 	steps   []step
 	dirs    []string
 	entries []manifest.Entry
-	method  string
+	methods map[string]string // том источника → способ укладки
 }
 
 // Empty сообщает, что игра уже совпадает с профилем.
@@ -333,11 +334,19 @@ func (d *Deployer) Plan(sources []Source, winners map[string]string) (*Plan, err
 
 // addPlace добавляет в план укладку файла и запоминает папки, которых ещё нет.
 func (d *Deployer) addPlace(p *Plan, t Target, backup bool, newDirs map[string]bool) error {
-	if p.method == "" {
-		p.method = manifest.MethodCopy
+	// Ссылка возможна, только если источник на том же томе, что игра;
+	// проверяем один раз на каждый том.
+	vol := strings.ToLower(filepath.VolumeName(t.Src))
+	method, ok := p.methods[vol]
+	if !ok {
+		method = manifest.MethodCopy
 		if !d.ForceCopy && fsx.CanLink(filepath.Dir(t.Src), d.game) == nil {
-			p.method = manifest.MethodLink
+			method = manifest.MethodLink
 		}
+		if p.methods == nil {
+			p.methods = map[string]string{}
+		}
+		p.methods[vol] = method
 	}
 	for dir := path.Dir(t.Path); dir != "." && dir != "/"; dir = path.Dir(dir) {
 		abs, err := d.gamePath(dir)
@@ -349,10 +358,10 @@ func (d *Deployer) addPlace(p *Plan, t Target, backup bool, newDirs map[string]b
 		}
 		newDirs[dir] = true
 	}
-	p.steps = append(p.steps, step{Op: opPlace, Path: t.Path, Src: t.Src, Hash: t.Hash, Method: p.method})
+	p.steps = append(p.steps, step{Op: opPlace, Path: t.Path, Src: t.Src, Hash: t.Hash, Method: method})
 	p.entries = append(p.entries, manifest.Entry{
 		Path: t.Path, ModID: t.ModID, VersionID: t.VersionID, Hash: t.Hash, Size: t.Size,
-		Method: p.method, Backup: backup,
+		Method: method, Backup: backup,
 	})
 	return nil
 }
@@ -697,4 +706,79 @@ func (d *Deployer) recover() (Recovery, error) {
 		return NothingToRecover, err
 	}
 	return RolledBack, nil
+}
+
+// AdoptEntry — файл, который уже лежит в игре и переходит под учёт как
+// развёрнутый программой.
+type AdoptEntry struct {
+	Entry manifest.Entry
+	// Original — сохранённый кем-то оригинал этого файла; он становится
+	// резервной копией и вернётся при снятии мода. Пусто — оригинала нет.
+	Original string
+}
+
+// Adopt принимает под учёт уже развёрнутые файлы, не трогая игру: так
+// управление переходит от другого менеджера модов. Учёт должен быть пуст.
+func (d *Deployer) Adopt(generation string, entries []AdoptEntry) error {
+	if p, err := journal.Load(d.state); err != nil || p != nil {
+		return errors.Join(err, errors.New("прошлое развёртывание не завершено"))
+	}
+	m, err := d.Manifest()
+	if err != nil {
+		return err
+	}
+	if m.Len() > 0 {
+		return errors.New("Modvault уже ведёт учёт файлов этой игры")
+	}
+	// Резервные копии без учёта никому не принадлежат.
+	if err := os.RemoveAll(filepath.Join(d.state, backupsDir)); err != nil {
+		return err
+	}
+
+	next := manifest.New(filepath.Join(d.state, manifestFile))
+	now := time.Now().UTC().Truncate(time.Second)
+	for _, a := range entries {
+		e := a.Entry
+		e.Backup = a.Original != ""
+		if e.Deployed.IsZero() {
+			e.Deployed = now
+		}
+		if e.Backup {
+			dst, err := d.backupPath(e.Path)
+			if err != nil {
+				return err
+			}
+			if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+				return err
+			}
+			if err := fsx.CopyFile(a.Original, dst); err != nil {
+				return err
+			}
+		}
+		if err := next.Set(e); err != nil {
+			return err
+		}
+	}
+	next.SetGeneration(generation)
+	return next.Save()
+}
+
+// Forget забывает учёт этой установки вместе с резервными копиями. Файлы
+// игры остаются как есть: дальше ими управляет кто-то другой. Папка
+// displaced с чужими правками не трогается.
+func (d *Deployer) Forget() error {
+	if p, err := journal.Load(d.state); err != nil || p != nil {
+		return errors.Join(err, errors.New("прошлое развёртывание не завершено"))
+	}
+	for _, name := range []string{manifestFile} {
+		if err := os.Remove(filepath.Join(d.state, name)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+	}
+	for _, dir := range []string{backupsDir, stashDir, staleDir} {
+		if err := os.RemoveAll(filepath.Join(d.state, dir)); err != nil {
+			return err
+		}
+	}
+	return nil
 }

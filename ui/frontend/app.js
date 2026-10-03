@@ -218,7 +218,12 @@ function render() {
 }
 
 // Команды, которые программа разрешает вызывать из строк состояния и замечаний.
-const commands = { ChooseGame: () => backend().ChooseGame() };
+const commands = {
+  ChooseGame: () => backend().ChooseGame(),
+  Adopt: () => backend().Adopt(),
+  Release: () => backend().Release(),
+  IgnoreManagers: () => backend().IgnoreManagers(),
+};
 
 function run(command) {
   if (commands[command]) call(commands[command]);

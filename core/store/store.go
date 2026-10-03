@@ -50,9 +50,13 @@ type Version struct {
 	Version     string    `json:"version"`
 	Source      string    `json:"source"`
 	Added       time.Time `json:"added"`
-	Archive     string    `json:"archive"` // имя файла архива в папке версии
-	ArchiveHash fsx.Hash  `json:"archiveHash"`
-	Files       []File    `json:"files"`
+	Archive     string    `json:"archive"` // имя файла архива в папке версии; пусто — архива нет
+	ArchiveHash fsx.Hash  `json:"archiveHash,omitzero"`
+	NexusID     int       `json:"nexusId,omitempty"`
+	// AsIs — файлы уже разложены так, как лежат в игре (например, приняты
+	// у другого менеджера модов), раскладывать их заново не нужно.
+	AsIs  bool   `json:"asIs,omitempty"`
+	Files []File `json:"files"`
 }
 
 // Mod — мод со всеми его версиями, от старой к новой по времени добавления.
@@ -69,8 +73,10 @@ func (m Mod) Latest() Version {
 // Info — сведения о моде, известные при добавлении.
 type Info struct {
 	Name    string // обязательно
-	Version string // если пусто, версия именуется по хешу архива
+	Version string // если пусто, версия именуется по хешу содержимого
 	Source  string
+	NexusID int
+	AsIs    bool // файлы уже разложены как в игре
 }
 
 // Store — хранилище модов в папке root.
@@ -171,6 +177,7 @@ func (s *Store) Add(archivePath string, info Info) (Version, error) {
 	v := Version{
 		ModID: modID, ID: versionID,
 		Name: info.Name, Version: info.Version, Source: info.Source,
+		NexusID: info.NexusID, AsIs: info.AsIs,
 		Added:   time.Now().UTC().Truncate(time.Second),
 		Archive: "archive." + string(format), ArchiveHash: archiveHash,
 	}
@@ -184,13 +191,23 @@ func (s *Store) Add(archivePath string, info Info) (Version, error) {
 	if len(entries) == 0 {
 		return Version{}, fmt.Errorf("%s: в архиве нет файлов", filepath.Base(archivePath))
 	}
-	v.Files = make([]File, 0, len(entries))
-	for _, e := range entries {
-		hash, size, err := fsx.HashFile(filepath.Join(stage, filesDir, filepath.FromSlash(e.Path)))
+	paths := make([]string, len(entries))
+	for i, e := range entries {
+		paths[i] = e.Path
+	}
+	return s.finish(stage, final, v, paths)
+}
+
+// finish считает хеши файлов версии, записывает её описание и одним
+// переименованием ставит готовую папку на место.
+func (s *Store) finish(stage, final string, v Version, paths []string) (Version, error) {
+	v.Files = make([]File, 0, len(paths))
+	for _, p := range paths {
+		hash, size, err := fsx.HashFile(filepath.Join(stage, filesDir, filepath.FromSlash(p)))
 		if err != nil {
 			return Version{}, err
 		}
-		v.Files = append(v.Files, File{Path: e.Path, Size: size, Hash: hash})
+		v.Files = append(v.Files, File{Path: p, Size: size, Hash: hash})
 	}
 	sort.Slice(v.Files, func(i, j int) bool { return v.Files[i].Path < v.Files[j].Path })
 
@@ -209,6 +226,71 @@ func (s *Store) Add(archivePath string, info Info) (Version, error) {
 		return Version{}, err
 	}
 	return v, nil
+}
+
+// AddFiles добавляет мод из готовых файлов: files — пути относительно root
+// через «/». Архива у такой версии нет. Если версия не задана, она
+// именуется по хешу содержимого, так что повторное добавление тех же файлов
+// даёт ошибку, совместимую с fs.ErrExist, и идентификаторы уже имеющейся версии.
+func (s *Store) AddFiles(root string, files []string, info Info) (Version, error) {
+	modID := Slug(info.Name)
+	if err := checkID(modID); err != nil {
+		return Version{}, fmt.Errorf("название мода %q: %w", info.Name, err)
+	}
+	if len(files) == 0 {
+		return Version{}, fmt.Errorf("%s: нет файлов", info.Name)
+	}
+	sorted := append([]string(nil), files...)
+	sort.Strings(sorted)
+
+	// Отпечаток содержимого: пути и хеши всех файлов.
+	var listing strings.Builder
+	for _, f := range sorted {
+		if _, err := fsx.SafeJoin("x", f); err != nil {
+			return Version{}, err
+		}
+		hash, _, err := fsx.HashFile(filepath.Join(root, filepath.FromSlash(f)))
+		if err != nil {
+			return Version{}, err
+		}
+		listing.WriteString(f + "\x00" + hash.String() + "\n")
+	}
+	fingerprint, _, _ := fsx.HashReader(strings.NewReader(listing.String()))
+
+	versionID := Slug(info.Version)
+	if versionID == "" {
+		versionID = strings.TrimPrefix(fingerprint.String(), "sha256:")[:12]
+	}
+	if err := checkID(versionID); err != nil {
+		return Version{}, fmt.Errorf("версия %q: %w", info.Version, err)
+	}
+	final := s.versionDir(modID, versionID)
+	if _, err := os.Stat(final); err == nil {
+		// Вызывающему нужно знать, какая версия уже есть.
+		return Version{ModID: modID, ID: versionID}, fmt.Errorf("%s версии %s: %w", info.Name, versionID, fs.ErrExist)
+	}
+
+	stage, err := os.MkdirTemp(filepath.Join(s.root, tmpDir), "add-")
+	if err != nil {
+		return Version{}, err
+	}
+	defer os.RemoveAll(stage)
+	for _, f := range sorted {
+		dst := filepath.Join(stage, filesDir, filepath.FromSlash(f))
+		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+			return Version{}, err
+		}
+		if err := fsx.CopyFile(filepath.Join(root, filepath.FromSlash(f)), dst); err != nil {
+			return Version{}, err
+		}
+	}
+	v := Version{
+		ModID: modID, ID: versionID,
+		Name: info.Name, Version: info.Version, Source: info.Source,
+		NexusID: info.NexusID, AsIs: info.AsIs,
+		Added: time.Now().UTC().Truncate(time.Second),
+	}
+	return s.finish(stage, final, v, sorted)
 }
 
 // Get возвращает сведения о версии мода.

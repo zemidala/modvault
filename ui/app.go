@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"strings"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
@@ -105,4 +106,78 @@ func (a *App) confirm(title, message string) bool {
 		Type: runtime.QuestionDialog, Title: title, Message: message, DefaultButton: "No",
 	})
 	return err == nil && answer == "Yes"
+}
+
+// Adopt показывает, что будет принято у Vortex, и после подтверждения
+// перенимает управление.
+func (a *App) Adopt() (manager.State, error) {
+	rep, err := a.m.Adopt(true)
+	if err != nil {
+		return manager.State{}, err
+	}
+	msg := fmt.Sprintf("Modvault примет у Vortex %d %s (развёрнуто %d) и %d %s в игре.\n\n"+
+		"Файлы игры не изменятся. Vortex будет отсоединён: его учёт развёртывания перейдёт к Modvault, "+
+		"а хранилище %s останется нетронутым.\n\n"+
+		"Вернуть всё как было можно в любой момент — щелчком по «Vortex: отсоединён · вернуть» в строке состояния.",
+		rep.Mods, plural(rep.Mods, "мод", "мода", "модов"), rep.Enabled,
+		rep.Files, plural(rep.Files, "файл", "файла", "файлов"), rep.Staging)
+	if len(rep.Others) > 0 {
+		msg += "\n\nТакже перестанут учитываться: " + strings.Join(rep.Others, ", ") + ". Не пользуйтесь ими для этой игры."
+	}
+	if len(rep.Problems) > 0 {
+		msg += fmt.Sprintf("\n\nВнимание: %d %s в игре отличаются от хранилища Vortex — после усыновления они будут показаны как изменённые вне программы.",
+			len(rep.Problems), plural(len(rep.Problems), "файл", "файла", "файлов"))
+	}
+	if !a.confirm("Перенять управление у Vortex", msg) {
+		return a.m.State()
+	}
+	if _, err := a.m.Adopt(false); err != nil {
+		return manager.State{}, err
+	}
+	return a.m.State()
+}
+
+// Release показывает, что изменится, и после подтверждения возвращает
+// управление Vortex.
+func (a *App) Release() (manager.State, error) {
+	rep, err := a.m.Release(true)
+	if err != nil {
+		return manager.State{}, err
+	}
+	msg := "Игра станет такой, какой её оставил Vortex: файлы модов снова будут ссылками на " + rep.Staging +
+		", порядок загрузки и база бандлов — как были.\n\n"
+	if rep.Changes > 0 {
+		msg += fmt.Sprintf("Изменится %d %s в игре. ", rep.Changes, plural(rep.Changes, "файл", "файла", "файлов"))
+	}
+	msg += "Моды останутся в хранилище Modvault, и перенять управление можно будет снова."
+	if !a.confirm("Вернуть управление Vortex", msg) {
+		return a.m.State()
+	}
+	if _, err := a.m.Release(false); err != nil {
+		return manager.State{}, err
+	}
+	return a.m.State()
+}
+
+// IgnoreManagers после подтверждения перестаёт учитывать другие менеджеры,
+// кроме Vortex.
+func (a *App) IgnoreManagers() (manager.State, error) {
+	if !a.confirm("Не учитывать другие программы", "Modvault перестанет обращать внимание на другие менеджеры модов в папке игры (кроме Vortex).\n\nПодтвердите, что не пользуетесь ими для этой игры: две программы испортят друг другу учёт.") {
+		return a.m.State()
+	}
+	return a.m.IgnoreManagers()
+}
+
+func plural(n int, one, few, many string) string {
+	n %= 100
+	if n >= 11 && n <= 14 {
+		return many
+	}
+	switch n % 10 {
+	case 1:
+		return one
+	case 2, 3, 4:
+		return few
+	}
+	return many
 }

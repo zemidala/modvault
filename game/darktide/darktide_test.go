@@ -359,3 +359,29 @@ func TestRealDtkitPatch(t *testing.T) {
 		t.Error("наш патч отличается от того, что сделал dtkit-patch в игре")
 	}
 }
+
+func TestDescribe(t *testing.T) {
+	l := Describe([]string{"mods/afk/afk.mod", `mods\afk\scripts\afk.lua`, "README.md", "binaries/mod_loader", "mods/base/base.mod"})
+	if l.Paths["README.md"] != "README.md" || l.Paths[`mods\afk\scripts\afk.lua`] != "mods/afk/scripts/afk.lua" {
+		t.Errorf("пути: %v", l.Paths)
+	}
+	if strings.Join(l.Folders, ",") != "afk,base" || l.Role != game.RoleLoader {
+		t.Errorf("папки %v, роль %q", l.Folders, l.Role)
+	}
+}
+
+func TestOriginals(t *testing.T) {
+	dir := newGame(t, fakeBundle(true))
+	if got := New().Originals(dir); got != nil {
+		t.Errorf("без .bak: %v", got)
+	}
+	bak := filepath.Join(dir, filepath.FromSlash(bundleDBPath)+".bak")
+	os.WriteFile(bak, fakeBundle(false), 0o644)
+	if got := New().Originals(dir); got[bundleDBPath] != bak {
+		t.Errorf("с .bak: %v", got)
+	}
+	os.WriteFile(bak, fakeBundle(true), 0o644)
+	if got := New().Originals(dir); got != nil {
+		t.Errorf("пропатченный .bak принят за оригинал: %v", got)
+	}
+}

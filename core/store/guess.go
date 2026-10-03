@@ -3,6 +3,7 @@ package store
 import (
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -18,10 +19,12 @@ func GuessInfo(archivePath string) Info {
 	base = strings.TrimSuffix(base, filepath.Ext(base))
 
 	if m := nexusName.FindStringSubmatch(base); m != nil {
+		id, _ := strconv.Atoi(m[2])
 		return Info{
 			Name:    strings.TrimSpace(strings.ReplaceAll(m[1], "_", " ")),
 			Version: strings.ReplaceAll(m[3], "-", "."),
 			Source:  "Nexus Mods",
+			NexusID: id,
 		}
 	}
 	return Info{Name: strings.TrimSpace(base), Source: "Архив с диска"}

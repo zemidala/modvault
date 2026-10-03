@@ -24,19 +24,22 @@ var (
 	cleanBundle  = append(append(bytes.Repeat([]byte{1}, 64), bundleAnchor...), bytes.Repeat([]byte{2}, 64)...)
 )
 
+// fakePatcher заменяет dtkit-patch: дописывает отметку патча.
+func fakePatcher(_, dir string) error {
+	f := filepath.Join(dir, "bundle_database.data")
+	data, err := os.ReadFile(f)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(f, append(data, patchMarker...), 0o644)
+}
+
 // newGame создаёт папку, похожую на чистый Darktide, и приложение,
 // у которого вместо dtkit-patch подменный патчер.
 func newGame(t *testing.T) (*Manager, string, string) {
 	t.Helper()
 	a, home := newApp(t)
-	a.game = &darktide.Darktide{Patcher: func(_, dir string) error {
-		f := filepath.Join(dir, "bundle_database.data")
-		data, err := os.ReadFile(f)
-		if err != nil {
-			return err
-		}
-		return os.WriteFile(f, append(data, patchMarker...), 0o644)
-	}}
+	a.game = &darktide.Darktide{Patcher: fakePatcher}
 	g := filepath.Join(t.TempDir(), "Warhammer 40,000 DARKTIDE")
 	for rel, data := range map[string][]byte{
 		"binaries/Darktide.exe":       []byte("exe"),

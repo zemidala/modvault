@@ -477,3 +477,56 @@ func TestAddSurvivesKill(t *testing.T) {
 		}
 	}
 }
+
+func TestAddFiles(t *testing.T) {
+	s, _ := open(t)
+	src := t.TempDir()
+	files := map[string]string{"mods/afk/afk.mod": "return {}", "mods/afk/scripts/afk.lua": "-- afk"}
+	for p, c := range files {
+		full := filepath.Join(src, filepath.FromSlash(p))
+		os.MkdirAll(filepath.Dir(full), 0o755)
+		os.WriteFile(full, []byte(c), 0o644)
+	}
+	info := Info{Name: "AFK", Version: "23.4.05", Source: "Vortex", NexusID: 33, AsIs: true}
+
+	v, err := s.AddFiles(src, []string{"mods/afk/scripts/afk.lua", "mods/afk/afk.mod"}, info)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.ModID != "afk" || v.ID != "23.4.05" || v.Archive != "" || !v.AsIs || v.NexusID != 33 || len(v.Files) != 2 {
+		t.Errorf("версия = %+v", v)
+	}
+	if problems, err := s.Verify(v.ModID, v.ID); err != nil || len(problems) != 0 {
+		t.Errorf("Verify: %v, %v", problems, err)
+	}
+	got, err := s.Get(v.ModID, v.ID)
+	if err != nil || !got.AsIs || got.NexusID != 33 {
+		t.Errorf("Get: %+v, %v", got, err)
+	}
+
+	// Хранилище не зависит от исходной папки.
+	os.RemoveAll(src)
+	if problems, _ := s.Verify(v.ModID, v.ID); len(problems) != 0 {
+		t.Errorf("после удаления исходной папки: %v", problems)
+	}
+
+	if _, err := s.AddFiles(t.TempDir(), nil, Info{Name: "пусто"}); err == nil {
+		t.Error("версия без файлов добавлена")
+	}
+	if _, err := s.AddFiles(t.TempDir(), []string{"../x"}, Info{Name: "x"}); !errors.Is(err, fsx.ErrUnsafePath) {
+		t.Errorf("путь наружу: %v", err)
+	}
+}
+
+func TestAddFilesUnknownVersion(t *testing.T) {
+	s, _ := open(t)
+	src := t.TempDir()
+	os.WriteFile(filepath.Join(src, "a.mod"), []byte("1"), 0o644)
+	v, err := s.AddFiles(src, []string{"a.mod"}, Info{Name: "a"})
+	if err != nil || len(v.ID) != 12 {
+		t.Fatalf("версия по содержимому: %+v, %v", v, err)
+	}
+	if _, err := s.AddFiles(src, []string{"a.mod"}, Info{Name: "a"}); !errors.Is(err, fs.ErrExist) {
+		t.Errorf("те же файлы второй раз: %v, want fs.ErrExist", err)
+	}
+}

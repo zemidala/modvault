@@ -4,6 +4,7 @@
 package manager
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -12,13 +13,14 @@ import (
 	"sync"
 
 	"github.com/zemidala/modvault/core/deploy"
+	"github.com/zemidala/modvault/core/fsx"
 	"github.com/zemidala/modvault/core/profile"
 	"github.com/zemidala/modvault/core/store"
 	"github.com/zemidala/modvault/game"
 	"github.com/zemidala/modvault/game/darktide"
 )
 
-// mainProfile — профиль, с которым окно работает, пока нет выбора профилей.
+// mainProfile — профиль по умолчанию.
 const mainProfile = "Основной"
 
 // Level — степень внимания, которую требует строка: от неё зависит цвет.
@@ -101,37 +103,87 @@ type Manager struct {
 	demo []demoMod
 }
 
-// DefaultHome возвращает папку данных программы. До этапа 4, когда программа
-// научится находить игру и класть хранилище рядом с ней, это
-// %LOCALAPPDATA%\Modvault; переменная MODVAULT_HOME задаёт другое место.
-func DefaultHome() string {
-	if home := os.Getenv("MODVAULT_HOME"); home != "" {
-		return home
-	}
+// Хранилище должно лежать на одном диске с игрой: только тогда файлы
+// кладутся в игру жёсткими ссылками. Где оно, запоминается в маленьком
+// файле в профиле пользователя.
+const locationName = "location.json"
+
+func locationPath() string {
 	base, err := os.UserCacheDir()
 	if err != nil {
 		base = "."
 	}
-	return filepath.Join(base, "Modvault")
+	return filepath.Join(base, "Modvault", locationName)
 }
 
-// New создаёт Modvault для настоящего запуска: папка данных по
-// умолчанию, игра ищется сама, если папка ещё не выбрана.
+// DefaultHome возвращает папку данных программы: из MODVAULT_HOME, из
+// запомненного места или пусто, если место ещё не выбрано.
+func DefaultHome() string {
+	if home := os.Getenv("MODVAULT_HOME"); home != "" {
+		return home
+	}
+	data, err := os.ReadFile(locationPath())
+	if err != nil {
+		return ""
+	}
+	var loc struct {
+		Home string `json:"home"`
+	}
+	if json.Unmarshal(data, &loc) != nil {
+		return ""
+	}
+	return loc.Home
+}
+
+// chooseHome выбирает место хранилища при первом запуске: папка Modvault
+// в корне диска с игрой, а если игра не найдена — в профиле пользователя.
+func chooseHome(installs []game.Install) string {
+	if len(installs) > 0 {
+		if vol := filepath.VolumeName(installs[0].Dir); vol != "" {
+			return vol + `\Modvault`
+		}
+	}
+	return filepath.Dir(locationPath())
+}
+
+func saveLocation(home string) error {
+	data, err := json.Marshal(map[string]string{"home": home})
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(locationPath()), 0o755); err != nil {
+		return err
+	}
+	return fsx.WriteFile(locationPath(), data)
+}
+
+// New создаёт Modvault для настоящего запуска: при первом запуске находит
+// игру и кладёт хранилище на её диск, дальше берёт запомненное место.
 func New() *Manager {
-	a := NewAt(DefaultHome())
+	g := darktide.New()
+	installs, _ := g.Detect()
+	home := DefaultHome()
+	if home == "" {
+		home = chooseHome(installs)
+		saveLocation(home) // не запомнилось — выберем так же в следующий раз
+	}
+	a := NewAt(home)
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if a.openErr == nil && a.settings.GameDir == "" {
-		if installs, err := a.game.Detect(); err == nil && len(installs) > 0 {
-			a.setInstall(installs[0])
-		}
+	if a.openErr == nil && a.settings.GameDir == "" && len(installs) > 0 {
+		a.setInstall(installs[0])
 	}
 	return a
 }
 
 // NewAt создаёт Modvault с папкой данных home.
 func NewAt(home string) *Manager {
-	a := &Manager{home: home, demo: demoMods(), game: darktide.New()}
+	return NewWith(home, darktide.New())
+}
+
+// NewWith создаёт Modvault с папкой данных home и плагином игры g.
+func NewWith(home string, g game.Game) *Manager {
+	a := &Manager{home: home, demo: demoMods(), game: g}
 	a.store, a.openErr = store.Open(home)
 	if a.openErr == nil {
 		a.profiles, a.openErr = profile.Open(filepath.Join(home, "profiles"))
@@ -193,6 +245,13 @@ func (a *Manager) addArchive(path string) (State, error) {
 		return State{}, a.openErr
 	}
 	info := store.GuessInfo(path)
+	// Был ли мод в профиле до добавления: новый мод включается, у старого
+	// меняется только версия.
+	before, _, err := a.loadProfile()
+	if err != nil {
+		return State{}, err
+	}
+	listed := before.Index(store.Slug(info.Name)) >= 0
 	v, err := a.store.Add(path, info)
 	if errors.Is(err, fs.ErrExist) {
 		return State{}, fmt.Errorf("«%s» этой версии уже есть в хранилище", info.Name)
@@ -213,10 +272,13 @@ func (a *Manager) addArchive(path string) (State, error) {
 	if err != nil {
 		return State{}, err
 	}
-	if p.Index(v.ModID) >= 0 {
-		err = p.SetVersion(v.ModID, v.ID)
-	} else {
+	if p.Index(v.ModID) < 0 {
 		err = p.Add(v.ModID, v.ID)
+	} else {
+		err = p.SetVersion(v.ModID, v.ID)
+	}
+	if err == nil && !listed {
+		err = p.SetEnabled(v.ModID, true)
 	}
 	if err != nil {
 		return State{}, err
@@ -301,22 +363,19 @@ func (a *Manager) ModFiles(id string) ([]string, error) {
 	return paths, nil
 }
 
-// hasMods сообщает, есть ли в хранилище настоящие моды. Пока их нет, окно
-// показывает демонстрационные.
+// hasMods сообщает, что показывать настоящее состояние, а не пример:
+// выбрана игра или в хранилище есть моды.
 func (a *Manager) hasMods() (bool, error) {
 	if a.openErr != nil {
 		return false, a.openErr
 	}
+	// Игра выбрана — показываем настоящее, даже пустое: иначе за примером
+	// не видно, что в игре уже есть (например, моды Vortex).
+	if a.settings.GameDir != "" {
+		return true, nil
+	}
 	mods, _, err := a.store.List()
-	if err != nil || len(mods) > 0 {
-		return len(mods) > 0, err
-	}
-	// Хранилище пусто, но в игре ещё лежат файлы модов: их надо показать и снять.
-	if a.deployer != nil {
-		m, err := a.deployer.Manifest()
-		return err == nil && m.Len() > 0, err
-	}
-	return false, nil
+	return len(mods) > 0, err
 }
 
 func (a *Manager) modName(id string) string {
@@ -330,16 +389,16 @@ func (a *Manager) modName(id string) string {
 }
 
 // loadProfile читает основной профиль и приводит его в согласие с хранилищем:
-// пропавшие моды убирает, новые ставит в конец, пропавшую версию заменяет
+// пропавшие моды убирает, новые ставит в конец выключенными, пропавшую версию заменяет
 // последней. Изменённый профиль сохраняет.
 func (a *Manager) loadProfile() (profile.Profile, []store.Mod, error) {
 	mods, _, err := a.store.List()
 	if err != nil {
 		return profile.Profile{}, nil, err
 	}
-	p, err := a.profiles.Load(mainProfile)
+	p, err := a.profiles.Load(a.profileName())
 	if errors.Is(err, fs.ErrNotExist) {
-		p, err = profile.Profile{Name: mainProfile}, nil
+		p, err = profile.Profile{Name: a.profileName()}, nil
 	}
 	if err != nil {
 		return profile.Profile{}, nil, err
@@ -366,9 +425,12 @@ func (a *Manager) loadProfile() (profile.Profile, []store.Mod, error) {
 	p.Entries = kept
 	for _, m := range mods {
 		if p.Index(m.ID) < 0 {
+			// Мод из хранилища, которого в профиле нет, виден в нём выключенным:
+			// включает его только сам пользователь.
 			if err := p.Add(m.ID, m.Latest().ID); err != nil {
 				return profile.Profile{}, nil, err
 			}
+			p.SetEnabled(m.ID, false)
 			changed = true
 		}
 	}

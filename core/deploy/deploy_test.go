@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/zemidala/modvault/core/fsx"
+	"github.com/zemidala/modvault/core/manifest"
 )
 
 // mod создаёт файлы версии мода в папке хранилища root (если их ещё нет)
@@ -553,4 +554,51 @@ func TestKillAtEveryStep(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Файлы другого менеджера переходят под учёт без изменений в игре; после
+// этого снятие возвращает сохранённые оригиналы, а Forget снимает учёт,
+// оставляя игру как есть.
+func TestAdoptAndForget(t *testing.T) {
+	e := newEnv(t, map[string]string{"mods/base.lua": "мод другого менеджера", "keep.txt": "чужой"})
+	original := filepath.Join(t.TempDir(), "base.lua.backup")
+	os.WriteFile(original, []byte("файл игры"), 0o644)
+	a := mod(t, e.store, "a", "1", map[string]string{"mods/base.lua": "мод другого менеджера"})
+	before := snapshot(t, e.game)
+
+	if err := e.d.Adopt("adopted-1", []AdoptEntry{{
+		Entry:    manifestEntry(a.Files[0], "a", "1"),
+		Original: original,
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := snapshot(t, e.game); got != before {
+		t.Fatal("Adopt изменил игру")
+	}
+	if p, _ := e.d.Plan([]Source{a}, nil); !p.Empty() || len(p.Drift) != 0 {
+		t.Fatalf("после Adopt план не пуст: %+v", p)
+	}
+	if err := e.d.Adopt("adopted-2", nil); err == nil {
+		t.Error("второй Adopt поверх учёта прошёл")
+	}
+
+	e.deploy(t)
+	if data, _ := os.ReadFile(filepath.Join(e.game, "mods", "base.lua")); string(data) != "файл игры" {
+		t.Errorf("после снятия: %q, want сохранённый оригинал", data)
+	}
+
+	e.deploy(t, a)
+	if err := e.d.Forget(); err != nil {
+		t.Fatal(err)
+	}
+	if m, _ := e.d.Manifest(); m.Len() != 0 {
+		t.Error("учёт остался после Forget")
+	}
+	if data, _ := os.ReadFile(filepath.Join(e.game, "mods", "base.lua")); string(data) != "мод другого менеджера" {
+		t.Errorf("Forget изменил игру: %q", data)
+	}
+}
+
+func manifestEntry(f File, modID, versionID string) manifest.Entry {
+	return manifest.Entry{Path: f.Path, ModID: modID, VersionID: versionID, Hash: f.Hash, Size: f.Size, Method: manifest.MethodCopy}
 }

@@ -27,6 +27,11 @@ type settings struct {
 	GameDir string `json:"gameDir"`
 	// GameStore — откуда игра: «Steam», «Xbox», «вручную».
 	GameStore string `json:"gameStore,omitempty"`
+	// IgnoredManagers — другие менеджеры модов, которые пользователь
+	// разрешил не учитывать.
+	IgnoredManagers []string `json:"ignoredManagers,omitempty"`
+	// Profile — текущий профиль; пусто — «Основной».
+	Profile string `json:"profile,omitempty"`
 }
 
 func loadSettings(home string) (settings, error) {
@@ -130,6 +135,9 @@ func (a *Manager) layout(v store.Version) (game.Layout, error) {
 	for i, f := range v.Files {
 		paths[i] = f.Path
 	}
+	if v.AsIs {
+		return a.game.Describe(paths), nil
+	}
 	return a.game.Layout(paths)
 }
 
@@ -151,8 +159,8 @@ func (a *Manager) Deploy() (DeployResult, error) {
 	if !real {
 		return DeployResult{}, errors.New("сейчас показаны демонстрационные данные: добавьте мод, чтобы было что развернуть")
 	}
-	if managers := a.game.Managers(a.settings.GameDir); len(managers) > 0 {
-		return DeployResult{}, fmt.Errorf("игрой управляет %s; Modvault не развёртывает поверх другого менеджера, пока не научится принимать его моды (этап 5)", strings.Join(managers, " и "))
+	if managers := a.managers(); len(managers) > 0 {
+		return DeployResult{}, fmt.Errorf("игрой управляет %s; Modvault не развёртывает поверх другого менеджера модов", strings.Join(managers, " и "))
 	}
 	plan, err := a.plan()
 	if err != nil {
@@ -166,6 +174,7 @@ func (a *Manager) Deploy() (DeployResult, error) {
 			return DeployResult{}, err
 		}
 		a.recovery = deploy.NothingToRecover
+		a.rememberDeployed()
 		msg = fmt.Sprintf("Развёрнуто: %d %s", res.Changes, plural(res.Changes, "изменение", "изменения", "изменений"))
 		if res.Displaced != "" {
 			msg += ". Файлы, изменённые вне программы, сохранены в " + res.Displaced
@@ -405,15 +414,19 @@ func (a *Manager) realState() (State, error) {
 		s.Issues = append(s.Issues, Issue{Title: "Не удалось рассчитать развёртывание", Detail: planErr.Error(), Level: LevelError})
 	}
 	if a.settings.GameDir != "" && a.deployErr == nil {
-		if managers := a.game.Managers(a.settings.GameDir); len(managers) > 0 {
-			whose := "его"
-			if len(managers) > 1 {
-				whose = "их"
+		for _, m := range a.managers() {
+			if m == "Vortex" {
+				s.Issues = append(s.Issues, Issue{
+					Title:  "Игрой управляет Vortex",
+					Detail: "Modvault может перенять его моды без переустановки: файлы игры не изменятся, а вернуть всё Vortex можно в любой момент",
+					Level:  LevelWarn, Action: "Перенять у Vortex", Command: "Adopt",
+				})
+				continue
 			}
 			s.Issues = append(s.Issues, Issue{
-				Title:  "Игрой управляет " + strings.Join(managers, " и "),
-				Detail: "Modvault не развёртывает поверх другого менеджера. Принимать " + whose + " моды без переустановки программа научится на этапе 5",
-				Level:  LevelError,
+				Title:  "В папке игры лежит " + m,
+				Detail: "Пока он есть, Modvault не развёртывает: две программы испортят друг другу учёт. Если вы им для этой игры не пользуетесь, его можно не учитывать",
+				Level:  LevelError, Action: "Не учитывать", Command: "IgnoreManagers",
 			})
 		}
 		if err := a.game.Validate(a.settings.GameDir); err != nil {
@@ -598,10 +611,30 @@ func (a *Manager) status(s State, mods int, plan *deploy.Plan) []StatusItem {
 			}
 		}
 	}
-	return []StatusItem{
+	items := []StatusItem{
 		game,
 		{Label: "Хранилище", Value: fmt.Sprintf("%d %s", mods, plural(mods, "мод", "мода", "модов")), Level: LevelOK},
 		files,
 		checks,
 	}
+	if rec, err := a.loadRecord(); err == nil && rec != nil {
+		items = append(items, StatusItem{Label: "Vortex", Value: "отсоединён · вернуть", Level: LevelOff, Command: "Release"})
+	}
+	return items
+}
+
+// IgnoreManagers перестаёт учитывать другие менеджеры модов, кроме Vortex:
+// пользователь подтвердил, что не пользуется ими для этой игры.
+func (a *Manager) IgnoreManagers() (State, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for _, m := range a.managers() {
+		if m != "Vortex" {
+			a.settings.IgnoredManagers = append(a.settings.IgnoredManagers, m)
+		}
+	}
+	if err := a.saveSettings(); err != nil {
+		return State{}, err
+	}
+	return a.state()
 }

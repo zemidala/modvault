@@ -77,6 +77,12 @@ type Game interface {
 	Validate(dir string) error
 	// Layout раскладывает файлы архива (пути через «/») по папкам игры.
 	Layout(files []string) (Layout, error)
+	// Describe описывает файлы, которые уже лежат так, как в игре
+	// (например, приняты у другого менеджера модов): пути не меняются.
+	Describe(files []string) Layout
+	// Originals перечисляет оригиналы файлов игры, которые сохранили другие
+	// инструменты: путь в игре → путь к сохранённому оригиналу там же.
+	Originals(dir string) map[string]string
 	// Generate собирает служебные файлы: порядок загрузки, патчи.
 	Generate(ctx Context) ([]Generated, []Notice, error)
 	// Managers перечисляет другие менеджеры модов, найденные в папке игры.

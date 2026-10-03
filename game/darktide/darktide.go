@@ -33,6 +33,19 @@ func (*Darktide) Name() string { return "Darktide" }
 
 func (*Darktide) Layout(files []string) (game.Layout, error) { return Layout(files) }
 
+func (*Darktide) Describe(files []string) game.Layout { return Describe(files) }
+
+// Originals находит оригинал базы бандлов, который dtkit-patch оставляет
+// рядом с пропатченной: bundle_database.data.bak.
+func (*Darktide) Originals(dir string) map[string]string {
+	bak := filepath.Join(dir, filepath.FromSlash(bundleDBPath)+".bak")
+	data, err := os.ReadFile(bak)
+	if err != nil || InspectBundle(data) != Unpatched {
+		return nil
+	}
+	return map[string]string{bundleDBPath: bak}
+}
+
 // Validate проверяет, что в папке есть исполняемый файл и база бандлов игры.
 func (*Darktide) Validate(dir string) error {
 	for _, rel := range []string{exePath, bundleDBPath} {
