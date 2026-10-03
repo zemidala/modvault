@@ -3,6 +3,8 @@
 package main
 
 import (
+	"bufio"
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -25,6 +27,9 @@ const (
 	exitError = 1
 	exitUsage = 2
 )
+
+// stdin — откуда команды читают ввод пользователя.
+var stdin io.Reader = os.Stdin
 
 // errUsage — команда вызвана неправильно; справка уже выведена.
 var errUsage = errors.New("неверный вызов")
@@ -69,6 +74,7 @@ func run(args []string, stdout, stderr io.Writer, open func() *manager.Manager) 
 		"adopt":    c.adopt,
 		"release":  c.release,
 		"play":     c.play,
+		"nexus":    c.nexus,
 	}
 	switch cmd {
 	case "version", "--version", "-v":
@@ -126,6 +132,13 @@ func usage(w io.Writer) {
 Vortex:
   adopt [--dry-run]         перенять управление модами у Vortex
   release [--dry-run]       вернуть управление Vortex
+
+Nexus:
+  nexus                     чей ключ сохранён
+  nexus login               сохранить ключ API (читается со стандартного ввода)
+  nexus logout              забыть ключ
+  nexus check               проверить, вышли ли новые версии модов
+  nexus get <ссылка nxm>    скачать и поставить мод по ссылке с сайта
 
   version, help
 
@@ -589,4 +602,72 @@ func (c *cli) play(args []string) error {
 	}
 	fmt.Fprintln(c.out, "игра запускается")
 	return nil
+}
+
+func (c *cli) nexus(args []string) error {
+	if len(args) == 0 {
+		args = []string{"status"}
+	}
+	m := c.manager()
+	ctx := context.Background()
+	switch args[0] {
+	case "status":
+		if user := m.NexusUser(); user != "" {
+			fmt.Fprintf(c.out, "ключ Nexus сохранён: %s\n", user)
+		} else {
+			fmt.Fprintln(c.out, "ключ Nexus не задан: modvault nexus login")
+		}
+		return nil
+	case "login":
+		fmt.Fprint(c.out, "Ключ API (nexusmods.com → настройки учётной записи → API Keys → Personal API Key): ")
+		key, err := bufio.NewReader(stdin).ReadString('\n')
+		if err != nil && key == "" {
+			return errors.New("ключ не введён")
+		}
+		if _, err := m.NexusLogin(ctx, key); err != nil {
+			return err
+		}
+		fmt.Fprintf(c.out, "ключ принят и сохранён: %s\n", m.NexusUser())
+		return nil
+	case "logout":
+		if _, err := m.NexusLogout(); err != nil {
+			return err
+		}
+		fmt.Fprintln(c.out, "ключ Nexus забыт")
+		return nil
+	case "check":
+		rep, err := m.CheckUpdates(ctx)
+		if err != nil {
+			return err
+		}
+		for _, mod := range rep.State.Mods {
+			if mod.Available != "" {
+				fmt.Fprintf(c.out, "%-30s %s → %s\n", mod.Name, mod.Version, mod.Available)
+			}
+		}
+		fmt.Fprintln(c.out, rep.Message)
+		return nil
+	case "get":
+		if err := c.need("nexus get", args[1:], 1, "<ссылка nxm>"); err != nil {
+			return err
+		}
+		shown := int64(-1)
+		res, err := m.InstallLink(ctx, args[1], func(p manager.Progress) {
+			if p.Total <= 0 {
+				return
+			}
+			// Строка на каждые 10%: не забивает вывод и видна в журнале.
+			if tenth := p.Done * 10 / p.Total; tenth != shown {
+				shown = tenth
+				fmt.Fprintf(c.out, "%s: %d%%\n", p.Name, tenth*10)
+			}
+		})
+		if err != nil {
+			return err
+		}
+		fmt.Fprintln(c.out, res.Message)
+		return nil
+	}
+	fmt.Fprintf(c.errOut, "неизвестная команда Nexus: %s\n", args[0])
+	return errUsage
 }

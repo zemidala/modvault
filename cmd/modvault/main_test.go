@@ -92,6 +92,14 @@ func TestHelpAndVersion(t *testing.T) {
 		{[]string{"move", "x"}, exitUsage, "", "использование: modvault move"},
 		{[]string{"deploy", "--bogus"}, exitUsage, "", "flag provided but not defined"},
 		{[]string{"list"}, exitError, "", "игра не выбрана"},
+		{[]string{"help"}, exitOK, "nexus get <ссылка nxm>", ""},
+		{[]string{"nexus"}, exitOK, "ключ Nexus не задан", ""},
+		{[]string{"nexus", "get"}, exitUsage, "", "использование: modvault nexus get"},
+		{[]string{"nexus", "nope"}, exitUsage, "", "неизвестная команда Nexus: nope"},
+		{[]string{"nexus", "get", "https://example.com"}, exitError, "", "ссылка nxm не разобрана"},
+		{[]string{"nexus", "get", "nxm://warhammer40kdarktide/mods/1/files/2"}, exitError, "", "ключ Nexus не задан"},
+		{[]string{"nexus", "check"}, exitError, "", "ключ Nexus не задан"},
+		{[]string{"nexus", "logout"}, exitOK, "ключ Nexus забыт", ""},
 	}
 	for _, tt := range tests {
 		code, out, errOut := e.run(tt.args...)
