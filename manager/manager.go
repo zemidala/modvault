@@ -323,6 +323,7 @@ func (a *Manager) addVersion(path string, info store.Info) (store.Version, strin
 	if err := a.profiles.Save(p); err != nil {
 		return store.Version{}, "", err
 	}
+	a.shareVersion(v.ModID, v.ID)
 	a.pruneVersions(v.ModID, v.ID, prev)
 	return v, prev, nil
 }

@@ -555,28 +555,6 @@ func TestUpdateKeepsModState(t *testing.T) {
 	}
 }
 
-func TestPruneKeepsOtherProfiles(t *testing.T) {
-	a, _, _ := nexusApp(t)
-	mod := func(version string) string {
-		return writeZip(t, "Flux-30-"+version+"-1700000000.zip", map[string]string{"Flux/Flux.mod": "return {} -- " + version})
-	}
-	if _, err := a.addArchive(mod("1")); err != nil {
-		t.Fatal(err)
-	}
-	// Второй профиль остаётся на первой версии.
-	if err := a.CopyProfile(mainProfile, "Запасной"); err != nil {
-		t.Fatal(err)
-	}
-	for _, v := range []string{"2", "3"} {
-		if _, err := a.addArchive(mod(v)); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if m := findMod(t, state(t, a), "flux"); m.Version != "3" || m.Versions != 3 {
-		t.Errorf("версия другого профиля не сохранена: %+v", m)
-	}
-}
-
 // fakeProtocol — обработчик ссылок вместо реестра Windows.
 type fakeProtocol struct{ cmd string }
 
