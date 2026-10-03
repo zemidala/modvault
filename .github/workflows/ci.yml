@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Проверка и тесты
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Форматирование
+        shell: bash
+        run: |
+          out="$(gofmt -l .)"
+          if [ -n "$out" ]; then
+            echo "Не отформатированы:"; echo "$out"; exit 1
+          fi
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Тесты
+        run: go test -race ./...
+
+      - name: Сборка
+        run: go build -o bin/modvault.exe ./cmd/modvault
