@@ -613,6 +613,23 @@ func (a *App) ImportSet() (manager.ImportResult, error) {
 	return a.m.ImportSet(path)
 }
 
+// CollectionAsk — вопрос со ссылкой на коллекцию Nexus.
+func (a *App) CollectionAsk() Ask {
+	return Ask{
+		Title: "Загрузить коллекцию Nexus", OK: "Создать набор", Input: true, Placeholder: "Адрес страницы коллекции или её код",
+		Message: "Программа создаст набор по коллекции: включит в нём её моды, которые у вас уже есть, и покажет, каких не хватает, со ссылками на загрузку.\n\n" +
+			"Мод узнаётся по номеру на Nexus. Если у вас версия новее, чем в коллекции, она и останется. Текущий набор не изменится.",
+	}
+}
+
+// ImportCollection создаёт набор по коллекции Nexus.
+func (a *App) ImportCollection(link string) (manager.ImportResult, error) {
+	if strings.TrimSpace(link) == "" {
+		return manager.ImportResult{Missing: []manager.MissingMod{}}, errors.New("вставьте адрес страницы коллекции")
+	}
+	return a.m.ImportCollection(a.ctx, link)
+}
+
 // maxPages — сколько страниц открывать в браузере за раз.
 const maxPages = 15
 

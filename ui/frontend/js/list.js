@@ -210,6 +210,27 @@ async function importSet() {
     return;
   }
   if (!res.set) return; // файл не выбран
+  showImported(res, "Набор загружен, но модов не хватает");
+}
+
+// importCollection создаёт набор по коллекции Nexus.
+async function importCollection() {
+  const link = await ask(await backend().CollectionAsk());
+  if (link === null) return;
+  toast("Коллекция: спрашиваю у Nexus её состав…", "busy", true);
+  let res;
+  try {
+    res = await backend().ImportCollection(link);
+  } catch (err) {
+    toast(String(err), "error");
+    return;
+  }
+  showImported(res, "Набор по коллекции создан, но модов не хватает");
+}
+
+// showImported показывает итог создания набора по списку модов: что не
+// хватает и откуда это взять.
+async function showImported(res, title) {
   state = res.state;
   render();
   if (!res.missing.length) {
@@ -219,7 +240,7 @@ async function importSet() {
   const links = res.missing.filter((m) => m.url);
   const list = res.missing.map((m) => `• ${m.name}${m.version ? " " + m.version : ""}${m.url ? "" : " — нет на Nexus, ищите сами"}`).join("\n");
   const open = await ask({
-    title: "Набор загружен, но модов не хватает",
+    title,
     message: `${res.message}.\n\nНе хватает:\n${list}`,
     ok: links.length ? `Открыть страницы на Nexus (${Math.min(links.length, 15)})` : "",
   });

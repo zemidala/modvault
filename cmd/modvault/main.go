@@ -142,6 +142,7 @@ Nexus:
   nexus logout              забыть ключ
   nexus check               проверить, вышли ли новые версии модов
   nexus get <ссылка nxm>    скачать и поставить мод по ссылке с сайта
+  nexus collection <ссылка> создать набор по коллекции Nexus
   nexus endorsed            какие моды вы одобрили
   nexus endorse <мод>       одобрить мод на Nexus
   nexus abstain <мод>       снять одобрение
@@ -726,6 +727,19 @@ func (c *cli) nexus(args []string) error {
 			}
 		}
 		fmt.Fprintf(c.out, "одобрено модов: %d (список обновляет modvault nexus check)\n", n)
+		return nil
+	case "collection":
+		if err := c.need("nexus collection", args[1:], 1, "<ссылка или код>"); err != nil {
+			return err
+		}
+		res, err := m.ImportCollection(ctx, args[1])
+		if err != nil {
+			return err
+		}
+		fmt.Fprintln(c.out, res.Message)
+		for _, miss := range res.Missing {
+			fmt.Fprintf(c.out, "  нет: %s %s  %s\n", miss.Name, miss.Version, miss.URL)
+		}
 		return nil
 	case "endorse", "abstain":
 		if err := c.need("nexus "+args[0], args[1:], 1, "<мод>"); err != nil {

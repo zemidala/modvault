@@ -222,9 +222,6 @@ func (m ModInfo) AuthorPage(game string) string {
 
 // graph выполняет запрос к новому API. Ошибка в ответе — ошибка запроса.
 func (c *Client) graph(ctx context.Context, query string, vars map[string]any, out any) error {
-	if c.Key == "" {
-		return ErrNoKey
-	}
 	u := c.Graph
 	if u == "" {
 		u = DefaultGraph
@@ -238,7 +235,9 @@ func (c *Client) graph(ctx context.Context, query string, vars map[string]any, o
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("apikey", c.Key)
+	if c.Key != "" { // открытые сведения отдаются и без ключа
+		req.Header.Set("apikey", c.Key)
+	}
 	req.Header.Set("User-Agent", "Modvault/"+c.Version)
 	req.Header.Set("Application-Name", "Modvault")
 	req.Header.Set("Application-Version", c.Version)
@@ -271,13 +270,19 @@ func (c *Client) graph(ctx context.Context, query string, vars map[string]any, o
 	var reply struct {
 		Data   json.RawMessage `json:"data"`
 		Errors []struct {
-			Message string `json:"message"`
+			Message    string `json:"message"`
+			Extensions struct {
+				Code string `json:"code"`
+			} `json:"extensions"`
 		} `json:"errors"`
 	}
 	if err := json.Unmarshal(answer, &reply); err != nil {
 		return fmt.Errorf("непонятный ответ Nexus: %w", err)
 	}
 	if len(reply.Errors) > 0 {
+		if reply.Errors[0].Extensions.Code == "NOT_FOUND" {
+			return fmt.Errorf("%w: %s", ErrNotFound, reply.Errors[0].Message)
+		}
 		return fmt.Errorf("%w: %s", ErrForbidden, reply.Errors[0].Message)
 	}
 	if err := json.Unmarshal(reply.Data, out); err != nil {
@@ -294,6 +299,9 @@ func (c *Client) SendMessage(ctx context.Context, to int, title, body string) er
 		CreateMessage struct {
 			Success bool `json:"success"`
 		} `json:"createMessage"`
+	}
+	if c.Key == "" {
+		return ErrNoKey
 	}
 	const query = "mutation($to: [Int!]!, $title: String!, $body: String!) { createMessage(to: $to, title: $title, body: $body) { success } }"
 	if err := c.graph(ctx, query, map[string]any{"to": []int{to}, "title": title, "body": body}, &out); err != nil {

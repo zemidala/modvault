@@ -33,7 +33,7 @@ func ParseLink(raw string) (Link, error) {
 	}
 	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
 	if len(parts) >= 1 && strings.EqualFold(parts[0], "collections") {
-		return bad("коллекции не поддерживаются")
+		return bad("это ссылка на коллекцию, а не на файл мода")
 	}
 	if u.Host == "" || len(parts) != 4 || !strings.EqualFold(parts[0], "mods") || !strings.EqualFold(parts[2], "files") {
 		return bad("ожидается nxm://игра/mods/номер/files/номер")

@@ -1,6 +1,7 @@
 package manager
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -165,6 +166,8 @@ type setFileMod struct {
 	Version string `json:"version,omitempty"`
 	NexusID int    `json:"nexusId,omitempty"`
 	FileID  int    `json:"fileId,omitempty"`
+	// URL — где взять мод, если он не с Nexus (ресурс коллекции).
+	URL string `json:"url,omitempty"`
 }
 
 // ExportSet записывает текущий набор в файл: его включённые моды по порядку.
@@ -242,6 +245,15 @@ func (a *Manager) ImportSet(path string) (ImportResult, error) {
 	if domain := a.game.NexusDomain(); in.Game != "" && in.Game != domain {
 		return ImportResult{}, fmt.Errorf("набор собран для другой игры (%s)", in.Game)
 	}
+	if strings.TrimSpace(in.Name) == "" {
+		in.Name = strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+	}
+	return a.importSet(in, "из файла")
+}
+
+// importSet создаёт набор по списку модов in; origin — откуда список («из
+// файла», «по коллекции …»), для сообщения.
+func (a *Manager) importSet(in setFile, origin string) (ImportResult, error) {
 	p, mods, err := a.loadProfile()
 	if err != nil {
 		return ImportResult{}, err
@@ -270,7 +282,7 @@ func (a *Manager) ImportSet(path string) (ImportResult, error) {
 			have = append(have, id)
 			continue
 		}
-		miss := MissingMod{Name: m.Name, Version: m.Version}
+		miss := MissingMod{Name: m.Name, Version: m.Version, URL: m.URL}
 		if m.NexusID != 0 && in.Game != "" {
 			miss.URL = nexus.ModPage(in.Game, m.NexusID)
 			if m.FileID != 0 {
@@ -282,9 +294,6 @@ func (a *Manager) ImportSet(path string) (ImportResult, error) {
 
 	// Название не должно совпасть с существующим набором.
 	name := strings.TrimSpace(in.Name)
-	if name == "" {
-		name = strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
-	}
 	taken, err := a.profiles.List()
 	if err != nil {
 		return ImportResult{}, err
@@ -306,7 +315,7 @@ func (a *Manager) ImportSet(path string) (ImportResult, error) {
 		return ImportResult{}, err
 	}
 	res.Set = name
-	res.Message = fmt.Sprintf("Набор «%s» создан из файла: %d из %d %s уже есть и включены в нём", name, len(have), len(in.Mods), plural(len(in.Mods), "мода", "модов", "модов"))
+	res.Message = fmt.Sprintf("Набор «%s» создан %s: %d из %d %s уже есть и включены в нём", name, origin, len(have), len(in.Mods), plural(len(in.Mods), "мода", "модов", "модов"))
 	if n := len(res.Missing); n > 0 {
 		res.Message += fmt.Sprintf(". Не хватает %d: после установки включите их в этом наборе", n)
 	}
@@ -419,4 +428,77 @@ func (a *Manager) FilesReport() (FilesReport, error) {
 	}
 	rep.Note = strings.Join(notes, "\n\n")
 	return rep, nil
+}
+
+// ImportCollection создаёт набор по коллекции Nexus: включает в нём её
+// обязательные моды, которые есть в хранилище, и перечисляет те, которых не
+// хватает, со ссылками на страницы загрузки. Мод узнаётся по номеру на
+// Nexus; версия в хранилище может быть новее, чем в коллекции, — она и
+// остаётся. Текущий набор не меняется. Ключ Nexus для этого не нужен.
+func (a *Manager) ImportCollection(ctx context.Context, link string) (ImportResult, error) {
+	where, ok := nexus.ParseCollection(link)
+	if !ok {
+		return ImportResult{}, errors.New("это не ссылка на коллекцию Nexus: нужен адрес её страницы или её код")
+	}
+	a.mu.Lock()
+	real, herr := a.hasMods()
+	domain, derr := a.domain()
+	key, _ := a.keys.Load()
+	c := newClient(a.nexusBase, key)
+	a.mu.Unlock()
+	if err := errors.Join(herr, derr); err != nil {
+		return ImportResult{}, err
+	}
+	if !real {
+		return ImportResult{}, errors.New("сначала выберите папку игры")
+	}
+	if where.Game != "" && where.Game != domain {
+		return ImportResult{}, fmt.Errorf("коллекция для другой игры (%s), а Modvault ведёт %s", where.Game, a.game.Name())
+	}
+	col, err := c.Collection(ctx, domain, where.Slug, where.Revision)
+	if errors.Is(err, nexus.ErrNotFound) {
+		return ImportResult{}, fmt.Errorf("коллекции «%s» на Nexus нет: проверьте ссылку", where.Slug)
+	}
+	if err != nil {
+		return ImportResult{}, fmt.Errorf("коллекция «%s»: %w", where.Slug, err)
+	}
+	if col.Game != "" && col.Game != domain {
+		return ImportResult{}, fmt.Errorf("коллекция «%s» собрана для другой игры (%s)", col.Name, col.Game)
+	}
+
+	in := setFile{Format: 1, Name: col.Name, Game: domain}
+	optional := 0
+	for _, m := range col.Mods {
+		if m.Optional {
+			optional++
+			continue
+		}
+		in.Mods = append(in.Mods, setFileMod{Name: m.Name, Version: m.Version, NexusID: m.ModID, FileID: m.FileID})
+	}
+	for _, e := range col.External {
+		if e.Optional {
+			optional++
+			continue
+		}
+		in.Mods = append(in.Mods, setFileMod{Name: e.Name + " (не с Nexus)", URL: e.URL})
+	}
+	if len(in.Mods) == 0 {
+		return ImportResult{}, fmt.Errorf("в коллекции «%s» нет обязательных модов", col.Name)
+	}
+	origin := fmt.Sprintf("по коллекции Nexus (редакция %d", col.Revision)
+	if col.Author != "" {
+		origin += ", автор " + col.Author
+	}
+	origin += ")"
+
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	res, err := a.importSet(in, origin)
+	if err != nil {
+		return ImportResult{}, err
+	}
+	if optional > 0 {
+		res.Message += fmt.Sprintf(". Необязательных в коллекции: %d — в набор не вошли", optional)
+	}
+	return res, nil
 }

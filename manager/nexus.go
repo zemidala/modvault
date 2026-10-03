@@ -139,6 +139,19 @@ type InstallResult struct {
 
 // InstallLink скачивает и ставит мод по ссылке nxm:// с сайта.
 func (a *Manager) InstallLink(ctx context.Context, raw string, progress func(Progress)) (InstallResult, error) {
+	// Кнопка коллекции на сайте отдаёт ссылку того же вида: по ней
+	// создаётся набор.
+	if nexus.IsCollectionLink(raw) {
+		res, err := a.ImportCollection(ctx, raw)
+		if err != nil {
+			return InstallResult{}, err
+		}
+		msg := res.Message
+		if len(res.Missing) > 0 {
+			msg += ". Список недостающих — в меню «Набор» → «Загрузить коллекцию Nexus…»"
+		}
+		return InstallResult{State: res.State, Message: msg}, nil
+	}
 	link, err := nexus.ParseLink(raw)
 	if err != nil {
 		return InstallResult{}, err

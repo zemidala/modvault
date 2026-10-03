@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -58,6 +59,8 @@ type fakeNexus struct {
 	versions map[int]string
 	// messages — личные сообщения, принятые новым API: "кому|тема|текст".
 	messages []string
+	// collections — коллекции по коду: готовый ответ collectionRevision.
+	collections map[string]map[string]any
 }
 
 func newFakeNexus(t *testing.T) *fakeNexus {
@@ -123,7 +126,20 @@ func (f *fakeNexus) serve(w http.ResponseWriter, r *http.Request) {
 				Body  string
 			}
 		}
-		json.NewDecoder(r.Body).Decode(&q)
+		raw, _ := io.ReadAll(r.Body)
+		json.Unmarshal(raw, &q)
+		if strings.Contains(q.Query, "collectionRevision") {
+			var c struct{ Variables struct{ Slug, Domain string } }
+			json.Unmarshal(raw, &c)
+			col, ok := f.collections[c.Variables.Slug]
+			if !ok {
+				json.NewEncoder(w).Encode(map[string]any{"data": nil, "errors": []map[string]any{{
+					"message": "Collection not found", "extensions": map[string]string{"code": "NOT_FOUND"}}}})
+				return
+			}
+			json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"collectionRevision": col}})
+			return
+		}
 		switch {
 		case r.Header.Get("apikey") != "good":
 			w.WriteHeader(http.StatusUnauthorized)
@@ -864,5 +880,92 @@ func TestMessageAuthor(t *testing.T) {
 	f.refuse = "You cannot message this user"
 	if _, err := a.MessageAuthor(ctx, "scoreboard", "тема", "текст"); err == nil || !strings.Contains(err.Error(), "You cannot message this user") {
 		t.Errorf("отказ Nexus: %v", err)
+	}
+}
+
+func TestImportCollection(t *testing.T) {
+	a, f, _ := nexusApp(t)
+	ctx := context.Background()
+	a.addArchive(writeZip(t, "dml.zip", dmlArchive))
+	// В хранилище: мод с Nexus (номер 22, версия новее, чем в коллекции) и мод с диска.
+	f.add(t, 22, "Scoreboard", fakeFile{ID: 9, Name: "Scoreboard", Version: "2.0.0", Category: "MAIN", FileName: "Scoreboard-22-2-0-0.zip"},
+		map[string]string{"Scoreboard/Scoreboard.mod": "return {}"})
+	a.addArchive(modZip(t, "Local", `return {}`))
+	login(t, a)
+	if _, err := a.InstallLink(ctx, link(22, 9), nil); err != nil {
+		t.Fatal(err)
+	}
+	a.NexusLogout() // состав коллекции читается и без ключа
+
+	file := func(id, modID int, name, version string, optional bool) map[string]any {
+		return map[string]any{"fileId": id, "optional": optional, "version": version,
+			"file": map[string]any{"fileId": id, "modId": modID, "name": name + " file", "version": version, "mod": map[string]any{"name": name}}}
+	}
+	f.collections = map[string]map[string]any{"abc123": {
+		"revisionNumber": 17,
+		"collection": map[string]any{"name": "Dank Collection", "slug": "abc123",
+			"user": map[string]any{"name": "Dankantor"}, "game": map[string]any{"domainName": testDomain}},
+		"modFiles": []map[string]any{
+			file(1, 22, "Scoreboard", "1.4.0", false),
+			file(308, 21, "Animation Events", "1.01", false),
+			file(500, 23, "Settings Extension", "1.0", true),
+			{"fileId": 77, "optional": false, "version": "1", "file": nil}, // файл убран с Nexus
+		},
+		"externalResources": []map[string]any{{"name": "Shader pack", "resourceUrl": "https://example.com/pack", "optional": false}},
+	}, "other": {
+		"revisionNumber": 1,
+		"collection":     map[string]any{"name": "Skyrim things", "slug": "other", "user": map[string]any{"name": "x"}, "game": map[string]any{"domainName": "skyrim"}},
+		"modFiles":       []map[string]any{file(1, 1, "X", "1", false)},
+	}}
+
+	for _, bad := range []string{"", "https://www.nexusmods.com/games/skyrim/collections/abc123", "нет/такой/ссылки", "missing", "other"} {
+		if _, err := a.ImportCollection(ctx, bad); err == nil {
+			t.Errorf("коллекция по ссылке %q загружена", bad)
+		}
+	}
+	if sets, _ := a.Sets(); len(sets) != 1 {
+		t.Fatalf("после отказов наборы: %+v", sets)
+	}
+
+	res, err := a.ImportCollection(ctx, "https://www.nexusmods.com/games/"+testDomain+"/collections/abc123/revisions/17")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Set != "Dank Collection" || res.State.Profile != mainProfile {
+		t.Errorf("набор %q, текущий %q", res.Set, res.State.Profile)
+	}
+	for _, want := range []string{"по коллекции Nexus (редакция 17, автор Dankantor)", "1 из 3", "Не хватает 2", "Необязательных в коллекции: 1"} {
+		if !strings.Contains(res.Message, want) {
+			t.Errorf("в сообщении нет %q: %s", want, res.Message)
+		}
+	}
+	if len(res.Missing) != 2 {
+		t.Fatalf("недостающие: %+v", res.Missing)
+	}
+	// Недостающий мод с Nexus — со страницей загрузки именно того файла;
+	// ресурс вне Nexus — со своим адресом.
+	if m := res.Missing[0]; m.Name != "Animation Events" || m.Version != "1.01" || m.URL != "https://www.nexusmods.com/"+testDomain+"/mods/21?tab=files&file_id=308&nmm=1" {
+		t.Errorf("недостающий мод: %+v", m)
+	}
+	if m := res.Missing[1]; m.Name != "Shader pack (не с Nexus)" || m.URL != "https://example.com/pack" {
+		t.Errorf("недостающий ресурс: %+v", m)
+	}
+	// В наборе включён мод с тем же номером на Nexus (со своей, более новой
+	// версией) и загрузчик; мод с диска в коллекцию не входит.
+	sw, err := a.SwitchSet("Dank Collection")
+	if err != nil || enabledIDs(sw.State) != "dml,scoreboard" {
+		t.Errorf("набор по коллекции: %v, включены %s", err, enabledIDs(sw.State))
+	}
+	if findMod(t, sw.State, "scoreboard").Version != "2.0.0" {
+		t.Error("версия мода заменена версией из коллекции")
+	}
+
+	// Код коллекции и ссылка nxm с сайта работают так же; название не повторяется.
+	if res, err = a.ImportCollection(ctx, "abc123"); err != nil || res.Set != "Dank Collection (2)" {
+		t.Errorf("по коду: %q, %v", res.Set, err)
+	}
+	inst, err := a.InstallLink(ctx, "nxm://"+testDomain+"/collections/abc123/revisions/17", nil)
+	if err != nil || !strings.Contains(inst.Message, "Набор «Dank Collection (3)» создан по коллекции") {
+		t.Errorf("по ссылке nxm: %q, %v", inst.Message, err)
 	}
 }

@@ -113,6 +113,7 @@ async function openSets() {
   items.push({ separator: true });
   items.push({ label: `Сохранить «${state.profile}» в файл…`, hint: "поделиться", action: () => act(() => backend().ExportSet(), $("set-button")) });
   items.push({ label: "Загрузить набор из файла…", action: importSet });
+  items.push({ label: "Загрузить коллекцию Nexus…", action: importCollection });
   showMenu($("set-button"), items);
 }
 
