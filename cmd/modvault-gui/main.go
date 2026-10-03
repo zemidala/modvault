@@ -20,17 +20,26 @@ func main() {
 	// сайте Nexus нажата кнопка загрузки.
 	app.Queue(os.Args[1:])
 
+	window := app.Window()
+	startState := options.Normal
+	if window.Maximised {
+		startState = options.Maximised
+	}
+
 	err := wails.Run(&options.App{
 		// Окно одно: вторая копия отдаёт свои аргументы первой и закрывается.
 		SingleInstanceLock: &options.SingleInstanceLock{
 			UniqueId:               "modvault-7c1f4a52-9d0e-4b7b-a6c3-2f5e8d1b0a94",
 			OnSecondInstanceLaunch: func(data options.SecondInstanceData) { app.Open(data.Args) },
 		},
-		Title:     "Modvault",
-		Width:     1280,
-		Height:    900,
-		MinWidth:  960,
-		MinHeight: 600,
+		Title: "Modvault",
+		// Окно открывается таким, каким его закрыли.
+		Width:            window.Width,
+		Height:           window.Height,
+		MinWidth:         ui.MinWidth,
+		MinHeight:        ui.MinHeight,
+		WindowStartState: startState,
+		OnBeforeClose:    app.BeforeClose,
 		// Цвет окна до загрузки страницы — тот же, что у её фона.
 		BackgroundColour: &options.RGBA{R: 0x1b, G: 0x17, B: 0x14, A: 0xff},
 		AssetServer:      &assetserver.Options{Assets: ui.Assets()},

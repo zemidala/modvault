@@ -40,15 +40,18 @@ type App struct {
 	mu      sync.Mutex
 	ready   bool     // страница готова принимать события
 	pending []string // аргументы запуска, которые ждут готовности страницы
+
+	window WindowState // размер и место окна с прошлого запуска
 }
 
 func NewApp(m *manager.Manager) *App {
-	return &App{m: m}
+	return &App{m: m, window: LoadWindow()}
 }
 
 // Startup вызывается при открытии окна.
 func (a *App) Startup(ctx context.Context) {
 	a.ctx = ctx
+	a.placeWindow()
 }
 
 func (a *App) State() (manager.State, error) { return a.m.State() }
