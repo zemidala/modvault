@@ -1,4 +1,4 @@
-package ui
+package manager
 
 import (
 	"crypto/sha256"
@@ -10,8 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
-	"github.com/wailsapp/wails/v2/pkg/runtime"
 
 	"github.com/zemidala/modvault/core/deploy"
 	"github.com/zemidala/modvault/core/fsx"
@@ -46,7 +44,7 @@ func loadSettings(home string) (settings, error) {
 	return s, nil
 }
 
-func (a *App) saveSettings() error {
+func (a *Manager) saveSettings() error {
 	data, err := json.MarshalIndent(a.settings, "", "  ")
 	if err != nil {
 		return err
@@ -56,38 +54,35 @@ func (a *App) saveSettings() error {
 
 // gameState — папка состояния развёртывания для папки игры. У каждой папки
 // своя: смена папки не путает учёт, а прежняя установка остаётся как была.
-func (a *App) gameState(game string) string {
+func (a *Manager) gameState(game string) string {
 	sum := sha256.Sum256([]byte(strings.ToLower(filepath.Clean(game))))
 	return filepath.Join(a.home, "deploy", hex.EncodeToString(sum[:6]))
 }
 
 // openDeployer открывает развёртывание в выбранную папку; заодно откатывает
 // развёртывание, оборвавшееся в прошлый раз.
-func (a *App) openDeployer() {
+func (a *Manager) openDeployer() {
 	a.deployer, a.recovery, a.deployErr = deploy.Open(a.settings.GameDir, a.gameState(a.settings.GameDir))
 	if a.deployErr != nil && errors.Is(a.deployErr, fs.ErrNotExist) {
 		a.deployErr = fmt.Errorf("папка %s не найдена", a.settings.GameDir)
 	}
 }
 
-// ChooseGame спрашивает у пользователя папку игры.
-func (a *App) ChooseGame() (State, error) {
-	dir, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
-		Title:            "Папка игры",
-		DefaultDirectory: a.settings.GameDir,
-	})
-	if err != nil {
-		return State{}, err
-	}
+// SetGame выбирает папку игры.
+func (a *Manager) SetGame(dir string) (State, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if dir == "" {
-		return a.state()
-	}
 	return a.setGame(dir)
 }
 
-func (a *App) setGame(dir string) (State, error) {
+// GameDir возвращает выбранную папку игры.
+func (a *Manager) GameDir() string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.settings.GameDir
+}
+
+func (a *Manager) setGame(dir string) (State, error) {
 	if a.openErr != nil {
 		return State{}, a.openErr
 	}
@@ -109,7 +104,7 @@ func (a *App) setGame(dir string) (State, error) {
 	return a.state()
 }
 
-func (a *App) setInstall(inst game.Install) error {
+func (a *Manager) setInstall(inst game.Install) error {
 	a.settings.GameDir, a.settings.GameStore = inst.Dir, inst.Store
 	if err := a.saveSettings(); err != nil {
 		return err
@@ -119,7 +114,7 @@ func (a *App) setInstall(inst game.Install) error {
 }
 
 // Play запускает игру.
-func (a *App) Play() error {
+func (a *Manager) Play() error {
 	a.mu.Lock()
 	inst := game.Install{Dir: a.settings.GameDir, Store: a.settings.GameStore}
 	a.mu.Unlock()
@@ -130,7 +125,7 @@ func (a *App) Play() error {
 }
 
 // layout раскладывает версию мода по папкам игры.
-func (a *App) layout(v store.Version) (game.Layout, error) {
+func (a *Manager) layout(v store.Version) (game.Layout, error) {
 	paths := make([]string, len(v.Files))
 	for i, f := range v.Files {
 		paths[i] = f.Path
@@ -145,7 +140,7 @@ type DeployResult struct {
 }
 
 // Deploy приводит игру в соответствие с профилем.
-func (a *App) Deploy() (DeployResult, error) {
+func (a *Manager) Deploy() (DeployResult, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -181,7 +176,7 @@ func (a *App) Deploy() (DeployResult, error) {
 }
 
 // PlanFiles перечисляет, что развёртывание сделает с каждым файлом.
-func (a *App) PlanFiles() ([]string, error) {
+func (a *Manager) PlanFiles() ([]string, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -209,7 +204,7 @@ func (a *App) PlanFiles() ([]string, error) {
 }
 
 // plan рассчитывает развёртывание для основного профиля.
-func (a *App) plan() (*deploy.Plan, error) {
+func (a *Manager) plan() (*deploy.Plan, error) {
 	if a.deployer == nil && a.deployErr == nil {
 		return nil, errors.New("сначала выберите папку игры")
 	}
@@ -221,7 +216,7 @@ func (a *App) plan() (*deploy.Plan, error) {
 }
 
 // planWithNotices рассчитывает развёртывание и возвращает замечания игры.
-func (a *App) planWithNotices() (*deploy.Plan, []game.Notice, error) {
+func (a *Manager) planWithNotices() (*deploy.Plan, []game.Notice, error) {
 	if a.deployer == nil && a.deployErr == nil {
 		return nil, nil, errors.New("сначала выберите папку игры")
 	}
@@ -246,7 +241,7 @@ const generatedMod = "modvault"
 
 // sources собирает включённые моды профиля в порядке загрузки, раскладывает
 // их файлы по папкам игры и добавляет служебные файлы игры.
-func (a *App) sources(p profile.Profile) ([]deploy.Source, []game.Notice, error) {
+func (a *Manager) sources(p profile.Profile) ([]deploy.Source, []game.Notice, error) {
 	var out []deploy.Source
 	var notices []game.Notice
 	infos := make([]game.ModInfo, 0, len(p.Entries))
@@ -301,7 +296,7 @@ func (a *App) sources(p profile.Profile) ([]deploy.Source, []game.Notice, error)
 }
 
 // modNames возвращает функцию «идентификатор → название мода».
-func (a *App) modNames() func(string) string {
+func (a *Manager) modNames() func(string) string {
 	names := map[string]string{}
 	if mods, _, err := a.store.List(); err == nil {
 		for _, m := range mods {
@@ -318,7 +313,7 @@ func (a *App) modNames() func(string) string {
 }
 
 // realState собирает состояние окна из хранилища, профиля и развёртывания.
-func (a *App) realState() (State, error) {
+func (a *Manager) realState() (State, error) {
 	p, mods, err := a.loadProfile()
 	if err != nil {
 		return State{}, err
@@ -567,7 +562,7 @@ func planLines(plan *deploy.Plan, names func(string) string) ([]string, string) 
 	return lines, fmt.Sprintf("План развёртывания: %d %s", n, plural(n, "изменение", "изменения", "изменений"))
 }
 
-func (a *App) status(s State, mods int, plan *deploy.Plan) []StatusItem {
+func (a *Manager) status(s State, mods int, plan *deploy.Plan) []StatusItem {
 	game := StatusItem{Label: "Игра", Value: "папка не выбрана", Level: LevelWarn, Command: "ChooseGame"}
 	if a.settings.GameDir != "" {
 		game.Value, game.Level = a.settings.GameDir, LevelOK

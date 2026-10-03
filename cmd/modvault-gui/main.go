@@ -8,11 +8,12 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 
+	"github.com/zemidala/modvault/manager"
 	"github.com/zemidala/modvault/ui"
 )
 
 func main() {
-	app := ui.NewApp()
+	app := ui.NewApp(manager.New())
 
 	err := wails.Run(&options.App{
 		Title:     "Modvault",

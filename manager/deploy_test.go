@@ -1,4 +1,4 @@
-package ui
+package manager
 
 import (
 	"bytes"
@@ -26,7 +26,7 @@ var (
 
 // newGame создаёт папку, похожую на чистый Darktide, и приложение,
 // у которого вместо dtkit-patch подменный патчер.
-func newGame(t *testing.T) (*App, string, string) {
+func newGame(t *testing.T) (*Manager, string, string) {
 	t.Helper()
 	a, home := newApp(t)
 	a.game = &darktide.Darktide{Patcher: func(_, dir string) error {
@@ -141,7 +141,7 @@ func TestDarktideDeploy(t *testing.T) {
 		t.Error("база бандлов не пропатчена")
 	}
 
-	s = state(t, NewAppAt(home))
+	s = state(t, NewAt(home))
 	if findMod(t, s, "scoreboard").State != "Развёрнут" || s.PlanTitle != "" {
 		t.Errorf("после перезапуска: %s, план %q", findMod(t, s, "scoreboard").State, s.PlanTitle)
 	}
@@ -256,7 +256,7 @@ func TestMissingGameDir(t *testing.T) {
 	a.addArchive(writeZip(t, "m.zip", map[string]string{"m/m.mod": "1"}))
 	os.RemoveAll(g)
 
-	s := state(t, NewAppAt(home))
+	s := state(t, NewAt(home))
 	if !strings.Contains(issueTitles(s), "Развёртывание недоступно") || s.Status[0].Level != LevelError {
 		t.Errorf("пропавшая папка игры: %s, %+v", issueTitles(s), s.Status[0])
 	}

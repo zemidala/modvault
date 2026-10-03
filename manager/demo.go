@@ -1,4 +1,4 @@
-package ui
+package manager
 
 import (
 	"fmt"
@@ -35,7 +35,7 @@ func demoMods() []demoMod {
 	}
 }
 
-func (a *App) setDemoEnabled(id string, enabled bool) error {
+func (a *Manager) setDemoEnabled(id string, enabled bool) error {
 	for i := range a.demo {
 		m := &a.demo[i]
 		if m.id != id {
@@ -50,7 +50,7 @@ func (a *App) setDemoEnabled(id string, enabled bool) error {
 	return fmt.Errorf("мод %q не найден", id)
 }
 
-func (a *App) demoName(id string) string {
+func (a *Manager) demoName(id string) string {
 	for _, m := range a.demo {
 		if m.id == id {
 			return m.name
@@ -59,7 +59,7 @@ func (a *App) demoName(id string) string {
 	return id
 }
 
-func (a *App) demoState() State {
+func (a *Manager) demoState() State {
 	s := State{
 		Version: version.String(),
 		Demo:    true,
