@@ -745,6 +745,13 @@ function wire() {
   }
   $("search").addEventListener("input", renderMods);
 
+  // Высота закреплённого блока нужна стилям, чтобы названия столбцов
+  // прилипали точно под ним.
+  const pinned = document.querySelector(".pinned");
+  new ResizeObserver(() => {
+    $("view-mods").style.setProperty("--pinned-h", `${pinned.offsetHeight}px`);
+  }).observe(pinned);
+
   $("set-button").addEventListener("click", openSets);
   $("picked-new").addEventListener("click", () => newSet([...picked]));
   $("picked-add").addEventListener("click", openAddToSet);
