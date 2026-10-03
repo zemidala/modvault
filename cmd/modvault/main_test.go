@@ -162,7 +162,7 @@ func TestWorkflow(t *testing.T) {
 	if out := e.ok("verify"); !strings.Contains(out, "Проблем не найдено") {
 		t.Errorf("verify: %s", out)
 	}
-	if out := e.ok("status"); !strings.Contains(out, "совпадают с профилем") {
+	if out := e.ok("status"); !strings.Contains(out, "совпадают с набором") {
 		t.Errorf("status:\n%s", out)
 	}
 

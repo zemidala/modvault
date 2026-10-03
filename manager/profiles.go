@@ -88,7 +88,7 @@ func (a *Manager) DeleteProfile(name string) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if name == a.profileName() {
-		return i18n.Errorf("«%s» — текущий профиль: сначала переключитесь на другой", name)
+		return i18n.Errorf("«%s» — текущий набор: сначала переключитесь на другой", name)
 	}
 	return a.profiles.Delete(name)
 }

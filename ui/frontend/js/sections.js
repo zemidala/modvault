@@ -171,7 +171,9 @@ function renderSettings() {
     const row = el("div", "setting");
     const text = el("div", "setting-text");
     text.append(el("div", "setting-title", item.label), el("div", "setting-detail", item.value));
-    const button = el("button", "ghost", item.command === "Release" ? t("Вернуть Vortex") : t("Изменить"));
+    // Пункты, которые только показывают подробности, ничего не меняют.
+    const label = item.command === "Release" ? t("Вернуть Vortex") : /^(Show|Open)/.test(item.command) ? t("Открыть") : t("Изменить");
+    const button = el("button", "ghost", label);
     button.addEventListener("click", () => run(item.command));
     row.append(text, button);
     links.append(row);

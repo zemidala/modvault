@@ -113,7 +113,7 @@ func (a *Manager) demoState() State {
 		s.PlanTitle = i18n.Sprintf("План развёртывания: %d %s", n, plural(n, "изменение", "изменения", "изменений"))
 	}
 
-	files := StatusItem{Label: i18n.T("Файлы в игре"), Value: i18n.T("совпадают с профилем"), Level: LevelOK}
+	files := StatusItem{Label: i18n.T("Файлы в игре"), Value: i18n.T("совпадают с набором"), Level: LevelOK}
 	if len(s.Plan) > 0 {
 		files.Value, files.Level = i18n.T("ждут развёртывания"), LevelWarn
 	}

@@ -388,7 +388,7 @@ func (c *cli) deploy(args []string) error {
 			return err
 		}
 		if len(lines) == 0 {
-			fmt.Fprintln(c.out, i18n.T("Игра уже совпадает с профилем"))
+			fmt.Fprintln(c.out, i18n.T("Игра уже совпадает с набором"))
 			return nil
 		}
 		for _, line := range lines {

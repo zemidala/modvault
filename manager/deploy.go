@@ -189,7 +189,7 @@ func (a *Manager) Deploy() (DeployResult, error) {
 		return DeployResult{}, err
 	}
 
-	msg := i18n.T("Игра уже совпадает с профилем")
+	msg := i18n.T("Игра уже совпадает с набором")
 	if !plan.Empty() {
 		res, err := a.deployer.Apply(plan)
 		if err != nil {
@@ -660,7 +660,7 @@ func (a *Manager) status(s State, mods int, plan *deploy.Plan) []StatusItem {
 
 	files := StatusItem{Label: i18n.T("Файлы в игре"), Value: "—", Level: LevelOff, Command: "ShowFiles"}
 	if plan != nil {
-		files.Value, files.Level = i18n.T("совпадают с профилем"), LevelOK
+		files.Value, files.Level = i18n.T("совпадают с набором"), LevelOK
 		if !plan.Empty() {
 			files.Value, files.Level = i18n.T("ждут развёртывания"), LevelWarn
 		}
