@@ -210,6 +210,163 @@ async function checkUpdates() {
   }
 }
 
+// Выделение нескольких модов (Ctrl и Shift + щелчок) для действий с ними
+// разом. Это не то же, что выбранный мод, чью карточку показывает окно.
+const picked = new Set();
+let pickAnchor = null; // от какой строки тянется выделение с Shift
+
+function pickRange(toId) {
+  const ids = [...document.querySelectorAll("#mods tr")].map((row) => row.dataset.id);
+  const from = ids.indexOf(pickAnchor ?? selectedId ?? ids[0]);
+  const to = ids.indexOf(toId);
+  if (from < 0 || to < 0) return;
+  for (let i = Math.min(from, to); i <= Math.max(from, to); i++) picked.add(ids[i]);
+}
+
+function clearPicked() {
+  picked.clear();
+  pickAnchor = null;
+  renderMods();
+  renderPicked();
+}
+
+// renderPicked показывает полоску действий с выделенными модами.
+function renderPicked() {
+  const n = picked.size;
+  $("picked-bar").hidden = n === 0;
+  $("pick-hint").hidden = n > 0 || state.demo || state.mods.length < 2;
+  const word = n % 10 === 1 && n % 100 !== 11 ? "мод" : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? "мода" : "модов";
+  $("picked-count").textContent = `Выделено: ${n} ${word}`;
+}
+
+// Всплывающее меню под кнопкой. Пункт: {label, hint, current, disabled,
+// action, remove, removeTitle}, заголовок {title} или черта {separator}.
+function showMenu(anchor, items) {
+  const menu = $("menu");
+  menu.replaceChildren();
+  for (const item of items) {
+    if (item.separator) {
+      menu.append(el("div", "menu-separator"));
+      continue;
+    }
+    if (item.title) {
+      menu.append(el("div", "menu-title", item.title));
+      continue;
+    }
+    const row = el("div", "menu-row");
+    const button = el("button", "menu-item");
+    button.setAttribute("role", "menuitem");
+    button.append(el("span", "menu-label", item.label));
+    if (item.hint) button.append(el("span", "menu-hint", item.hint));
+    if (item.current) button.setAttribute("aria-current", "true");
+    button.disabled = !!item.disabled;
+    button.addEventListener("click", () => {
+      hideMenu();
+      if (item.action) item.action();
+    });
+    row.append(button);
+    if (item.remove) {
+      const remove = el("button", "menu-remove", "✕");
+      remove.title = item.removeTitle;
+      remove.setAttribute("aria-label", item.removeTitle);
+      remove.addEventListener("click", () => {
+        hideMenu();
+        item.remove();
+      });
+      row.append(remove);
+    }
+    menu.append(row);
+  }
+  menu.hidden = false;
+  const box = anchor.getBoundingClientRect();
+  menu.style.top = `${box.bottom + 4}px`;
+  menu.style.left = `${Math.max(8, Math.min(box.left, window.innerWidth - menu.offsetWidth - 8))}px`;
+  menu.dataset.anchor = anchor.id;
+  const first = menu.querySelector("button:not(:disabled)");
+  if (first) first.focus();
+}
+
+function hideMenu() {
+  $("menu").hidden = true;
+}
+
+// Наборы модов: меню в шапке и действия с выделенными модами.
+async function loadSets() {
+  try {
+    return await backend().Sets();
+  } catch (err) {
+    toast(String(err), "error");
+    return null;
+  }
+}
+
+async function openSets() {
+  const sets = await loadSets();
+  if (!sets) return;
+  const items = [{ title: "Наборы модов" }];
+  for (const set of sets) {
+    items.push({
+      label: (set.current ? "✓ " : "") + set.name,
+      hint: `включено: ${set.enabled}`,
+      current: set.current,
+      action: set.current ? null : () => switchSet(set.name),
+      remove: set.current ? null : () => call(() => confirmThen(() => backend().DeleteSetAsk(set.name), () => backend().DeleteSet(set.name))),
+      removeTitle: `Удалить набор «${set.name}»`,
+    });
+  }
+  items.push({ separator: true });
+  items.push({ label: "Новый набор — копия текущего…", action: () => newSet([]) });
+  items.push({ label: `Переименовать «${state.profile}»…`, action: renameSet });
+  showMenu($("set-button"), items);
+}
+
+// switchSet выбирает набор; программа сразу приводит к нему игру.
+async function switchSet(name) {
+  picked.clear();
+  await act(() => backend().SwitchSet(name), $("set-button"), `Набор «${name}»: игра приводится к нему…`);
+  renderPicked();
+}
+
+async function newSet(ids) {
+  const name = await ask(await backend().NewSetAsk(ids.length));
+  if (name === null) return;
+  // Выделение снимается только если набор создан: при ошибке его не придётся собирать заново.
+  if (await act(() => backend().CreateSet(name, ids), $("set-button"))) clearPicked();
+}
+
+async function renameSet() {
+  const from = state.profile;
+  const to = await ask(await backend().RenameSetAsk(from));
+  if (to === null || to.trim() === from) return;
+  call(() => backend().RenameSet(from, to));
+}
+
+async function openAddToSet() {
+  const sets = await loadSets();
+  if (!sets) return;
+  const ids = [...picked];
+  const items = [{ title: "Включить выделенные моды в наборе" }];
+  for (const set of sets) {
+    if (set.current) continue;
+    items.push({
+      label: set.name,
+      hint: `включено: ${set.enabled}`,
+      action: async () => {
+        if (await act(() => backend().AddToSet(set.name, ids), $("picked-add"))) clearPicked();
+      },
+    });
+  }
+  if (items.length === 1) items.push({ label: "Других наборов пока нет", disabled: true });
+  items.push({ separator: true });
+  items.push({ label: "В новый набор…", action: () => newSet(ids) });
+  showMenu($("picked-add"), items);
+}
+
+async function setPickedEnabled(enabled) {
+  const ids = [...picked];
+  if (await call(() => backend().SetEnabledMany(ids, enabled))) clearPicked();
+}
+
 function renderMods() {
   const body = $("mods");
   const query = $("search").value.trim().toLowerCase();
@@ -222,6 +379,7 @@ function renderMods() {
     row.tabIndex = 0;
     row.dataset.enabled = String(mod.enabled);
     row.setAttribute("aria-selected", String(mod.id === selectedId));
+    row.classList.toggle("picked", picked.has(mod.id));
 
     const toggleCell = el("td");
     if (mod.pinned) {
@@ -261,7 +419,20 @@ function renderMods() {
       renderMods();
       renderCard();
     };
-    row.addEventListener("click", select);
+    row.addEventListener("click", (event) => {
+      if (event.ctrlKey || event.metaKey) {
+        if (!picked.delete(mod.id)) picked.add(mod.id);
+        pickAnchor = mod.id;
+      } else if (event.shiftKey) {
+        pickRange(mod.id);
+      } else {
+        pickAnchor = mod.id;
+        select();
+        return;
+      }
+      renderMods();
+      renderPicked();
+    });
     row.addEventListener("keydown", (event) => {
       if (event.key === "Enter" && event.target === row) select();
     });
@@ -330,6 +501,7 @@ function render() {
     selectedId = null;
     hideFiles();
   }
+  for (const id of picked) if (!state.mods.some((m) => m.id === id)) picked.delete(id);
   $("profile").textContent = state.profile;
   $("version").textContent = state.version;
   $("demo").hidden = !state.demo;
@@ -342,6 +514,7 @@ function render() {
   renderMods();
   renderCard();
   renderPlan();
+  renderPicked();
 }
 
 // ask показывает вопрос в окне программы и ждёт ответа: true — действие
@@ -356,7 +529,8 @@ function ask(question) {
     const refuse = question.input ? null : false;
     $("ask-field").hidden = !question.input;
     $("ask-input-label").textContent = question.placeholder || "";
-    input.value = "";
+    input.type = question.secret ? "password" : "text";
+    input.value = question.value || "";
     const ok = $("ask-ok");
     // Без подписи действия вопрос только сообщает: остаётся одна кнопка.
     ok.hidden = !question.ok;
@@ -380,8 +554,10 @@ function ask(question) {
     box.addEventListener("keydown", onKey);
     box.hidden = false;
     // Необратимое по умолчанию не выбрано: Enter без раздумий его не запустит.
-    if (question.input) input.focus();
-    else (question.danger || !question.ok ? $("ask-cancel") : ok).focus();
+    if (question.input) {
+      input.focus();
+      input.select();
+    } else (question.danger || !question.ok ? $("ask-cancel") : ok).focus();
   });
 }
 
@@ -413,7 +589,8 @@ function run(command, arg) {
 
 // act выполняет запрос, который возвращает новое состояние и сообщение.
 // Пока он идёт, кнопка не нажимается и по ней бежит полоска, а внизу висит
-// строка busy: долгое действие не должно выглядеть зависшим.
+// строка busy: долгое действие не должно выглядеть зависшим. Возвращает,
+// удался ли запрос.
 async function act(request, button, busy) {
   button.disabled = true;
   button.classList.add("busy");
@@ -423,8 +600,10 @@ async function act(request, button, busy) {
     state = res.state;
     render();
     if (res.message) toast(res.message);
+    return true;
   } catch (err) {
     toast(String(err), "error");
+    return false;
   } finally {
     button.disabled = false;
     button.classList.remove("busy");
@@ -508,6 +687,23 @@ function wire() {
     button.addEventListener("click", () => notYet(button.textContent.trim().replace(/:.*/, ""), button.dataset.stage));
   }
   $("search").addEventListener("input", renderMods);
+
+  $("set-button").addEventListener("click", openSets);
+  $("picked-new").addEventListener("click", () => newSet([...picked]));
+  $("picked-add").addEventListener("click", openAddToSet);
+  $("picked-on").addEventListener("click", () => setPickedEnabled(true));
+  $("picked-off").addEventListener("click", () => setPickedEnabled(false));
+  $("picked-clear").addEventListener("click", clearPicked);
+  // Меню закрывается щелчком мимо него и клавишей Esc.
+  document.addEventListener("mousedown", (event) => {
+    const menu = $("menu");
+    if (menu.hidden || menu.contains(event.target)) return;
+    const anchor = document.getElementById(menu.dataset.anchor);
+    if (!anchor || !anchor.contains(event.target)) hideMenu();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") hideMenu();
+  });
 
   $("add-mod").addEventListener("click", async () => {
     const before = state ? state.mods.map((m) => m.id + m.version).join() : "";

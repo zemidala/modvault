@@ -104,6 +104,10 @@ type Ask struct {
 	// Введённое на экране не показывается: это поле для ключей.
 	Input       bool   `json:"input"`
 	Placeholder string `json:"placeholder"`
+	// Secret — введённое не показывается на экране (ключи); Value — то,
+	// что стоит в поле сначала.
+	Secret bool   `json:"secret"`
+	Value  string `json:"value"`
 }
 
 // RemoveAsk — вопрос перед удалением мода.
@@ -247,9 +251,74 @@ func (a *App) SortAsk() (Ask, error) {
 // Sort расставляет моды по правилам.
 func (a *App) Sort() (manager.State, error) { return a.m.Sort() }
 
+// Sets возвращает наборы модов для меню «Набор».
+func (a *App) Sets() ([]manager.SetInfo, error) { return a.m.Sets() }
+
+// NewSetAsk — вопрос о названии нового набора; count — сколько модов
+// выделено (0 — набор повторит текущий).
+func (a *App) NewSetAsk(count int) Ask {
+	ask := Ask{Title: "Новый набор", OK: "Создать", Input: true, Placeholder: "Название набора"}
+	if count == 0 {
+		ask.Message = "Новый набор повторит текущий: те же моды включены, тот же порядок. Дальше его можно менять отдельно.\n\nТекущий набор останется выбранным."
+		return ask
+	}
+	ask.Message = fmt.Sprintf("В новом наборе будут включены %d %s и то, без чего они не заработают: загрузчик модов, Darktide Mod Framework и моды, которых они требуют. Остальные моды в нём выключены.\n\nТекущий набор не изменится и останется выбранным.",
+		count, plural(count, "выделенный мод", "выделенных мода", "выделенных модов"))
+	return ask
+}
+
+// CreateSet создаёт набор из модов ids; без них — копию текущего.
+func (a *App) CreateSet(name string, ids []string) (manager.SetResult, error) {
+	if strings.TrimSpace(name) == "" {
+		return manager.SetResult{}, errors.New("введите название набора")
+	}
+	return a.m.CreateSet(name, ids)
+}
+
+// AddToSet включает моды ids в наборе name.
+func (a *App) AddToSet(name string, ids []string) (manager.SetResult, error) {
+	return a.m.AddToSet(name, ids)
+}
+
+// SetEnabledMany включает или выключает несколько модов текущего набора.
+func (a *App) SetEnabledMany(ids []string, enabled bool) (manager.State, error) {
+	return a.m.SetEnabledMany(ids, enabled)
+}
+
+// SwitchSet выбирает набор и сразу приводит к нему игру.
+func (a *App) SwitchSet(name string) (manager.SetResult, error) { return a.m.SwitchSet(name) }
+
+// RenameSetAsk — вопрос о новом названии набора.
+func (a *App) RenameSetAsk(name string) Ask {
+	return Ask{
+		Title: "Переименовать набор", OK: "Переименовать", Input: true,
+		Message: fmt.Sprintf("Новое название для набора «%s».", name), Placeholder: "Название набора", Value: name,
+	}
+}
+
+// RenameSet переименовывает набор.
+func (a *App) RenameSet(from, to string) (manager.State, error) {
+	if strings.TrimSpace(to) == "" {
+		return manager.State{}, errors.New("введите название набора")
+	}
+	return a.m.RenameSet(from, to)
+}
+
+// DeleteSetAsk — вопрос перед удалением набора.
+func (a *App) DeleteSetAsk(name string) Ask {
+	return Ask{
+		Title:   "Удалить набор",
+		Message: fmt.Sprintf("Удалить набор «%s»?\n\nМоды останутся в хранилище и в других наборах; пропадёт только этот список включённых модов.", name),
+		OK:      "Удалить",
+	}
+}
+
+// DeleteSet удаляет набор.
+func (a *App) DeleteSet(name string) (manager.State, error) { return a.m.DeleteSet(name) }
+
 // NexusKeyAsk — вопрос с полем для ключа Nexus.
 func (a *App) NexusKeyAsk() Ask {
-	ask := Ask{Title: "Ключ Nexus Mods", OK: "Сохранить", Input: true, Placeholder: "Personal API Key"}
+	ask := Ask{Title: "Ключ Nexus Mods", OK: "Сохранить", Input: true, Secret: true, Placeholder: "Personal API Key"}
 	ask.Message = "Ключ нужен, чтобы ставить моды кнопкой «Mod Manager Download» на сайте и проверять обновления.\n\n" +
 		"Где взять: nexusmods.com → настройки сайта (Site preferences) → страница API Access → Personal API Key.\n\n" +
 		"Ключ хранится в учётных данных Windows; в файлы программы он не попадает."

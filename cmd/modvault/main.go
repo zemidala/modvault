@@ -128,6 +128,9 @@ func usage(w io.Writer) {
 
 Профили:
   profile list | use <имя> | copy <из> <в> | rename <из> <в> | delete <имя>
+  profile new <имя> [мод...]  набор только из этих модов и того, что им нужно;
+                            без модов — копия текущего
+  profile switch <имя>      выбрать набор и сразу привести к нему игру
 
 Vortex:
   adopt [--dry-run]         перенять управление модами у Vortex
@@ -516,6 +519,40 @@ func (c *cli) profile(args []string) error {
 			return err
 		}
 		fmt.Fprintf(c.out, "текущий профиль: %s. Чтобы игра совпала с ним — modvault deploy\n", args[1])
+		return nil
+	case "new":
+		if err := c.need("profile new", args[1:], 1, "<имя> [мод...]"); err != nil {
+			return err
+		}
+		var ids []string
+		if len(args) > 2 {
+			s, err := c.state()
+			if err != nil {
+				return err
+			}
+			for _, ref := range args[2:] {
+				mod, err := c.resolve(s, ref)
+				if err != nil {
+					return err
+				}
+				ids = append(ids, mod.ID)
+			}
+		}
+		res, err := m.CreateSet(args[1], ids)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintln(c.out, res.Message)
+		return nil
+	case "switch":
+		if err := c.need("profile switch", args[1:], 1, "<имя>"); err != nil {
+			return err
+		}
+		res, err := m.SwitchSet(args[1])
+		if err != nil {
+			return err
+		}
+		fmt.Fprintln(c.out, res.Message)
 		return nil
 	case "copy", "rename":
 		if err := c.need("profile "+args[0], args[1:], 2, "<из> <в>"); err != nil {
