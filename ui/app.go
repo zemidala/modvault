@@ -273,8 +273,8 @@ func (a *App) NexusLogin(key string) (manager.State, error) {
 // CheckUpdates проверяет на Nexus, вышли ли новые версии модов.
 // О ходе проверки страница узнаёт из событий «checking».
 func (a *App) CheckUpdates() (manager.UpdateReport, error) {
-	return a.m.CheckUpdates(a.ctx, func(done, total int) {
-		runtime.EventsEmit(a.ctx, "checking", map[string]int{"done": done, "total": total})
+	return a.m.CheckUpdates(a.ctx, func(p manager.CheckProgress) {
+		runtime.EventsEmit(a.ctx, "checking", p)
 	})
 }
 

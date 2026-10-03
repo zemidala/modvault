@@ -403,3 +403,30 @@ button.busy::after,
 @media (prefers-reduced-motion: reduce) {
   button.busy::after, .toast[data-level="busy"]::after { animation: none; width: 100%; }
 }
+
+/* Общий ход проверки обновлений над списком модов. */
+.check-progress { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; }
+.check-text { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; color: var(--orange-text); font-variant-numeric: tabular-nums; }
+.bar { position: relative; height: 8px; overflow: hidden; border: 1px solid var(--brass-frame); background: var(--iron-deep); }
+.bar-fill { height: 100%; width: 0; background: var(--orange-worn); transition: width 0.2s linear; }
+.bar.indeterminate .bar-fill { width: 35%; animation: busy 1.1s linear infinite; }
+
+/* Мод, о котором спрашивают сейчас: мигающая точка перед подписью. */
+.state.checking::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--orange-text);
+  animation: pulse 0.8s ease-in-out infinite alternate;
+}
+@keyframes pulse {
+  from { opacity: 0.25; }
+  to { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bar.indeterminate .bar-fill { animation: none; width: 100%; }
+  .state.checking::before { animation: none; }
+}

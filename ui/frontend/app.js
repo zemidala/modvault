@@ -85,6 +85,74 @@ function renderIssues() {
   $("issues-section").hidden = state.issues.length === 0;
 }
 
+// Проверка обновлений, пока она идёт: общий ход и отметки по модам.
+// rows: идентификатор мода → "checking", "ok", "missing" или найденная версия.
+let checking = null;
+
+// markRow показывает в строке мода, что с ним делает проверка обновлений;
+// без отметки строка показывает обычное состояние.
+function markRow(row, mark) {
+  const cell = row.querySelector(".state");
+  if (!cell) return;
+  cell.classList.toggle("checking", mark === "checking");
+  if (!mark) {
+    cell.textContent = row.dataset.state;
+    cell.dataset.level = row.dataset.level;
+  } else if (mark === "checking") {
+    cell.textContent = "Проверяется…";
+    cell.dataset.level = "warn";
+  } else if (mark === "ok") {
+    cell.textContent = "✓ Новых версий нет";
+    cell.dataset.level = "ok";
+  } else if (mark === "missing") {
+    cell.textContent = "На Nexus не найден";
+    cell.dataset.level = "off";
+  } else {
+    cell.textContent = "↑ Есть версия " + mark;
+    cell.dataset.level = "warn";
+  }
+}
+
+// renderCheck показывает общий ход проверки обновлений над списком.
+function renderCheck() {
+  const box = $("check-progress");
+  box.hidden = !checking;
+  if (!checking) return;
+  const known = checking.total > 0;
+  $("check-label").textContent = checking.name ? "Проверка обновлений: " + checking.name : "Проверка обновлений: запрос к Nexus…";
+  $("check-count").textContent = known ? `${checking.done} из ${checking.total}` : "";
+  $("check-bar").classList.toggle("indeterminate", !known);
+  $("check-fill").style.width = known ? `${Math.round((checking.done * 100) / checking.total)}%` : "";
+}
+
+// onCheckStep принимает шаг проверки от программы.
+function onCheckStep(step) {
+  if (!checking) return;
+  checking.done = step.done;
+  checking.total = step.total;
+  checking.name = step.name;
+  const mark = !step.finished ? "checking" : step.missing ? "missing" : step.available || "ok";
+  for (const id of step.mods || []) {
+    checking.rows.set(id, mark);
+    const row = document.querySelector(`#mods tr[data-id="${CSS.escape(id)}"]`);
+    if (row) markRow(row, mark);
+  }
+  renderCheck();
+}
+
+async function checkUpdates() {
+  checking = { done: 0, total: 0, name: "", rows: new Map() };
+  renderCheck();
+  try {
+    await act(() => backend().CheckUpdates(), $("check-updates"));
+  } finally {
+    // Итог остаётся в списке: у модов с обновлением новая версия видна в столбце «Версия».
+    checking = null;
+    renderCheck();
+    renderMods();
+  }
+}
+
 function renderMods() {
   const body = $("mods");
   const query = $("search").value.trim().toLowerCase();
@@ -118,8 +186,19 @@ function renderMods() {
 
     const stateCell = el("td", "state", mod.state);
     stateCell.dataset.level = mod.level;
+    row.dataset.id = mod.id;
+    row.dataset.state = mod.state;
+    row.dataset.level = mod.level;
 
-    row.append(el("td", "num", String(index + 1)), toggleCell, el("td", "name", mod.name), el("td", "version", mod.version), stateCell);
+    // Вышла версия новее — это видно прямо в списке.
+    const versionCell = el("td", "version", mod.available ? `${mod.version} → ${mod.available}` : mod.version);
+    if (mod.available) {
+      versionCell.classList.add("warn");
+      versionCell.title = "На Nexus есть версия " + mod.available;
+    }
+
+    row.append(el("td", "num", String(index + 1)), toggleCell, el("td", "name", mod.name), versionCell, stateCell);
+    if (checking) markRow(row, checking.rows.get(mod.id));
 
     const select = () => {
       selectedId = mod.id === selectedId ? null : mod.id;
@@ -308,9 +387,7 @@ function listen() {
     const share = p.total > 0 ? ` — ${Math.floor((p.done * 100) / p.total)}%` : "";
     toast(`Загрузка: ${p.name}${share}`, "busy", true);
   });
-  events.EventsOn("checking", (p) => {
-    toast(`Проверка обновлений: ${p.done} из ${p.total}`, "busy", true);
-  });
+  events.EventsOn("checking", onCheckStep);
   events.EventsOn("installed", (res) => {
     state = res.state;
     render();
@@ -395,7 +472,7 @@ function wire() {
     return res.state;
   }));
   $("card-show-files").addEventListener("click", toggleFiles);
-  $("check-updates").addEventListener("click", () => act(() => backend().CheckUpdates(), $("check-updates"), "Проверка обновлений: запрос к Nexus…"));
+  $("check-updates").addEventListener("click", checkUpdates);
   $("card-update").addEventListener("click", () => act(() => backend().UpdateMod(selectedId), $("card-update"), "Обновление: запрос к Nexus…"));
   $("card-nexus").addEventListener("click", async () => {
     try {

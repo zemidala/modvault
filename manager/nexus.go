@@ -376,6 +376,20 @@ func (a *Manager) saveUpdates(u updates) error {
 	return fsx.WriteFile(a.updatesPath(), data)
 }
 
+// CheckProgress — шаг проверки обновлений: до запроса о моде и после ответа.
+type CheckProgress struct {
+	Done  int `json:"done"`  // о скольких модах уже есть ответ
+	Total int `json:"total"` // о скольких спрашиваем
+	// Name и Mods — название и идентификаторы модов, о которых этот шаг.
+	Name string   `json:"name"`
+	Mods []string `json:"mods"`
+	// Finished — ответ получен; Available — найденная версия новее
+	// установленной; Missing — мода на Nexus больше нет.
+	Finished  bool   `json:"finished"`
+	Available string `json:"available"`
+	Missing   bool   `json:"missing"`
+}
+
 // UpdateReport — итог проверки обновлений.
 type UpdateReport struct {
 	State    State  `json:"state"`
@@ -392,15 +406,16 @@ const updatesHorizon = 27 * 24 * time.Hour
 
 // CheckUpdates узнаёт на Nexus, вышли ли новые версии модов профиля.
 // Первый раз спрашивает о каждом моде, потом — только о менявшихся.
-// progress сообщает, о скольких модах из total уже спрошено.
-func (a *Manager) CheckUpdates(ctx context.Context, progress func(done, total int)) (UpdateReport, error) {
+// progress получает ход проверки: о каком моде спрашивают и что узнали.
+func (a *Manager) CheckUpdates(ctx context.Context, progress func(CheckProgress)) (UpdateReport, error) {
 	if progress == nil {
-		progress = func(int, int) {}
+		progress = func(CheckProgress) {}
 	}
 	type target struct {
 		modID   string
 		nexusID int
 		fileID  int
+		v       store.Version
 	}
 	var rep UpdateReport
 
@@ -424,7 +439,7 @@ func (a *Manager) CheckUpdates(ctx context.Context, progress func(done, total in
 					rep.Unknown++
 					continue
 				}
-				targets = append(targets, target{e.ModID, v.NexusID, v.NexusFileID})
+				targets = append(targets, target{e.ModID, v.NexusID, v.NexusFileID, v})
 			}
 		}
 		cache = a.loadUpdates()
@@ -477,11 +492,25 @@ func (a *Manager) CheckUpdates(ctx context.Context, progress func(done, total in
 	sort.Ints(ids)
 	var failure error
 	for i, id := range ids {
-		progress(i, len(ids))
+		// Моды хранилища с этим номером на Nexus: обычно один.
+		step := CheckProgress{Done: i, Total: len(ids)}
+		for _, t := range targets {
+			if t.nexusID == id {
+				step.Mods = append(step.Mods, t.modID)
+				if step.Name == "" {
+					step.Name = t.v.Name
+				}
+			}
+		}
+		progress(step)
+
 		files, err := c.Files(ctx, domain, id)
 		rep.Requests++
+		step.Done, step.Finished = i+1, true
 		if errors.Is(err, nexus.ErrNotFound) || errors.Is(err, nexus.ErrForbidden) {
-			continue // мод убран с Nexus или скрыт автором
+			step.Missing = true // мод убран с Nexus или скрыт автором
+			progress(step)
+			continue
 		}
 		if err != nil {
 			failure = err
@@ -492,9 +521,14 @@ func (a *Manager) CheckUpdates(ctx context.Context, progress func(done, total in
 				continue
 			}
 			if latest, ok := files.Latest(t.fileID); ok {
-				cache.Mods[t.modID] = update{NexusID: id, FileID: latest.ID, Version: firstNonEmpty(latest.Version, latest.ModVersion)}
+				found := update{NexusID: id, FileID: latest.ID, Version: firstNonEmpty(latest.Version, latest.ModVersion)}
+				cache.Mods[t.modID] = found
+				if found.newerThan(t.v) {
+					step.Available = found.Version
+				}
 			}
 		}
+		progress(step)
 	}
 	if failure == nil {
 		cache.Checked = started

@@ -392,9 +392,20 @@ func TestUpdates(t *testing.T) {
 	f.add(t, 22, "Scoreboard", fakeFile{ID: 150, Name: "Scoreboard Skins", Version: "0.1", Category: "OPTIONAL", Uploaded: 30}, map[string]string{"Skins/Skins.mod": "return {}"})
 	f.mods[22].updates = [][2]int{{100, 101}}
 
-	rep, err := a.CheckUpdates(ctx, nil)
+	var steps []CheckProgress
+	rep, err := a.CheckUpdates(ctx, func(p CheckProgress) { steps = append(steps, p) })
 	if err != nil {
 		t.Fatal(err)
+	}
+	// Ход проверки: сначала «спрашиваем об этом моде», потом «вот что узнали».
+	if len(steps) != 2 {
+		t.Fatalf("шагов проверки: %+v", steps)
+	}
+	if s := steps[0]; s.Finished || s.Done != 0 || s.Total != 1 || s.Name != "Score Board" || strings.Join(s.Mods, ",") != "score_board" {
+		t.Errorf("шаг до запроса: %+v", s)
+	}
+	if s := steps[1]; !s.Finished || s.Done != 1 || s.Available != "1.5.0" || s.Missing {
+		t.Errorf("шаг после ответа: %+v", s)
 	}
 	if rep.Mods != 1 || rep.Unknown != 1 || rep.Updates != 1 || rep.Requests != 1 {
 		t.Errorf("первая проверка: %+v", rep)
