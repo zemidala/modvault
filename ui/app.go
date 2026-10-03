@@ -1,14 +1,23 @@
 // Package ui — Go-сторона окна программы: то, что страница может запросить
-// у программы. Пока ядро не подключено, отдаёт демонстрационные данные.
+// у программы. Пока в хранилище нет ни одного мода, отдаёт демонстрационные
+// данные.
 package ui
 
 import (
 	"context"
 	"embed"
+	"errors"
 	"fmt"
 	"io/fs"
+	"os"
+	"path/filepath"
 	"sync"
 
+	"github.com/wailsapp/wails/v2/pkg/runtime"
+
+	"github.com/zemidala/modvault/core/fsx"
+	"github.com/zemidala/modvault/core/profile"
+	"github.com/zemidala/modvault/core/store"
 	"github.com/zemidala/modvault/internal/version"
 )
 
@@ -24,6 +33,9 @@ func Assets() fs.FS {
 	return sub
 }
 
+// mainProfile — профиль, с которым окно работает, пока нет выбора профилей.
+const mainProfile = "Основной"
+
 // Level — степень внимания, которую требует строка: от неё зависит цвет.
 type Level string
 
@@ -38,7 +50,7 @@ const (
 type State struct {
 	Version   string       `json:"version"`
 	Demo      bool         `json:"demo"`
-	Game      string       `json:"game"`
+	Home      string       `json:"home"`
 	Profile   string       `json:"profile"`
 	Status    []StatusItem `json:"status"`
 	Issues    []Issue      `json:"issues"`
@@ -59,6 +71,7 @@ type Issue struct {
 	Title  string `json:"title"`
 	Detail string `json:"detail"`
 	Level  Level  `json:"level"`
+	// Action — подпись кнопки исправления; пустая — кнопки нет.
 	Action string `json:"action"`
 	// Stage — этап плана, на котором действие заработает.
 	Stage int `json:"stage"`
@@ -72,6 +85,7 @@ type Mod struct {
 	Available string `json:"available"`
 	Source    string `json:"source"`
 	Files     int    `json:"files"`
+	Versions  int    `json:"versions"`
 	DependsOn string `json:"dependsOn"`
 	Enabled   bool   `json:"enabled"`
 	Pinned    bool   `json:"pinned"`
@@ -81,13 +95,43 @@ type Mod struct {
 
 // App — объект, методы которого доступны странице.
 type App struct {
-	ctx  context.Context
-	mu   sync.Mutex
-	mods []demoMod
+	ctx context.Context
+	mu  sync.Mutex
+
+	home     string
+	store    *store.Store
+	profiles *profile.Dir
+	openErr  error // почему не открылись хранилище или профили
+
+	demo []demoMod
+}
+
+// DefaultHome возвращает папку данных программы. До этапа 4, когда программа
+// научится находить игру и класть хранилище рядом с ней, это
+// %LOCALAPPDATA%\Modvault; переменная MODVAULT_HOME задаёт другое место.
+func DefaultHome() string {
+	if home := os.Getenv("MODVAULT_HOME"); home != "" {
+		return home
+	}
+	base, err := os.UserCacheDir()
+	if err != nil {
+		base = "."
+	}
+	return filepath.Join(base, "Modvault")
 }
 
 func NewApp() *App {
-	return &App{mods: demoMods()}
+	return NewAppAt(DefaultHome())
+}
+
+// NewAppAt создаёт приложение с папкой данных home.
+func NewAppAt(home string) *App {
+	a := &App{home: home, demo: demoMods()}
+	a.store, a.openErr = store.Open(home)
+	if a.openErr == nil {
+		a.profiles, a.openErr = profile.Open(filepath.Join(home, "profiles"))
+	}
+	return a
 }
 
 // Startup вызывается при открытии окна.
@@ -96,7 +140,7 @@ func (a *App) Startup(ctx context.Context) {
 }
 
 // State возвращает текущее состояние окна.
-func (a *App) State() State {
+func (a *App) State() (State, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return a.state()
@@ -107,118 +151,318 @@ func (a *App) SetEnabled(id string, enabled bool) (State, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	for i := range a.mods {
-		m := &a.mods[i]
-		if m.id != id {
-			continue
-		}
-		if m.pinned && !enabled {
-			return State{}, fmt.Errorf("%s нужен остальным модам, его нельзя выключить", m.name)
-		}
-		m.enabled = enabled
-		return a.state(), nil
+	real, err := a.hasMods()
+	if err != nil {
+		return State{}, err
 	}
-	return State{}, fmt.Errorf("мод %q не найден", id)
+	if !real {
+		if err := a.setDemoEnabled(id, enabled); err != nil {
+			return State{}, err
+		}
+		return a.state()
+	}
+
+	p, _, err := a.loadProfile()
+	if err != nil {
+		return State{}, err
+	}
+	if err := p.SetEnabled(id, enabled); err != nil {
+		return State{}, err
+	}
+	if err := a.profiles.Save(p); err != nil {
+		return State{}, err
+	}
+	return a.state()
 }
 
-func (a *App) state() State {
-	s := State{
-		Version: version.String(),
-		Demo:    true,
-		Game:    "Darktide · Steam",
-		Profile: "Основной",
-		Issues:  []Issue{},
-		Mods:    make([]Mod, 0, len(a.mods)),
-		Plan:    []string{},
+// AddMod спрашивает у пользователя архив и добавляет мод из него в хранилище
+// и в профиль. Если пользователь отказался, состояние возвращается прежним.
+func (a *App) AddMod() (State, error) {
+	path, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
+		Title:   "Добавить мод из архива",
+		Filters: []runtime.FileFilter{{DisplayName: "Архивы модов (*.zip, *.7z, *.rar)", Pattern: "*.zip;*.7z;*.rar"}},
+	})
+	if err != nil {
+		return State{}, err
 	}
 
-	enabled := make(map[string]bool, len(a.mods))
-	for _, m := range a.mods {
-		enabled[m.id] = m.enabled
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if path == "" {
+		return a.state()
 	}
-
-	for _, m := range a.mods {
-		conflict := m.enabled && m.conflictWith != "" && enabled[m.conflictWith]
-		text, level := modState(m, conflict)
-		s.Mods = append(s.Mods, Mod{
-			ID: m.id, Name: m.name, Version: m.version, Available: m.available,
-			Source: m.source, Files: m.files, DependsOn: m.dependsOn,
-			Enabled: m.enabled, Pinned: m.pinned, State: text, Level: level,
-		})
-
-		if conflict {
-			winner := a.name(m.conflictWith)
-			s.Issues = append(s.Issues, Issue{
-				Title:  fmt.Sprintf("%s и %s меняют один и тот же файл", m.name, winner),
-				Detail: "Конфликт файлов · сейчас побеждает " + winner,
-				Level:  LevelError, Action: "Выбрать победителя", Stage: 3,
-			})
-		}
-		if m.enabled && m.available != "" {
-			s.Issues = append(s.Issues, Issue{
-				Title:  fmt.Sprintf("%s: доступна версия %s", m.name, m.available),
-				Detail: "Обновление · установлена " + m.version,
-				Level:  LevelWarn, Action: "Обновить", Stage: 7,
-			})
-		}
-
-		switch {
-		case m.enabled && !m.deployed:
-			s.Plan = append(s.Plan, m.name+" будет развёрнут в игру")
-		case !m.enabled && m.deployed:
-			s.Plan = append(s.Plan, m.name+" будет убран из игры")
-		}
-	}
-
-	if n := len(s.Plan); n > 0 {
-		s.PlanTitle = fmt.Sprintf("План развёртывания: %d %s", n, plural(n, "изменение", "изменения", "изменений"))
-	}
-	s.Status = a.status(s)
-	return s
+	return a.addArchive(path)
 }
 
-func (a *App) status(s State) []StatusItem {
-	files := StatusItem{Label: "Файлы в игре", Value: "совпадают с профилем", Level: LevelOK}
-	if len(s.Plan) > 0 {
-		files.Value, files.Level = "ждут развёртывания", LevelWarn
+func (a *App) addArchive(path string) (State, error) {
+	if a.openErr != nil {
+		return State{}, a.openErr
 	}
-	checks := StatusItem{Label: "Проверки", Value: "замечаний нет", Level: LevelOK}
-	if n := len(s.Issues); n > 0 {
-		checks.Value = fmt.Sprintf("%d %s", n, plural(n, "замечание", "замечания", "замечаний"))
-		checks.Level = LevelWarn
+	info := store.GuessInfo(path)
+	v, err := a.store.Add(path, info)
+	if errors.Is(err, fs.ErrExist) {
+		return State{}, fmt.Errorf("«%s» этой версии уже есть в хранилище", info.Name)
 	}
-	return []StatusItem{
-		{Label: "Игра", Value: s.Game, Level: LevelOK},
-		{Label: "Патч загрузчика", Value: "установлен", Level: LevelOK},
-		files,
-		checks,
+	if err != nil {
+		return State{}, err
 	}
+
+	// Новая версия уже установленного мода занимает его место в профиле.
+	p, _, err := a.loadProfile()
+	if err != nil {
+		return State{}, err
+	}
+	if p.Index(v.ModID) >= 0 {
+		err = p.SetVersion(v.ModID, v.ID)
+	} else {
+		err = p.Add(v.ModID, v.ID)
+	}
+	if err != nil {
+		return State{}, err
+	}
+	if err := a.profiles.Save(p); err != nil {
+		return State{}, err
+	}
+	return a.state()
 }
 
-func (a *App) name(id string) string {
-	for _, m := range a.mods {
-		if m.id == id {
-			return m.name
+// RemoveMod после подтверждения удаляет мод со всеми версиями в Корзину.
+// Если Корзина недоступна, спрашивает, удалять ли насовсем.
+func (a *App) RemoveMod(id string) (State, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	real, err := a.hasMods()
+	if err != nil {
+		return State{}, err
+	}
+	if !real {
+		return State{}, errors.New("это демонстрационный мод: удалять нечего")
+	}
+
+	if !a.confirm("Удалить мод", fmt.Sprintf("Удалить «%s» из хранилища?\n\nВсе его версии уйдут в Корзину.", a.modName(id))) {
+		return a.state()
+	}
+	err = a.removeMod(id, false)
+	if errors.Is(err, fsx.ErrTrashUnavailable) {
+		if !a.confirm("Корзина недоступна", "Положить мод в Корзину не удалось.\n\nУдалить его насовсем? Вернуть его будет нельзя.") {
+			return a.state()
+		}
+		err = a.removeMod(id, true)
+	}
+	if err != nil {
+		return State{}, err
+	}
+	return a.state()
+}
+
+func (a *App) confirm(title, message string) bool {
+	answer, err := runtime.MessageDialog(a.ctx, runtime.MessageDialogOptions{
+		Type: runtime.QuestionDialog, Title: title, Message: message, DefaultButton: "No",
+	})
+	return err == nil && answer == "Yes"
+}
+
+func (a *App) removeMod(id string, permanent bool) error {
+	if err := a.store.RemoveMod(id, permanent); err != nil {
+		return err
+	}
+	p, _, err := a.loadProfile()
+	if err != nil {
+		return err
+	}
+	if p.Index(id) < 0 {
+		return nil
+	}
+	if err := p.Remove(id); err != nil {
+		return err
+	}
+	return a.profiles.Save(p)
+}
+
+// ModFiles возвращает пути файлов той версии мода, что выбрана в профиле.
+func (a *App) ModFiles(id string) ([]string, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	real, err := a.hasMods()
+	if err != nil {
+		return nil, err
+	}
+	if !real {
+		return nil, errors.New("это демонстрационный мод: файлов у него нет")
+	}
+	p, _, err := a.loadProfile()
+	if err != nil {
+		return nil, err
+	}
+	i := p.Index(id)
+	if i < 0 {
+		return nil, fmt.Errorf("мод %q не найден", id)
+	}
+	v, err := a.store.Get(id, p.Entries[i].VersionID)
+	if err != nil {
+		return nil, err
+	}
+	paths := make([]string, len(v.Files))
+	for i, f := range v.Files {
+		paths[i] = f.Path
+	}
+	return paths, nil
+}
+
+// hasMods сообщает, есть ли в хранилище настоящие моды. Пока их нет, окно
+// показывает демонстрационные.
+func (a *App) hasMods() (bool, error) {
+	if a.openErr != nil {
+		return false, a.openErr
+	}
+	mods, _, err := a.store.List()
+	return len(mods) > 0, err
+}
+
+func (a *App) modName(id string) string {
+	mods, _, _ := a.store.List()
+	for _, m := range mods {
+		if m.ID == id {
+			return m.Latest().Name
 		}
 	}
 	return id
 }
 
-// modState описывает состояние мода одной фразой для списка.
-func modState(m demoMod, conflict bool) (string, Level) {
-	switch {
-	case conflict:
-		return "Конфликт файлов", LevelError
-	case m.enabled && !m.deployed:
-		return "Ждёт развёртывания", LevelWarn
-	case !m.enabled && m.deployed:
-		return "Выключен, ждёт развёртывания", LevelOff
-	case !m.enabled:
-		return "Выключен", LevelOff
-	case m.available != "":
-		return "Есть обновление", LevelWarn
+// loadProfile читает основной профиль и приводит его в согласие с хранилищем:
+// пропавшие моды убирает, новые ставит в конец, пропавшую версию заменяет
+// последней. Изменённый профиль сохраняет.
+func (a *App) loadProfile() (profile.Profile, []store.Mod, error) {
+	mods, _, err := a.store.List()
+	if err != nil {
+		return profile.Profile{}, nil, err
 	}
-	return "Развёрнут", LevelOK
+	p, err := a.profiles.Load(mainProfile)
+	if errors.Is(err, fs.ErrNotExist) {
+		p, err = profile.Profile{Name: mainProfile}, nil
+	}
+	if err != nil {
+		return profile.Profile{}, nil, err
+	}
+
+	byID := make(map[string]store.Mod, len(mods))
+	for _, m := range mods {
+		byID[m.ID] = m
+	}
+	changed := false
+	kept := p.Entries[:0]
+	for _, e := range p.Entries {
+		m, ok := byID[e.ModID]
+		if !ok {
+			changed = true
+			continue
+		}
+		if !hasVersion(m, e.VersionID) {
+			e.VersionID = m.Latest().ID
+			changed = true
+		}
+		kept = append(kept, e)
+	}
+	p.Entries = kept
+	for _, m := range mods {
+		if p.Index(m.ID) < 0 {
+			if err := p.Add(m.ID, m.Latest().ID); err != nil {
+				return profile.Profile{}, nil, err
+			}
+			changed = true
+		}
+	}
+	if changed {
+		if err := a.profiles.Save(p); err != nil {
+			return profile.Profile{}, nil, err
+		}
+	}
+	return p, mods, nil
+}
+
+func hasVersion(m store.Mod, versionID string) bool {
+	for _, v := range m.Versions {
+		if v.ID == versionID {
+			return true
+		}
+	}
+	return false
+}
+
+func (a *App) state() (State, error) {
+	real, err := a.hasMods()
+	if err != nil {
+		return State{}, fmt.Errorf("хранилище %s: %w", a.home, err)
+	}
+	if !real {
+		return a.demoState(), nil
+	}
+	return a.realState()
+}
+
+// realState собирает состояние окна из хранилища и профиля.
+func (a *App) realState() (State, error) {
+	p, mods, err := a.loadProfile()
+	if err != nil {
+		return State{}, err
+	}
+	_, problems, err := a.store.List()
+	if err != nil {
+		return State{}, err
+	}
+
+	s := State{
+		Version: version.String(),
+		Home:    a.home,
+		Profile: p.Name,
+		Issues:  []Issue{},
+		Mods:    make([]Mod, 0, len(p.Entries)),
+		Plan:    []string{},
+	}
+	byID := make(map[string]store.Mod, len(mods))
+	for _, m := range mods {
+		byID[m.ID] = m
+	}
+	for _, e := range p.Entries {
+		m := byID[e.ModID]
+		v, err := a.store.Get(e.ModID, e.VersionID)
+		if err != nil {
+			return State{}, err
+		}
+		row := Mod{
+			ID: e.ModID, Name: v.Name, Version: v.Version, Source: v.Source,
+			Files: len(v.Files), Versions: len(m.Versions), Enabled: e.Enabled,
+			State: "В хранилище", Level: LevelOK,
+		}
+		if row.Version == "" {
+			row.Version = "—"
+		}
+		if !e.Enabled {
+			row.State, row.Level = "Выключен", LevelOff
+		}
+		s.Mods = append(s.Mods, row)
+	}
+	for _, problem := range problems {
+		s.Issues = append(s.Issues, Issue{
+			Title: "Запись в хранилище повреждена", Detail: problem.Error(), Level: LevelError,
+		})
+	}
+
+	n := len(mods)
+	checks := StatusItem{Label: "Проверки", Value: "замечаний нет", Level: LevelOK}
+	if k := len(s.Issues); k > 0 {
+		checks.Value = fmt.Sprintf("%d %s", k, plural(k, "замечание", "замечания", "замечаний"))
+		checks.Level = LevelError
+	}
+	s.Status = []StatusItem{
+		{Label: "Игра", Value: "поиск появится на этапе 4", Level: LevelOff},
+		{Label: "Хранилище", Value: fmt.Sprintf("%d %s", n, plural(n, "мод", "мода", "модов")), Level: LevelOK},
+		{Label: "Файлы в игре", Value: "развёртывание появится на этапе 3", Level: LevelOff},
+		checks,
+	}
+	return s, nil
 }
 
 // plural выбирает форму слова по правилам русского языка: 1 мод, 2 мода, 5 модов.

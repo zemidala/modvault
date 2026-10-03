@@ -147,6 +147,8 @@ h1, h2 { margin: 0; font-weight: 400; }
 .status-item::before { content: ""; width: 8px; height: 8px; transform: rotate(45deg); background: var(--ok); }
 .status-item[data-level="warn"]::before { background: var(--orange-text); }
 .status-item[data-level="error"]::before { background: var(--error); }
+.status-item[data-level="off"]::before { background: var(--brass-line); }
+.status-item[data-level="off"] .status-value { color: var(--muted); }
 .status-item[data-level="warn"] .status-value { color: var(--orange-text); }
 .status-item[data-level="error"] .status-value { color: var(--error); }
 
@@ -285,6 +287,18 @@ tr[data-enabled="false"] .name, tr[data-enabled="false"] .version { color: var(-
 .facts dd { margin: 0; font-variant-numeric: tabular-nums; }
 .card-actions { display: flex; flex-direction: column; gap: 8px; }
 .card-actions .plate { font-family: inherit; font-size: inherit; font-weight: 700; letter-spacing: 0; text-transform: none; }
+
+.file-list {
+  margin: 0;
+  padding: 8px 10px;
+  list-style: none;
+  border: 1px solid var(--brass-dark);
+  background: var(--iron-deep);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+.file-list li { padding: 2px 0; }
 
 /* План развёртывания и нижняя строка */
 

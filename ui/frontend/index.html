@@ -55,7 +55,7 @@
           <input type="search" id="search" placeholder="Название мода" autocomplete="off">
         </label>
         <button class="ghost" data-stage="6">Отсортировать по правилам</button>
-        <button class="ghost" data-stage="2">Добавить мод</button>
+        <button class="ghost" id="add-mod">Добавить мод</button>
       </div>
       <div class="frame">
         <table class="mods">
@@ -83,16 +83,18 @@
     <dl class="facts">
       <dt>Установлена</dt><dd id="card-version"></dd>
       <dt id="card-available-label">Доступна</dt><dd id="card-available" class="warn"></dd>
-      <dt>Файлов в игре</dt><dd id="card-files"></dd>
+      <dt>Файлов</dt><dd id="card-files"></dd>
+      <dt>Версий в хранилище</dt><dd id="card-versions"></dd>
       <dt id="card-depends-label">Зависит от</dt><dd id="card-depends"></dd>
       <dt>Состояние</dt><dd id="card-state"></dd>
     </dl>
     <div class="card-actions">
       <button class="plate" id="card-update" data-stage="7"></button>
-      <button class="ghost" data-stage="2">Показать файлы</button>
+      <button class="ghost" id="card-show-files">Показать файлы</button>
       <button class="ghost" data-stage="7">Открыть на Nexus</button>
-      <button class="ghost danger" data-stage="2">Удалить мод</button>
+      <button class="ghost danger" id="card-remove">Удалить мод</button>
     </div>
+    <ul class="file-list" id="card-file-list" hidden></ul>
     <p class="muted small">Прежняя версия остаётся в хранилище, пока новая не развёрнута без ошибок.</p>
   </aside>
 
@@ -108,7 +110,8 @@
 </footer>
 
 <div class="foot">
-  <span id="demo" hidden>Демонстрационные данные: ядро программы ещё не подключено</span>
+  <span id="demo" hidden>Демонстрационные данные: хранилище пусто. Добавьте мод, и они исчезнут</span>
+  <span id="home" hidden></span>
   <span class="spacer"></span>
   <span id="version"></span>
 </div>

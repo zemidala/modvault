@@ -31,13 +31,26 @@ function roman(n) {
 }
 
 let toastTimer = 0;
-function toast(text, level) {
+function toast(text, level, sticky) {
   const node = $("toast");
   node.textContent = text;
   node.dataset.level = level || "info";
   node.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { node.hidden = true; }, 3500);
+  // Ошибку читают дольше; сообщение о сбое запуска не гаснет вовсе.
+  if (!sticky) toastTimer = setTimeout(() => { node.hidden = true; }, level === "error" ? 8000 : 3500);
+}
+
+// call выполняет запрос к программе, который возвращает новое состояние окна.
+async function call(request) {
+  try {
+    state = await request();
+    render();
+    return true;
+  } catch (err) {
+    toast(String(err), "error");
+    return false;
+  }
 }
 
 // Кнопка, за которой ещё нет ядра, честно говорит, когда заработает.
@@ -64,9 +77,12 @@ function renderIssues() {
     row.dataset.level = issue.level;
     const text = el("div", "issue-text");
     text.append(el("div", "issue-title", issue.title), el("div", "issue-detail", issue.detail));
-    const button = el("button", "ghost", issue.action);
-    button.addEventListener("click", () => notYet(issue.action, issue.stage));
-    row.append(text, button);
+    row.append(text);
+    if (issue.action) {
+      const button = el("button", "ghost", issue.action);
+      button.addEventListener("click", () => notYet(issue.action, issue.stage));
+      row.append(button);
+    }
     box.append(row);
   }
   $("issues-section").hidden = state.issues.length === 0;
@@ -110,6 +126,7 @@ function renderMods() {
 
     const select = () => {
       selectedId = mod.id === selectedId ? null : mod.id;
+      hideFiles();
       renderMods();
       renderCard();
     };
@@ -133,6 +150,7 @@ function renderCard() {
   $("card-source").textContent = mod.source;
   $("card-version").textContent = mod.version;
   $("card-files").textContent = String(mod.files);
+  $("card-versions").textContent = String(mod.versions);
   $("card-state").textContent = mod.state;
 
   const hasUpdate = mod.available !== "";
@@ -154,10 +172,37 @@ function renderPlan() {
   $("plan-detail").textContent = state.plan.join(" · ");
 }
 
+function hideFiles() {
+  $("card-file-list").hidden = true;
+  $("card-show-files").textContent = "Показать файлы";
+}
+
+async function toggleFiles() {
+  const list = $("card-file-list");
+  if (!list.hidden) {
+    hideFiles();
+    return;
+  }
+  try {
+    const files = await backend().ModFiles(selectedId);
+    list.replaceChildren(...files.map((path) => el("li", "", path)));
+    list.hidden = false;
+    $("card-show-files").textContent = "Скрыть файлы";
+  } catch (err) {
+    toast(String(err), "error");
+  }
+}
+
 function render() {
+  if (!state.mods.some((m) => m.id === selectedId)) {
+    selectedId = null;
+    hideFiles();
+  }
   $("profile").textContent = state.profile;
   $("version").textContent = state.version;
   $("demo").hidden = !state.demo;
+  $("home").hidden = state.demo;
+  $("home").textContent = "Хранилище: " + state.home;
   renderStatus();
   renderIssues();
   renderMods();
@@ -165,13 +210,8 @@ function render() {
   renderPlan();
 }
 
-async function setEnabled(id, enabled) {
-  try {
-    state = await backend().SetEnabled(id, enabled);
-    render();
-  } catch (err) {
-    toast(String(err), "error");
-  }
+function setEnabled(id, enabled) {
+  return call(() => backend().SetEnabled(id, enabled));
 }
 
 function showTab(tab) {
@@ -197,6 +237,17 @@ function wire() {
     button.addEventListener("click", () => notYet(button.textContent.trim().replace(/:.*/, ""), button.dataset.stage));
   }
   $("search").addEventListener("input", renderMods);
+
+  $("add-mod").addEventListener("click", async () => {
+    const before = state ? state.mods.map((m) => m.id + m.version).join() : "";
+    const wasDemo = state && state.demo;
+    if (await call(() => backend().AddMod())) {
+      const after = state.mods.map((m) => m.id + m.version).join();
+      if (after !== before || wasDemo !== state.demo) toast("Мод добавлен в хранилище");
+    }
+  });
+  $("card-remove").addEventListener("click", () => call(() => backend().RemoveMod(selectedId)));
+  $("card-show-files").addEventListener("click", toggleFiles);
 }
 
 async function start() {
@@ -209,7 +260,7 @@ async function start() {
     state = await backend().State();
     render();
   } catch (err) {
-    toast("Не удалось получить данные: " + err, "error");
+    toast("Программа не может работать с хранилищем: " + err, "error", true);
   }
 }
 
