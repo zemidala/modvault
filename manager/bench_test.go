@@ -9,10 +9,8 @@ import (
 	"github.com/zemidala/modvault/core/store"
 )
 
-// BenchmarkState — сколько стоит пересчитать состояние окна на большом
-// наборе: 140 модов по 20 файлов, всё развёрнуто. Столько работы стоит
-// за каждым щелчком в окне.
-func BenchmarkState(b *testing.B) {
+// benchApp — хранилище со 140 модами по 20 файлов, всё развёрнуто.
+func benchApp(b *testing.B) (*Manager, []string) {
 	a, _, g := newGame(b)
 	if _, err := a.setGame(g); err != nil {
 		b.Fatal(err)
@@ -39,11 +37,36 @@ func BenchmarkState(b *testing.B) {
 	if _, err := a.Deploy(); err != nil {
 		b.Fatal(err)
 	}
+	return a, ids
+}
+
+// BenchmarkState — сколько стоит пересчитать состояние окна на большом
+// наборе: 140 модов по 20 файлов, всё развёрнуто. Столько работы стоит
+// за каждым щелчком в окне.
+func BenchmarkState(b *testing.B) {
+	a, _ := benchApp(b)
 	time.Sleep(3 * time.Second) // только что записанные файлы в память не попадают
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		if _, err := a.State(); err != nil {
 			b.Fatal(err)
+		}
+	}
+}
+
+// BenchmarkSwitch — сколько стоит убрать из игры и положить обратно 140
+// модов по 20 файлов: так переключаются наборы и идёт поиск сбойного мода.
+func BenchmarkSwitch(b *testing.B) {
+	a, ids := benchApp(b)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		for _, enabled := range []bool{false, true} {
+			if _, err := a.SetEnabledMany(ids, enabled); err != nil {
+				b.Fatal(err)
+			}
+			if _, err := a.Deploy(); err != nil {
+				b.Fatal(err)
+			}
 		}
 	}
 }

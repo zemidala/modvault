@@ -1,6 +1,12 @@
 // Package journal — журнал операций: план записывается на диск до первого
 // действия, каждый выполненный шаг отмечается. После сбоя по журналу видно,
 // что успело произойти, и операцию можно откатить.
+//
+// План сбрасывается на диск сразу, отметки — раз в SyncEvery: сброс каждой
+// отметки стоил бы дороже самого шага. Поэтому после отключения питания
+// отметок может оказаться меньше, чем выполнено шагов. Отмеченные шаги
+// выполнены наверняка; шаги после последней отметки вызывающий сверяет
+// с диском сам.
 package journal
 
 import (
@@ -13,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"time"
 
 	"github.com/zemidala/modvault/core/fsx"
 )
@@ -21,6 +28,9 @@ const (
 	planFile = "journal.json"
 	logFile  = "journal.log"
 )
+
+// SyncEvery — как часто отметки сбрасываются на диск.
+const SyncEvery = time.Second
 
 // ErrPending — в папке уже лежит незавершённая операция: сначала её нужно
 // откатить или закрыть.
@@ -33,9 +43,10 @@ type record struct {
 
 // Journal — открытая операция.
 type Journal struct {
-	dir  string
-	log  *os.File
-	done int
+	dir    string
+	log    *os.File
+	done   int
+	synced time.Time // когда отметки в последний раз сброшены на диск
 }
 
 // Begin записывает план операции data и открывает журнал. Пока журнал
@@ -64,17 +75,20 @@ func Begin(dir, id string, data any) (*Journal, error) {
 		os.Remove(filepath.Join(dir, planFile))
 		return nil, err
 	}
-	return &Journal{dir: dir, log: log}, nil
+	return &Journal{dir: dir, log: log, synced: time.Now()}, nil
 }
 
-// Done отмечает, что очередной шаг выполнен. Отметка сбрасывается на диск
-// до возврата.
+// Done отмечает, что очередной шаг выполнен. Отметка записывается сразу
+// (обрыв программы её не теряет), а на диск сбрасывается раз в SyncEvery.
 func (j *Journal) Done() error {
 	if _, err := fmt.Fprintf(j.log, "%d\n", j.done); err != nil {
 		return err
 	}
-	if err := j.log.Sync(); err != nil {
-		return err
+	if time.Since(j.synced) >= SyncEvery {
+		if err := j.log.Sync(); err != nil {
+			return err
+		}
+		j.synced = time.Now()
 	}
 	j.done++
 	return nil
@@ -96,7 +110,8 @@ type Pending struct {
 	ID   string
 	Data json.RawMessage
 	// Done — сколько шагов отмечено выполненными. Шаг с номером Done мог
-	// начаться, но не успеть получить отметку.
+	// начаться, но не успеть получить отметку; после отключения питания без
+	// отметки могли остаться и несколько шагов за ним.
 	Done int
 }
 

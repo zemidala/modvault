@@ -499,8 +499,32 @@ func TestKillAtEveryStep(t *testing.T) {
 	}
 	points = append(points, fmt.Sprintf("commit:%d", steps))
 
+	// Обрыв программы отметок журнала не теряет; отключение питания может
+	// потерять последние — вплоть до всех. Восстановление обязано вернуть
+	// игру на место в любом случае.
+	marks := map[string]func(lines []string) []string{
+		"отметки целы":     func(lines []string) []string { return lines },
+		"отметки пропали":  func(lines []string) []string { return nil },
+		"пропала половина": func(lines []string) []string { return lines[:len(lines)/2] },
+		"пропала последняя": func(lines []string) []string {
+			if len(lines) == 0 {
+				return lines
+			}
+			return lines[:len(lines)-1]
+		},
+	}
 	for _, point := range points {
-		t.Run(point, func(t *testing.T) {
+		for lost, keep := range marks {
+			killAt(t, point, lost, keep, want1, want2, before)
+		}
+	}
+}
+
+// killAt обрывает развёртывание P2 в точке point, оставляет в журнале
+// отметки, которые выбрал keep, и проверяет восстановление.
+func killAt(t *testing.T, point, lost string, keep func([]string) []string, want1, want2 string, before *Plan) {
+	t.Run(point+"/"+lost, func(t *testing.T) {
+		{
 			e := newEnv(t, foreignFiles)
 			p1, p2 := sets(t, e.store)
 			setupP1(t, e, p1)
@@ -511,6 +535,17 @@ func TestKillAtEveryStep(t *testing.T) {
 			var exit *exec.ExitError
 			if !errors.As(err, &exit) || exit.ExitCode() != crashCode {
 				t.Fatalf("вспомогательный процесс: %v\n%s", err, out)
+			}
+			logPath := filepath.Join(e.state, "journal.log")
+			if data, err := os.ReadFile(logPath); err == nil {
+				lines := keep(strings.Split(strings.TrimSuffix(string(data), "\n"), "\n"))
+				text := ""
+				if len(lines) > 0 {
+					text = strings.Join(lines, "\n") + "\n"
+				}
+				if err := os.WriteFile(logPath, []byte(text), 0o644); err != nil {
+					t.Fatal(err)
+				}
 			}
 
 			d, rec, err := Open(e.game, e.state)
@@ -552,8 +587,8 @@ func TestKillAtEveryStep(t *testing.T) {
 			if aside := snapshot(t, filepath.Join(e.state, stashDir)); strings.Contains(aside, "=") {
 				t.Errorf("в stash остались файлы:\n%s", aside)
 			}
-		})
-	}
+		}
+	})
 }
 
 // Файлы другого менеджера переходят под учёт без изменений в игре; после

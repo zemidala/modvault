@@ -774,13 +774,92 @@ func (d *Deployer) recover() (Recovery, error) {
 	if err := json.Unmarshal(pending.Data, &h); err != nil {
 		return NothingToRecover, fmt.Errorf("журнал развёртывания повреждён: %w", err)
 	}
-	if err := d.rollback(pending.ID, h, pending.Done); err != nil {
+	if err := d.rollback(pending.ID, h, d.executed(pending.ID, h, pending.Done)); err != nil {
 		return NothingToRecover, fmt.Errorf("откат прерванного развёртывания: %w", err)
 	}
 	if err := journal.Clear(d.state); err != nil {
 		return NothingToRecover, err
 	}
 	return RolledBack, nil
+}
+
+// executed уточняет по диску, сколько шагов развёртывания выполнено. Журнал
+// сбрасывает отметки на диск не каждый раз, и после отключения питания их
+// может оказаться меньше, чем шагов сделано: marked шагов выполнены
+// наверняка, следующие проверяются по тому, что лежит на диске. Шаги идут
+// строго по порядку, поэтому первый невыполненный — граница: за ним не
+// выполнен ни один.
+func (d *Deployer) executed(id string, h header, marked int) int {
+	done := min(marked, len(h.Steps))
+	for done < len(h.Steps) && d.stepDone(id, h, done) {
+		done++
+	}
+	return done
+}
+
+// stepDone сообщает по диску, выполнен ли шаг i целиком, считая, что все
+// шаги до него выполнены. Шаг, оборванный посередине (копия между томами
+// готова, оригинал ещё на месте), выполненным не считается: его отмену
+// rollback сверит с диском.
+func (d *Deployer) stepDone(id string, h header, i int) bool {
+	s := h.Steps[i]
+	game, err := d.gamePath(s.Path)
+	if err != nil {
+		return false
+	}
+	// taken: файл игры унесён в aside. На его месте мог успеть лечь
+	// следующий — файл мода или возвращённый оригинал.
+	taken := func(aside string, err error) bool {
+		if err != nil || !exists(aside) {
+			return false
+		}
+		return !exists(game) || d.refilled(h, i, game)
+	}
+	switch s.Op {
+	case opBackup:
+		return taken(d.backupPath(s.Path))
+	case opStash:
+		return taken(d.asidePath(stashDir, id, s.Path))
+	case opDisplace:
+		return taken(d.asidePath(displacedDir, id, s.Path))
+	case opStale:
+		// Обе папки — в папке состояния: перенос — одно переименование.
+		aside, err := d.asidePath(staleDir, id, s.Path)
+		return err == nil && exists(aside)
+	case opRestore:
+		backup, err := d.backupPath(s.Path)
+		return err == nil && !exists(backup) && exists(game)
+	case opPlace:
+		return d.holds(game, s.Hash)
+	}
+	return false
+}
+
+// refilled сообщает, что на месте файла, унесённого шагом i, лежит то, что
+// кладёт туда один из следующих шагов.
+func (d *Deployer) refilled(h header, i int, game string) bool {
+	for _, next := range h.Steps[i+1:] {
+		if key(next.Path) != key(h.Steps[i].Path) {
+			continue
+		}
+		switch next.Op {
+		case opPlace:
+			return d.holds(game, next.Hash)
+		case opRestore:
+			backup, err := d.backupPath(next.Path)
+			return err == nil && !exists(backup)
+		}
+	}
+	return false
+}
+
+// holds сообщает, что по пути abs лежит файл с хешем hash.
+func (d *Deployer) holds(abs string, hash fsx.Hash) bool {
+	if !exists(abs) {
+		return false
+	}
+	got, _, err := fsx.HashFile(abs)
+	return err == nil && got == hash
 }
 
 // AdoptEntry — файл, который уже лежит в игре и переходит под учёт как
