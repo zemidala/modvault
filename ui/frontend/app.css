@@ -46,9 +46,9 @@ body {
 [hidden] { display: none !important; }
 
 ::-webkit-scrollbar { width: 12px; height: 12px; }
-::-webkit-scrollbar-track { background: var(--iron-deep); }
-::-webkit-scrollbar-thumb { background: var(--brass-dark); border: 3px solid var(--iron-deep); }
-::-webkit-scrollbar-thumb:hover { background: var(--brass-frame); }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--brass-dark); background-clip: padding-box; border: 3px solid transparent; }
+::-webkit-scrollbar-thumb:hover { background-color: var(--brass-frame); }
 
 button { font: inherit; color: inherit; cursor: pointer; }
 button:focus-visible, input:focus-visible, tr:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
@@ -158,7 +158,9 @@ main {
   flex: 1 1 auto;
   min-width: 0;
   overflow-y: auto;
-  padding: 18px 20px;
+  /* Место под полосу прокрутки занято всегда: её появление не сдвигает содержимое. */
+  scrollbar-gutter: stable;
+  padding: 18px 8px 18px 20px;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -267,7 +269,8 @@ tr[data-enabled="false"] .name, tr[data-enabled="false"] .version { color: var(-
 .card {
   flex: 0 0 320px;
   overflow-y: auto;
-  padding: 18px 20px;
+  scrollbar-gutter: stable;
+  padding: 18px 8px 18px 20px;
   border-left: 1px solid var(--brass-line);
   background: var(--panel);
   display: flex;
