@@ -367,6 +367,7 @@ tr[data-enabled="false"] .name, tr[data-enabled="false"] .version { color: var(-
 
 .toast {
   position: fixed;
+  z-index: 50;
   left: 50%;
   bottom: 84px;
   transform: translateX(-50%);
@@ -407,6 +408,8 @@ tr[data-enabled="false"] .name, tr[data-enabled="false"] .version { color: var(-
   justify-content: center;
   padding: 40px;
   background: rgba(7, 8, 11, 0.6);
+  /* Поверх закреплённого поиска и меню. */
+  z-index: 40;
 }
 .sheet {
   width: min(900px, 100%);
@@ -601,3 +604,35 @@ button.busy::after,
 
 /* Мод выдавал ошибки в прошлом запуске игры. */
 .run-errors { margin-left: 8px; font-size: 12px; font-weight: 400; color: var(--error); cursor: help; }
+
+/* Разделы «Загрузки», «Журнал», «Настройки» и памятка «Начало работы». */
+.small-button { min-height: 30px; padding: 0 12px; font-size: 13px; }
+.setup-step[data-done="true"] .issue-title { color: var(--ok); }
+.setup-detail { font-size: 13px; color: var(--muted); }
+
+.download { display: flex; flex-direction: column; gap: 6px; padding: 10px 14px; border-bottom: 1px solid var(--brass-dark); }
+.download:last-child { border-bottom: 0; }
+.download-head { display: flex; justify-content: space-between; gap: 16px; }
+.download-name { font-weight: 700; }
+.download-status { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.download[data-state="done"] .download-status { color: var(--ok); }
+.download[data-state="failed"] .download-status, .download[data-state="failed"] .download-message { color: var(--error); }
+.download-message { font-size: 13px; color: var(--muted); }
+
+.event { display: flex; gap: 14px; padding: 7px 14px; border-bottom: 1px solid var(--brass-dark); font-size: 14px; }
+.event:last-child { border-bottom: 0; }
+.event-time { flex: 0 0 92px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.event-kind { flex: 0 0 64px; color: var(--brass); }
+.event-text { flex: 1 1 auto; min-width: 0; user-select: text; }
+.event[data-kind="error"] .event-kind, .event[data-kind="error"] .event-text { color: var(--error); }
+
+.setting { display: flex; align-items: center; gap: 20px; padding: 12px 14px; border-bottom: 1px solid var(--brass-dark); }
+.setting:last-child { border-bottom: 0; }
+.setting-text { flex: 1 1 auto; min-width: 0; }
+.setting-title { font-weight: 700; }
+.setting-detail { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+#view-settings { gap: 12px; }
+
+.ask-choices { display: flex; flex-direction: column; gap: 8px; }
+.ask-choices .choice { justify-content: flex-start; text-align: left; }
+.ask-choices .choice[aria-current="true"] { border-color: var(--gold); color: var(--gold); }

@@ -40,6 +40,8 @@ func main() {
 		MinHeight:        ui.MinHeight,
 		WindowStartState: startState,
 		OnBeforeClose:    app.BeforeClose,
+		// Архив мода можно бросить в окно мышью; сам архив окно при этом не открывает.
+		DragAndDrop: &options.DragAndDrop{EnableFileDrop: true, DisableWebViewDrop: true},
 		// Цвет окна до загрузки страницы — тот же, что у её фона.
 		BackgroundColour: &options.RGBA{R: 0x1b, G: 0x17, B: 0x14, A: 0xff},
 		AssetServer:      &assetserver.Options{Assets: ui.Assets()},

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -111,6 +112,15 @@ type Ask struct {
 	// что стоит в поле сначала.
 	Secret bool   `json:"secret"`
 	Value  string `json:"value"`
+	// Choices — варианты ответа: вопрос решается выбором одного из них.
+	Choices []Choice `json:"choices"`
+}
+
+// Choice — вариант ответа на вопрос.
+type Choice struct {
+	Label   string `json:"label"`
+	Value   string `json:"value"`
+	Current bool   `json:"current"` // выбран сейчас
 }
 
 // RemoveAsk — вопрос перед удалением мода.
@@ -377,6 +387,90 @@ func (a *App) OpenNexus(id string) error {
 	}
 	runtime.BrowserOpenURL(a.ctx, page)
 	return nil
+}
+
+// Journal возвращает последние записи журнала действий.
+func (a *App) Journal() ([]manager.Event, error) {
+	events, err := a.m.Journal(500)
+	if events == nil {
+		events = []manager.Event{}
+	}
+	return events, err
+}
+
+// Downloads возвращает загрузки этого запуска программы.
+func (a *App) Downloads() []manager.Download { return a.m.Downloads() }
+
+// SetSetting включает или выключает настройку.
+func (a *App) SetSetting(key string, on bool) (manager.State, error) {
+	if key == manager.SettingNxm {
+		// Кто открывает ссылки с сайта, знает только система; окну известен
+		// путь к программе, которую нужно назначить.
+		if _, ours := a.m.NxmOwner(); ours == on {
+			return a.m.State()
+		}
+		return a.ToggleNxm()
+	}
+	return a.m.SetSetting(key, on)
+}
+
+// HideSetup убирает памятку «Начало работы».
+func (a *App) HideSetup() (manager.State, error) { return a.m.HideSetup() }
+
+// WinnerAsk — вопрос, чьи файлы должны победить в конфликте.
+func (a *App) WinnerAsk(key string) (Ask, error) {
+	choice, err := a.m.WinnerOptions(key)
+	if err != nil {
+		return Ask{}, err
+	}
+	ask := Ask{
+		Title: "Победитель в конфликте файлов",
+		Message: fmt.Sprintf("Эти моды кладут в игру %d %s. В игре может лежать только один вариант — выберите, чей.\n\nПо умолчанию побеждает мод, стоящий ниже в порядке загрузки.",
+			choice.Files, plural(choice.Files, "один и тот же файл", "одних и тех же файла", "одних и тех же файлов")),
+	}
+	for _, o := range choice.Options {
+		label := o.Name
+		if o.Default {
+			label += " — по порядку загрузки"
+		}
+		ask.Choices = append(ask.Choices, Choice{Label: label, Value: o.ID, Current: o.Current})
+	}
+	return ask, nil
+}
+
+// SetWinner закрепляет победителя в конфликте файлов.
+func (a *App) SetWinner(key, winner string) (manager.State, error) { return a.m.SetWinner(key, winner) }
+
+// DropResult — итог добавления архивов, брошенных в окно.
+type DropResult struct {
+	State   manager.State `json:"state"`
+	Message string        `json:"message"`
+	Failed  bool          `json:"failed"` // хотя бы один архив не добавлен
+}
+
+// AddDropped добавляет моды из архивов, брошенных мышью в окно.
+func (a *App) AddDropped(paths []string) (DropResult, error) {
+	var added int
+	var problems []string
+	for _, path := range paths {
+		if _, err := a.m.AddArchive(path); err != nil {
+			problems = append(problems, filepath.Base(path)+": "+err.Error())
+			continue
+		}
+		added++
+	}
+	st, err := a.m.State()
+	res := DropResult{State: st, Failed: len(problems) > 0}
+	if added > 0 {
+		res.Message = fmt.Sprintf("Добавлено модов: %d", added)
+	}
+	if len(problems) > 0 {
+		if res.Message != "" {
+			res.Message += ". "
+		}
+		res.Message += "Не добавлено: " + strings.Join(problems, "; ")
+	}
+	return res, err
 }
 
 // SetFavorite добавляет моды в избранное или убирает из него.

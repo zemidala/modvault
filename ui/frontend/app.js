@@ -583,7 +583,7 @@ function authorLink(mod) {
 function renderCard() {
   const mod = state.mods.find((m) => m.id === selectedId);
   const card = $("card");
-  card.hidden = !mod || !$("view-placeholder").hidden;
+  card.hidden = !mod || $("view-mods").hidden;
   // С открытой карточкой списку тесно: часть столбцов уходит в неё.
   document.body.classList.toggle("with-card", !card.hidden);
   if (!mod) return;
@@ -665,6 +665,10 @@ function render() {
   renderCard();
   renderPlan();
   renderPicked();
+  renderSetup();
+  if (currentTab === "settings") renderSettings();
+  if (currentTab === "journal") renderJournal();
+  if (currentTab === "downloads") renderDownloads();
 }
 
 // ask показывает вопрос в окне программы и ждёт ответа: true — действие
@@ -676,9 +680,19 @@ function ask(question) {
     $("ask-title").textContent = question.title;
     $("ask-message").textContent = question.message;
     const input = $("ask-input");
-    const refuse = question.input ? null : false;
+    const refuse = question.input || (question.choices || []).length ? null : false;
     $("ask-field").hidden = !question.input;
     $("ask-input-label").textContent = question.placeholder || "";
+    // Вопрос с вариантами решается выбором одного из них.
+    const choices = $("ask-choices");
+    choices.hidden = !(question.choices || []).length;
+    choices.replaceChildren();
+    for (const choice of question.choices || []) {
+      const button = el("button", "ghost choice", (choice.current ? "✓ " : "") + choice.label);
+      if (choice.current) button.setAttribute("aria-current", "true");
+      button.addEventListener("click", () => done(choice.value));
+      choices.append(button);
+    }
     input.type = question.secret ? "password" : "text";
     input.value = question.value || "";
     const ok = $("ask-ok");
@@ -732,6 +746,10 @@ const commands = {
     return key === null ? state : backend().NexusLogin(key);
   },
   ToggleNxm: () => confirmThen(() => backend().NxmAsk(), () => backend().ToggleNxm()),
+  ChooseWinner: async (key) => {
+    const winner = await ask(await backend().WinnerAsk(key));
+    return winner === null ? state : backend().SetWinner(key, winner);
+  },
 };
 
 function run(command, arg) {
@@ -771,6 +789,7 @@ function listen() {
   events.EventsOn("download", (p) => {
     const share = p.total > 0 ? ` — ${Math.floor((p.done * 100) / p.total)}%` : "";
     toast(`Загрузка: ${p.name}${share}`, "busy", true);
+    if (currentTab === "downloads") renderDownloads();
   });
   events.EventsOn("checking", onCheckStep);
   events.EventsOn("installed", (res) => {
@@ -815,19 +834,177 @@ function setEnabled(id, enabled) {
   return call(() => backend().SetEnabled(id, enabled));
 }
 
+// Разделы окна: моды, загрузки, журнал, настройки.
+let currentTab = "mods";
+let downloadsTimer = 0;
+
+const eventKinds = {
+  deploy: "Игра", install: "Мод", remove: "Мод", set: "Набор", nexus: "Nexus", vortex: "Vortex", error: "Ошибка",
+};
+
+function clock(iso) {
+  const d = new Date(iso);
+  const two = (n) => String(n).padStart(2, "0");
+  return `${two(d.getDate())}.${two(d.getMonth() + 1)} ${two(d.getHours())}:${two(d.getMinutes())}`;
+}
+
+function megabytes(n) {
+  return `${(n / 1048576).toFixed(n < 10485760 ? 1 : 0).replace(".", ",")} МБ`;
+}
+
+// renderDownloads показывает загрузки этого запуска программы.
+async function renderDownloads() {
+  let list;
+  try {
+    list = await backend().Downloads();
+  } catch (err) {
+    toast(String(err), "error");
+    return;
+  }
+  const box = $("downloads");
+  box.replaceChildren();
+  for (const d of list) {
+    const row = el("div", "download");
+    row.dataset.state = d.state;
+    const head = el("div", "download-head");
+    head.append(el("span", "download-name", d.version ? `${d.name} ${d.version}` : d.name));
+    const share = d.total > 0 ? `${megabytes(d.done)} из ${megabytes(d.total)}` : d.done > 0 ? megabytes(d.done) : "";
+    const status = d.state === "active" ? `Идёт · ${share}` : d.state === "done" ? `Готово · ${clock(d.finished)}` : `Не удалось · ${clock(d.finished)}`;
+    head.append(el("span", "download-status", status));
+    row.append(head);
+    if (d.state === "active") {
+      const bar = el("div", "bar");
+      const fill = el("div", "bar-fill");
+      if (d.total > 0) fill.style.width = `${Math.round((d.done * 100) / d.total)}%`;
+      else bar.classList.add("indeterminate");
+      bar.append(fill);
+      row.append(bar);
+    } else if (d.message) {
+      row.append(el("div", "download-message", d.message));
+    }
+    box.append(row);
+  }
+  $("downloads-empty").hidden = list.length > 0;
+  $("downloads").hidden = list.length === 0;
+  // Пока что-то качается, список обновляется сам.
+  clearTimeout(downloadsTimer);
+  if (currentTab === "downloads" && list.some((d) => d.state === "active")) {
+    downloadsTimer = setTimeout(renderDownloads, 500);
+  }
+}
+
+// renderJournal показывает журнал действий, от новых записей к старым.
+async function renderJournal() {
+  let events;
+  try {
+    events = await backend().Journal();
+  } catch (err) {
+    toast(String(err), "error");
+    return;
+  }
+  const box = $("journal");
+  box.replaceChildren();
+  for (const e of events) {
+    const row = el("div", "event");
+    row.dataset.kind = e.kind;
+    row.append(el("span", "event-time", clock(e.time)), el("span", "event-kind", eventKinds[e.kind] || e.kind), el("span", "event-text", e.text));
+    box.append(row);
+  }
+  $("journal-empty").hidden = events.length > 0;
+  $("journal").hidden = events.length === 0;
+}
+
+// renderSettings показывает настройки переключателями и подключения
+// (игра, Nexus, Vortex) строками с кнопкой.
+function renderSettings() {
+  const box = $("settings");
+  box.replaceChildren();
+  for (const item of state.settings || []) {
+    const row = el("div", "setting");
+    const text = el("div", "setting-text");
+    text.append(el("div", "setting-title", item.title), el("div", "setting-detail", item.detail));
+    const toggle = el("button", "switch");
+    toggle.setAttribute("role", "switch");
+    toggle.setAttribute("aria-checked", String(item.on));
+    toggle.setAttribute("aria-label", item.title);
+    const track = el("span", "switch-track");
+    track.append(el("span", "switch-knob"));
+    toggle.append(track);
+    toggle.addEventListener("click", () => call(() => backend().SetSetting(item.key, !item.on)));
+    row.append(text, toggle);
+    box.append(row);
+  }
+  $("settings-empty").hidden = (state.settings || []).length > 0;
+
+  const links = $("connections");
+  links.replaceChildren();
+  for (const item of state.status) {
+    if (!item.command || item.command === "ToggleNxm") continue; // ссылки nxm — переключатель выше
+    const row = el("div", "setting");
+    const text = el("div", "setting-text");
+    text.append(el("div", "setting-title", item.label), el("div", "setting-detail", item.value));
+    const button = el("button", "ghost", item.command === "Release" ? "Вернуть Vortex" : "Изменить");
+    button.addEventListener("click", () => run(item.command));
+    row.append(text, button);
+    links.append(row);
+  }
+  const home = el("div", "setting");
+  const homeText = el("div", "setting-text");
+  homeText.append(el("div", "setting-title", "Хранилище модов"), el("div", "setting-detail", state.home));
+  home.append(homeText);
+  links.append(home);
+}
+
+// renderSetup показывает памятку «Начало работы», пока не всё сделано.
+function renderSetup() {
+  const steps = state.setup || [];
+  $("setup-section").hidden = steps.length === 0;
+  const box = $("setup");
+  box.replaceChildren();
+  for (const step of steps) {
+    const row = el("div", "issue setup-step");
+    row.dataset.done = String(step.done);
+    const text = el("div", "issue-text");
+    text.append(el("div", "issue-title", (step.done ? "✓ " : "○ ") + step.title), el("div", "setup-detail", step.detail));
+    row.append(text);
+    if (!step.done) {
+      const button = el("button", "ghost", step.action);
+      button.addEventListener("click", () => run(step.command));
+      row.append(button);
+    }
+    box.append(row);
+  }
+}
+
 function showTab(tab) {
   for (const button of document.querySelectorAll(".tab")) {
     if (button === tab) button.setAttribute("aria-current", "page");
     else button.removeAttribute("aria-current");
   }
-  const isMods = tab.dataset.tab === "mods";
-  $("view-mods").hidden = !isMods;
-  $("view-placeholder").hidden = isMods;
-  if (!isMods) {
-    $("placeholder-title").textContent = tab.textContent;
-    $("placeholder-text").textContent = `Раздел «${tab.textContent}» появится на этапе ${tab.dataset.stage}.`;
+  currentTab = tab.dataset.tab;
+  for (const name of ["mods", "downloads", "journal", "settings"]) {
+    $("view-" + name).hidden = name !== currentTab;
   }
-  if (state) renderCard();
+  hideMenu();
+  if (!state) return;
+  renderCard();
+  if (currentTab === "downloads") renderDownloads();
+  if (currentTab === "journal") renderJournal();
+  if (currentTab === "settings") renderSettings();
+}
+
+// dropFiles принимает архивы, брошенные мышью в окно.
+async function dropFiles(paths) {
+  if (!paths || !paths.length) return;
+  toast(`Добавляю из архивов: ${paths.length}…`, "busy", true);
+  try {
+    const res = await backend().AddDropped(paths);
+    state = res.state;
+    render();
+    toast(res.message, res.failed ? "error" : "info");
+  } catch (err) {
+    toast(String(err), "error");
+  }
 }
 
 function wire() {
@@ -845,6 +1022,10 @@ function wire() {
   new ResizeObserver(() => {
     $("view-mods").style.setProperty("--pinned-h", `${pinned.offsetHeight}px`);
   }).observe(pinned);
+
+  $("setup-hide").addEventListener("click", () => call(() => backend().HideSetup()));
+  // Архив мода можно бросить в окно мышью.
+  if (window.runtime && window.runtime.OnFileDrop) window.runtime.OnFileDrop((x, y, paths) => dropFiles(paths), false);
 
   $("set-button").addEventListener("click", openSets);
   $("picked-new").addEventListener("click", () => newSet([...picked]));

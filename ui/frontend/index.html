@@ -28,9 +28,9 @@
 
   <nav class="tabs" aria-label="Разделы">
     <button class="tab" data-tab="mods" aria-current="page">Моды</button>
-    <button class="tab" data-tab="downloads" data-stage="8">Загрузки</button>
-    <button class="tab" data-tab="journal" data-stage="3">Журнал</button>
-    <button class="tab" data-tab="settings" data-stage="8">Настройки</button>
+    <button class="tab" data-tab="downloads">Загрузки</button>
+    <button class="tab" data-tab="journal">Журнал</button>
+    <button class="tab" data-tab="settings">Настройки</button>
   </nav>
 
   <span class="spacer"></span>
@@ -43,6 +43,11 @@
 <div class="body">
 
   <main id="view-mods">
+    <section id="setup-section" aria-label="Начало работы" hidden>
+      <div class="heading"><h2>Начало работы</h2><span class="rule"></span><button class="ghost small-button" id="setup-hide">Скрыть</button></div>
+      <div class="frame" id="setup"></div>
+    </section>
+
     <section id="issues-section" aria-label="Требуют внимания" hidden>
       <div class="heading"><h2>Требуют внимания</h2><span class="rule"></span><span class="diamond"></span></div>
       <div class="frame" id="issues"></div>
@@ -87,9 +92,24 @@
     </section>
   </main>
 
-  <main id="view-placeholder" hidden>
-    <div class="heading"><h1 id="placeholder-title"></h1><span class="rule"></span><span class="diamond"></span></div>
-    <p class="placeholder" id="placeholder-text"></p>
+  <main id="view-downloads" hidden>
+    <div class="heading"><h1>Загрузки</h1><span class="rule"></span><span class="diamond"></span></div>
+    <p class="placeholder" id="downloads-empty">В этом запуске программы загрузок не было. Моды скачиваются кнопкой «Mod Manager Download» на сайте Nexus или значком обновления в списке модов; прошлые загрузки записаны в журнале.</p>
+    <div class="frame" id="downloads" hidden></div>
+  </main>
+
+  <main id="view-journal" hidden>
+    <div class="heading"><h1>Журнал</h1><span class="rule"></span><span class="diamond"></span></div>
+    <p class="placeholder" id="journal-empty">Журнал пуст: программа ещё ничего не делала с модами и игрой.</p>
+    <div class="frame" id="journal" hidden></div>
+  </main>
+
+  <main id="view-settings" hidden>
+    <div class="heading"><h1>Настройки</h1><span class="rule"></span><span class="diamond"></span></div>
+    <p class="placeholder" id="settings-empty" hidden>Настройки появятся, когда будет выбрана папка игры.</p>
+    <div class="frame" id="settings"></div>
+    <div class="heading"><h2>Подключения</h2><span class="rule"></span><span class="diamond"></span></div>
+    <div class="frame" id="connections"></div>
   </main>
 
   <aside class="card" id="card" aria-label="Выбранный мод" hidden>
@@ -146,6 +166,7 @@
   <section class="sheet ask frame" role="alertdialog" aria-modal="true" aria-labelledby="ask-title" aria-describedby="ask-message">
     <div class="heading"><h2 id="ask-title"></h2><span class="rule"></span><span class="diamond"></span></div>
     <p class="ask-message" id="ask-message"></p>
+    <div class="ask-choices" id="ask-choices" hidden></div>
     <label class="field" id="ask-field" hidden><span id="ask-input-label"></span>
       <input type="text" id="ask-input" autocomplete="off" spellcheck="false">
     </label>
