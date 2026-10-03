@@ -333,7 +333,12 @@ function renderMods() {
     });
     if (!sets.length) setsCell.append("—");
 
-    row.append(el("td", "num", String(index + 1)), toggleCell, nameCell, authorCell, categoryCell, ratingCell, statsCell, versionCell, updateTd, setsCell, installedCell, stateCell);
+    // За номер мод тянут, чтобы переставить его в порядке загрузки.
+    const numCell = el("td", "num", String(index + 1));
+    numCell.title = "Потяните, чтобы переставить мод в порядке загрузки";
+    numCell.addEventListener("mousedown", (event) => dragStart(event, mod));
+    numCell.addEventListener("click", (event) => event.stopPropagation());
+    row.append(numCell, toggleCell, nameCell, authorCell, categoryCell, ratingCell, statsCell, versionCell, updateTd, setsCell, installedCell, stateCell);
 
     const select = () => {
       selectedId = mod.id === selectedId ? null : mod.id;

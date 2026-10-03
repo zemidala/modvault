@@ -254,6 +254,11 @@ func (a *App) SortAsk() (Ask, error) {
 // Sort расставляет моды по правилам.
 func (a *App) Sort() (manager.State, error) { return a.m.Sort() }
 
+// MoveMods переставляет моды в порядке загрузки: перед модом target или за ним.
+func (a *App) MoveMods(ids []string, target string, after bool) (manager.SetResult, error) {
+	return a.m.MoveMods(ids, target, after)
+}
+
 // Sets возвращает наборы модов для меню «Набор».
 func (a *App) Sets() ([]manager.SetInfo, error) { return a.m.Sets() }
 

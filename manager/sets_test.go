@@ -277,3 +277,59 @@ func TestFavorites(t *testing.T) {
 		t.Errorf("записи избранного: %v", a.settings.Favorites)
 	}
 }
+
+func TestMoveMods(t *testing.T) {
+	a, _ := setsApp(t)
+	order := func(s State) string {
+		ids := make([]string, len(s.Mods))
+		for i, m := range s.Mods {
+			ids[i] = m.ID
+		}
+		return strings.Join(ids, ",")
+	}
+	if got := order(state(t, a)); got != "dml,dmf,needy,helper,deep,plain,other" {
+		t.Fatalf("исходный порядок: %s", got)
+	}
+
+	// Один мод — ниже другого.
+	res, err := a.MoveMods([]string{"needy"}, "plain", true)
+	if err != nil || order(res.State) != "dml,dmf,helper,deep,plain,needy,other" {
+		t.Fatalf("после переноса вниз: %v, %s", err, order(res.State))
+	}
+	if !strings.Contains(res.Message, "«Needy» теперь стоит после «Plain»") {
+		t.Errorf("сообщение: %q", res.Message)
+	}
+	// Несколько модов разом — выше другого; между собой порядок прежний,
+	// в каком бы порядке их ни назвали.
+	res, err = a.MoveMods([]string{"other", "deep"}, "helper", false)
+	if err != nil || order(res.State) != "dml,dmf,deep,other,helper,plain,needy" {
+		t.Fatalf("после переноса двух вверх: %v, %s", err, order(res.State))
+	}
+	if !strings.Contains(res.Message, "2 мода теперь стоят перед «Helper»") {
+		t.Errorf("сообщение о двух модах: %q", res.Message)
+	}
+	// На самый верх и в самый низ.
+	if res, _ = a.MoveMods([]string{"needy"}, "dml", false); order(res.State) != "needy,dml,dmf,deep,other,helper,plain" {
+		t.Errorf("перенос на самый верх: %s", order(res.State))
+	}
+	if res, _ = a.MoveMods([]string{"needy"}, "plain", true); order(res.State) != "dml,dmf,deep,other,helper,plain,needy" {
+		t.Errorf("перенос в самый низ: %s", order(res.State))
+	}
+	// Порядок переживает перезапуск; включённость модов не меняется.
+	if s := state(t, NewWith(a.home, a.game)); order(s) != "dml,dmf,deep,other,helper,plain,needy" || enabledIDs(s) != "dml,dmf,deep,other,helper,plain,needy" {
+		t.Errorf("после перезапуска: %s, включены %s", order(s), enabledIDs(s))
+	}
+
+	before := order(state(t, a))
+	for _, bad := range []struct {
+		ids    []string
+		target string
+	}{{[]string{"plain"}, "plain"}, {[]string{"plain"}, "нет такого"}, {[]string{"нет такого"}, "plain"}, {nil, "plain"}} {
+		if _, err := a.MoveMods(bad.ids, bad.target, true); err == nil {
+			t.Errorf("перенос %v к %q прошёл", bad.ids, bad.target)
+		}
+	}
+	if got := order(state(t, a)); got != before {
+		t.Errorf("неудачный перенос изменил порядок: %s", got)
+	}
+}

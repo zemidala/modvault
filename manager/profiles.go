@@ -110,6 +110,73 @@ func (a *Manager) Move(id string, to int) (State, error) {
 	return a.state()
 }
 
+// MoveMods переставляет моды ids в порядке загрузки: ставит их перед модом
+// target или, с after, сразу за ним. Между собой они остаются в прежнем
+// порядке.
+func (a *Manager) MoveMods(ids []string, target string, after bool) (SetResult, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if real, err := a.hasMods(); err != nil || !real {
+		return SetResult{}, errors.Join(err, errors.New("это демонстрационные моды"))
+	}
+	if err := a.bisecting(); err != nil {
+		return SetResult{}, err
+	}
+	p, _, err := a.loadProfile()
+	if err != nil {
+		return SetResult{}, err
+	}
+	moving := map[string]bool{}
+	for _, id := range ids {
+		if p.Index(id) < 0 {
+			return SetResult{}, fmt.Errorf("мод %q не найден", id)
+		}
+		moving[id] = true
+	}
+	if len(moving) == 0 || moving[target] || p.Index(target) < 0 {
+		return SetResult{}, errors.New("мод нужно бросить выше или ниже другого мода")
+	}
+	var moved, rest []profile.Entry
+	for _, e := range p.Entries {
+		if moving[e.ModID] {
+			moved = append(moved, e)
+		} else {
+			rest = append(rest, e)
+		}
+	}
+	at := 0
+	for i, e := range rest {
+		if e.ModID == target {
+			at = i
+		}
+	}
+	if after {
+		at++
+	}
+	p.Entries = append(append(append([]profile.Entry(nil), rest[:at]...), moved...), rest[at:]...)
+	if err := a.profiles.Save(p); err != nil {
+		return SetResult{}, err
+	}
+
+	names := a.modNames()
+	where := "перед"
+	if after {
+		where = "после"
+	}
+	msg := fmt.Sprintf("«%s» теперь стоит %s «%s»", names(moved[0].ModID), where, names(target))
+	if len(moved) > 1 {
+		msg = fmt.Sprintf("%d %s теперь стоят %s «%s»", len(moved), plural(len(moved), "мод", "мода", "модов"), where, names(target))
+	}
+	// Что это меняет, зависит от загрузчика модов.
+	if _, ord, err := a.orderInfo(p); err == nil && ord.Auto {
+		msg += ". Порядок загрузки в игре задаёт загрузчик модов; порядок в списке решает, чей файл побеждает при конфликте"
+	} else if a.deployer != nil {
+		msg += ". В игру новый порядок попадёт по кнопке «Развернуть»"
+	}
+	st, err := a.state()
+	return SetResult{State: st, Message: msg}, err
+}
+
 // Профиль на момент двух последних развёртываний: по ним откат возвращает
 // игру и профиль к предпоследнему развёртыванию.
 const (
