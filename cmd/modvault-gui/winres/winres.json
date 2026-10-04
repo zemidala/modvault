@@ -9,7 +9,7 @@
       "0409": {
         "identity": {
           "name": "zemidala.modvault",
-          "version": "0.2.0.0"
+          "version": "0.2.1.0"
         },
         "description": "Modvault",
         "minimum-os": "win10",
@@ -24,19 +24,19 @@
     "#1": {
       "0000": {
         "fixed": {
-          "file_version": "0.2.0.0",
-          "product_version": "0.2.0.0"
+          "file_version": "0.2.1.0",
+          "product_version": "0.2.1.0"
         },
         "info": {
           "0409": {
             "CompanyName": "zemidala",
             "FileDescription": "Modvault — mod manager for Warhammer 40,000: Darktide",
-            "FileVersion": "0.2.0",
+            "FileVersion": "0.2.1",
             "InternalName": "Modvault",
             "LegalCopyright": "© 2026 zemidala",
             "OriginalFilename": "Modvault.exe",
             "ProductName": "Modvault",
-            "ProductVersion": "0.2.0"
+            "ProductVersion": "0.2.1"
           }
         }
       }
