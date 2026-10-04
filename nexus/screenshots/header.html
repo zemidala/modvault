@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Modvault header</title>
+<style>
+/* Nexus header 1300x372 in the zemidala brand: ZD mark + stencil wordmark on ink, with the real window on the right.
+   Nexus draws its own breadcrumbs, mod title, stats and buttons over the bottom ~150px of the header,
+   so everything of ours stays in the top 210px and the bottom is left as plain dark ink. */
+@font-face{font-family:"Saira Stencil One";src:url("../../ui/frontend/fonts/SairaStencilOne-Regular.ttf")}
+@font-face{font-family:"PT Sans";font-weight:700;src:url("../../ui/frontend/fonts/PTSans-Bold.ttf")}
+html,body{margin:0;width:1300px;height:372px;overflow:hidden;font-synthesis:none}
+body{position:relative;background:#07080b}
+/* the window screenshot, its list of mods in the right half */
+.shot{position:absolute;right:-40px;top:-20px;width:820px;height:547px;background:url("main.png") 0 0 / 820px auto no-repeat;transform:perspective(1400px) rotateY(-9deg);transform-origin:right center;box-shadow:0 0 0 1px #3a2c1c}
+.ink{position:absolute;inset:0;background:linear-gradient(90deg,#07080b 0%,#07080b 38%,rgba(7,8,11,.80) 47%,rgba(7,8,11,.15) 58%,rgba(7,8,11,0) 70%)}
+.glow{position:absolute;inset:0;background:radial-gradient(55% 130% at 0% 40%,rgba(29,77,255,.30),transparent 70%),radial-gradient(40% 120% at 100% 40%,rgba(255,106,20,.16),transparent 70%)}
+.brand{position:absolute;left:40px;top:34px;display:flex;align-items:center;gap:28px}
+.brand img{width:112px;height:112px;flex:none}
+.wm{font-family:"Saira Stencil One",sans-serif;font-size:76px;line-height:.92;color:#fff;letter-spacing:.02em;white-space:nowrap}
+.wm i{font-style:normal;color:#ff6a14}
+.wm small{display:block;font:700 13px "PT Sans",sans-serif;letter-spacing:.34em;color:#9aa1b5;margin-top:16px;white-space:nowrap}
+/* darker floor under the site's own title and stats */
+.floor{position:absolute;left:0;right:0;bottom:0;height:200px;background:linear-gradient(180deg,rgba(7,8,11,0),rgba(7,8,11,.86) 62%,#07080b)}
+</style></head><body>
+<div class="shot"></div><div class="ink"></div><div class="glow"></div><div class="floor"></div>
+<div class="brand">
+	<img src="file:///G:/Projects/HomeNetwork/branding/final/svg/zd1.svg" alt="">
+	<div class="wm"><i>M</i>ODVAULT<small>MOD MANAGER · DARKTIDE</small></div>
+</div>
+</body></html>

@@ -1,0 +1,1 @@
+Mod manager for Darktide. Mods live in a separate store and go into the game as hard links in seconds; deployment is all-or-nothing with rollback; file conflicts come with advice; a built-in search finds the mod that crashes the game. Takes over from Vortex in one click and gives it back. One exe, English and Russian.

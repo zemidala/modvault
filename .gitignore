@@ -18,3 +18,10 @@ Desktop.ini
 # Локальные данные при отладке
 /tmp/
 *.log
+
+# Локальные заметки и материалы публикации, не для репозитория
+/.local/
+/nexus/PUBLISH.md
+/nexus/PUBLISH.html
+/nexus/screenshots/*.png
+/nexus/screenshots/upload/

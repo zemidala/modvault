@@ -1,0 +1,220 @@
+[size=5][b]Modvault[/b][/size]
+[i]Описание на русском — ниже.[/i]
+
+[b]A mod manager for Warhammer 40,000: Darktide.[/b] Modvault keeps your mods in a separate store, puts them into the game with hard links in seconds, never leaves the game half-changed, and helps you find the mod that crashes the game. It can take over your Vortex setup in one click — and give it back.
+
+One file, [b]Modvault.exe[/b], no installation. English and Russian interface.
+
+[size=4][b]What makes it different[/b][/size]
+[list]
+[*][b]All or nothing.[/b] Every deployment writes its plan to a journal first. If the program, Windows or the power fails halfway, the next start rolls the game back to its previous state.
+[*][b]It finds the mod that breaks the game.[/b] After each game run Modvault reads the game's own log and shows which mods logged errors and why the game crashed. When the log names no culprit, [b]Find faulty mod[/b] finds it by bisection: for 140 mods that is about 10 game runs instead of 140.
+[*][b]File conflicts come with advice.[/b] Modvault tells what kind of conflict it is and what to do about it, not just that two mods touch the same file.
+[*][b]A way back to Vortex.[/b] Take over from Vortex in one click; one more click restores Vortex's deployment byte for byte.
+[*][b]Mods in development are first-class.[/b] A folder link to your project becomes a mod: your edits are in the game at once, and the mod can still be disabled or added to sets.
+[/list]
+
+[size=4][b]Features[/b][/size]
+
+[b]Safe deployment[/b]
+[list]
+[*]Mods live in a store, not in the game — by default a [i]Modvault[/i] folder on the game's drive. Files go into the game as hard links, so enabling, disabling and switching sets take seconds and use no extra disk space. On another drive Modvault copies files instead.
+[*]Your files are never lost: a game file that a mod replaces is backed up and restored when the mod is removed. A mod file changed outside Modvault is moved to a separate folder, not deleted.
+[*]Integrity check: [i]Files in the game[/i] compares the game folder with the set and lists changed, missing and game-updated files by name. After a game update or a Steam file check, one click on [b]Deploy[/b] puts everything back.
+[*]Deployment plan: before deploying you see what will change, mod by mod or file by file.
+[*][i]bundle_database.data[/i] is patched for you with the mod loader's own patch tool, on a copy. The original is kept.
+[/list]
+
+[b]Coming from Vortex[/b]
+[list]
+[*][b]Take over from Vortex:[/b] mods are copied from the Vortex staging folder with their load order, conflict winners and backups. The game files do not change.
+[*][b]Return to Vortex:[/b] restores Vortex's deployment and returns the nxm:// links to it. Your mods stay in the Modvault store.
+[/list]
+
+[b]Load order and checks[/b]
+[list]
+[*]Works with Darktide Mod Loader and Auto Mod Loading and Ordering (AML). For AML the list shows the real order the game used last time, read from the loader's log. For plain DML Modvault writes [i]mod_load_order.txt[/i].
+[*]Sort by rules from the mods' own .mod files (load_before, load_after, require), with a preview. Cycles are shown, no mod is ever dropped.
+[*]Missing requirements: "X requires Y" with an [b]Enable Y[/b] button.
+[*]Drag to reorder, several selected mods at once.
+[/list]
+
+[b]File conflicts[/b]
+[list]
+[*]The kind of conflict is named: identical files, two variants of one mod, a mod fully covered by another, an order stated by the author, or a partial overlap.
+[*]Advice and the actions to follow it: choose the winner, disable the extra mod, or drop an earlier choice. A pinned winner stays the winner whatever the order.
+[*]Resolved and harmless conflicts do not clutter [i]Needs attention[/i].
+[/list]
+
+[b]Finding the mod that breaks the game[/b]
+[list]
+[*]Diagnosis after each game run: which mods logged errors (how many, and the first one) and why the game crashed. The mod gets a warning badge and a [b]Disable[/b] button.
+[*][b]Find faulty mod[/b] finds the smallest set of mods that reproduces the problem — a single mod or a combination. You run the game and answer "problem remains" or "no problem"; after each run the program reads the log and suggests the answer. The search runs in a temporary set: your own set is not touched. It survives a restart and can be stopped at any time.
+[/list]
+
+[b]Mods outside Modvault and mods in development[/b]
+[list]
+[*]Mod folders you put into the game yourself are shown in the list with an "out" mark.
+[*][b]Take into Modvault:[/b] the mod is copied into the store and appears disabled; the game is unchanged until you enable it or press Deploy.
+[*][b]Mods in development:[/b] a folder link (junction) to your project becomes a mod whose files are not copied. The project folder is never touched.
+[/list]
+
+[b]Nexus Mods[/b]
+[list]
+[*][b]Mod Manager Download[/b] buttons on this site install mods into Modvault (nxm:// links, switchable in Settings; the previous handler is remembered and restored).
+[*]Update check at start or by button. Premium accounts download updates directly; without Premium Modvault opens the right file page.
+[*]Downloads resume after a network failure and are verified by size and MD5 before they reach the store.
+[*]Columns from Nexus: author, category, endorsements, downloads, update status. Endorse a mod or write to its author from the window.
+[*]Collections: paste a collection link to create a set from it; missing mods are listed with download links.
+[*]Your personal API key is stored in Windows Credential Manager, never in a file.
+[/list]
+
+[b]Mod sets and the window[/b]
+[list]
+[*]Sets are like profiles: which mods are enabled. Switching a set deploys it at once. A set can be saved as a file and shared.
+[*]The mod loader, the framework and required mods are enabled in every set automatically.
+[*]Icons show where each mod comes from, what it requires, who needs it and whether it has unresolved conflicts.
+[*]Sortable list with a column chooser, quick filters, search, favourites and version rollback.
+[*]Add mods by dragging archives (zip, 7z, rar) into the window.
+[*]Journal of everything the program did with mods and the game.
+[/list]
+
+[i]Screenshots show sample data.[/i]
+
+[size=4][b]Requirements[/b][/size]
+[list]
+[*]Windows 10 or 11, 64-bit.
+[*]Microsoft Edge WebView2 Runtime — built into Windows 11. On Windows 10, if the window does not open, install it from [url=https://developer.microsoft.com/microsoft-edge/webview2/]Microsoft[/url].
+[*]Warhammer 40,000: Darktide (Steam) with [url=https://www.nexusmods.com/warhammer40kdarktide/mods/19]Darktide Mod Loader[/url].
+[*]A free Nexus Mods account and a personal API key for the Nexus features.
+[/list]
+
+[size=4][b]Install[/b][/size]
+[list=1]
+[*]Download the file with [b]Manual Download[/b] and unpack [i]Modvault.exe[/i] into any folder. It is a program, not a mod: do not install it with Vortex and do not put it into the game's [i]mods[/i] folder.
+[*]Run it. The app is not code-signed yet, so Windows SmartScreen may warn you: click [b]More info → Run anyway[/b].
+[*]Follow [b]Getting started[/b]: choose the game folder, take over from Vortex if you use it, enter your Nexus API key (status bar → Nexus).
+[/list]
+[b]Update:[/b] replace the old exe with the new one — your mods and settings stay.
+[b]Uninstall:[/b] in Modvault, switch off [i]Open links from the Nexus site[/i] (or click [i]Return to Vortex[/i]), then delete the exe, the store folder ([i]Modvault[/i] on the game drive) and [i]%LOCALAPPDATA%\Modvault[/i].
+
+[size=4][b]Feedback[/b][/size]
+[list]
+[*]Bugs and feature requests: the [b]Bugs[/b] tab here or [url=https://github.com/zemidala/modvault-releases/issues/new/choose]GitHub Issues[/url].
+[*]Questions and ideas: the [b]Posts[/b] tab here or [url=https://github.com/zemidala/modvault-releases/discussions]GitHub Discussions[/url].
+[*]All releases with SHA-256 hashes: [url=https://github.com/zemidala/modvault-releases/releases]github.com/zemidala/modvault-releases[/url].
+[*]Source code (MIT License) and build steps: [url=https://github.com/zemidala/modvault]github.com/zemidala/modvault[/url].
+[/list]
+English or Russian — both are fine.
+
+[line]
+
+[size=5][b]Modvault — по-русски[/b][/size]
+
+[b]Менеджер модов для Warhammer 40,000: Darktide.[/b] Modvault хранит моды в отдельном хранилище, за секунды кладёт их в игру жёсткими ссылками, никогда не оставляет игру изменённой наполовину и помогает найти мод, из-за которого игра падает. Перенимает моды у Vortex одной кнопкой — и так же возвращает.
+
+Один файл [b]Modvault.exe[/b], без установки. Русский язык включается в [b]Settings → English interface[/b] (выключить переключатель) — сразу, без перезапуска.
+
+[size=4][b]Чем отличается[/b][/size]
+[list]
+[*][b]Всё или ничего.[/b] Каждое развёртывание сначала записывает план в журнал. Если программа, Windows или питание отказали посередине, при следующем запуске игра вернётся в прежнее состояние.
+[*][b]Находит мод, который ломает игру.[/b] После каждого запуска Modvault читает журнал самой игры и показывает, какие моды выдали ошибки и почему игра упала. Если журнал виновника не называет, [b]«Найти сбойный мод»[/b] ищет его делением пополам: для 140 модов это около 10 запусков игры вместо 140.
+[*][b]Конфликты файлов — с советом.[/b] Modvault называет вид конфликта и говорит, что с ним делать, а не просто сообщает, что два мода меняют один файл.
+[*][b]Дорога обратно к Vortex.[/b] «Перенять у Vortex» — одна кнопка; ещё одна побайтно возвращает развёртывание Vortex.
+[*][b]Моды в разработке — полноправные.[/b] Ссылка на папку проекта становится модом: правки сразу в игре, а мод можно выключать и включать в наборы.
+[/list]
+
+[size=4][b]Возможности[/b][/size]
+
+[b]Надёжное развёртывание[/b]
+[list]
+[*]Моды лежат в хранилище, а не в игре — по умолчанию в папке [i]Modvault[/i] на диске с игрой. В игру они попадают жёсткими ссылками: включение, выключение и смена набора занимают секунды и не занимают места. На другом диске файлы копируются.
+[*]Ваши файлы не теряются: файл игры, который заменил мод, сохраняется и возвращается при снятии мода. Файл мода, изменённый вне Modvault, переносится в отдельную папку, а не удаляется.
+[*]Проверка целостности: «Файлы в игре» сверяют папку игры с набором и поимённо называют изменённые, пропавшие и заменённые игрой файлы. После обновления игры или проверки файлов в Steam всё возвращает одна кнопка [b]«Развернуть»[/b].
+[*]План развёртывания: перед развёртыванием видно, что изменится, — по модам или по файлам.
+[*][i]bundle_database.data[/i] патчится сам — инструментом самого загрузчика модов, на копии. Оригинал сохраняется.
+[/list]
+
+[b]Переход с Vortex[/b]
+[list]
+[*][b]«Перенять у Vortex»:[/b] моды копируются из хранилища Vortex вместе с порядком загрузки, победителями конфликтов и резервными копиями. Файлы игры не меняются.
+[*][b]«Вернуть Vortex»:[/b] возвращает развёртывание Vortex и ссылки nxm://. Моды остаются в хранилище Modvault.
+[/list]
+
+[b]Порядок загрузки и проверки[/b]
+[list]
+[*]Работает с Darktide Mod Loader и Auto Mod Loading and Ordering (AML). Для AML список показывает настоящий порядок, в котором игра загрузила моды в прошлый раз (из журнала загрузчика). Для обычного DML Modvault пишет [i]mod_load_order.txt[/i].
+[*]Сортировка по правилам из файлов .mod самих модов (load_before, load_after, require) с просмотром. Циклы показываются, ни один мод не теряется.
+[*]Недостающие зависимости: «X требует Y» с кнопкой [b]«Включить Y»[/b].
+[*]Перестановка мышью, в том числе нескольких выделенных модов.
+[/list]
+
+[b]Конфликты файлов[/b]
+[list]
+[*]Определяется вид конфликта: файлы одинаковые, два варианта одного мода, мод перекрыт целиком, порядок указал автор, частичное пересечение.
+[*]Совет и действия: выбрать победителя, выключить лишний мод, снять прежний выбор. Закреплённый победитель остаётся им при любом порядке.
+[*]Решённые и безвредные конфликты не засоряют «Требуют внимания».
+[/list]
+
+[b]Поиск мода, который ломает игру[/b]
+[list]
+[*]Диагностика после каждого запуска: какие моды выдали ошибки (сколько и текст первой) и почему игра упала. У мода появляется значок предупреждения и кнопка [b]«Выключить»[/b].
+[*][b]«Найти сбойный мод»[/b] находит наименьший набор модов, с которым проблема повторяется, — один мод или сочетание. Вы запускаете игру и отвечаете «проблема осталась» или «проблемы нет»; после каждого запуска программа читает журнал и подсказывает ответ. Поиск идёт во временном наборе: ваш набор не меняется. Поиск переживает перезапуск и прерывается в любой момент.
+[/list]
+
+[b]Моды вне Modvault и моды в разработке[/b]
+[list]
+[*]Папки модов, которые вы положили в игру сами, видны в списке с пометкой «вне».
+[*][b]«Взять в Modvault»:[/b] мод копируется в хранилище и появляется выключенным; игра не меняется, пока вы его не включите или не нажмёте «Развернуть».
+[*][b]Моды в разработке:[/b] ссылка на папку проекта (junction) становится модом, файлы которого не копируются. Папка проекта не трогается.
+[/list]
+
+[b]Nexus Mods[/b]
+[list]
+[*]Кнопки [b]Mod Manager Download[/b] на этом сайте ставят моды в Modvault (ссылки nxm://, переключаются в настройках; прежний обработчик запоминается и возвращается).
+[*]Проверка обновлений при запуске или по кнопке. С Premium обновления скачиваются сами; без Premium Modvault открывает страницу нужного файла.
+[*]Загрузки продолжаются после обрыва сети и проверяются по размеру и MD5 до попадания в хранилище.
+[*]Столбцы с Nexus: автор, категория, одобрения, скачивания, состояние обновления. Одобрить мод или написать автору можно прямо из окна.
+[*]Коллекции: вставьте ссылку на коллекцию — получится набор; недостающие моды перечислены со ссылками.
+[*]Личный ключ API хранится в диспетчере учётных данных Windows, а не в файле.
+[/list]
+
+[b]Наборы модов и окно[/b]
+[list]
+[*]Наборы — как профили: какие моды включены. Смена набора сразу развёртывает его. Набор можно сохранить в файл и передать.
+[*]Загрузчик, фреймворк и требуемые моды включены в каждом наборе автоматически.
+[*]Значки показывают, откуда мод, что ему нужно, кому нужен он и есть ли нерешённые конфликты.
+[*]Сортировка, выбор столбцов, быстрые фильтры, поиск, избранное и откат версии.
+[*]Моды добавляются перетаскиванием архивов (zip, 7z, rar) в окно.
+[*]Журнал всего, что программа делала с модами и игрой.
+[/list]
+
+[i]На снимках — пробные данные.[/i]
+
+[size=4][b]Что нужно[/b][/size]
+[list]
+[*]Windows 10 или 11, 64-разрядная.
+[*]Microsoft Edge WebView2 Runtime — в Windows 11 встроен. В Windows 10, если окно не открывается, установите его с сайта [url=https://developer.microsoft.com/microsoft-edge/webview2/]Microsoft[/url].
+[*]Warhammer 40,000: Darktide (Steam) с [url=https://www.nexusmods.com/warhammer40kdarktide/mods/19]Darktide Mod Loader[/url].
+[*]Бесплатная учётная запись Nexus Mods и личный ключ API — для функций Nexus.
+[/list]
+
+[size=4][b]Установка[/b][/size]
+[list=1]
+[*]Скачайте файл кнопкой [b]Manual Download[/b] и распакуйте [i]Modvault.exe[/i] в любую папку. Это программа, а не мод: не ставьте её через Vortex и не кладите в папку [i]mods[/i] игры.
+[*]Запустите. Программа пока без цифровой подписи, поэтому SmartScreen может предупредить: нажмите [b]Подробнее → Выполнить в любом случае[/b].
+[*]Пройдите [b]«Начало работы»[/b]: выберите папку игры, переймите моды у Vortex, если пользуетесь им, введите ключ Nexus (строка состояния → Nexus).
+[/list]
+[b]Обновление:[/b] замените старый exe новым — моды и настройки сохранятся.
+[b]Удаление:[/b] в Modvault выключите «Открывать ссылки с сайта Nexus» (или нажмите «Вернуть Vortex»), затем удалите exe, папку хранилища ([i]Modvault[/i] на диске с игрой) и [i]%LOCALAPPDATA%\Modvault[/i].
+
+[size=4][b]Обратная связь[/b][/size]
+[list]
+[*]Ошибки и пожелания: вкладка [b]Bugs[/b] здесь или [url=https://github.com/zemidala/modvault-releases/issues/new/choose]GitHub Issues[/url].
+[*]Вопросы и идеи: вкладка [b]Posts[/b] здесь или [url=https://github.com/zemidala/modvault-releases/discussions]GitHub Discussions[/url].
+[*]Все выпуски с хешами SHA-256: [url=https://github.com/zemidala/modvault-releases/releases]github.com/zemidala/modvault-releases[/url].
+[*]Исходный код (лицензия MIT) и шаги сборки: [url=https://github.com/zemidala/modvault]github.com/zemidala/modvault[/url].
+[/list]
+
+[size=4][b]Changelog[/b][/size]
+[b]{{VERSION}}[/b] — first release on Nexus Mods. Full history: [url=https://github.com/zemidala/modvault-releases/releases]GitHub releases[/url].

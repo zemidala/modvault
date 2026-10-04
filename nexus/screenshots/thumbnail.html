@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Modvault thumbnail</title>
+<style>
+/* Nexus thumbnail 1280x720 (first image of the gallery, shown on the mod card ~385px wide):
+   the real window on top, a brand plate with the ZD mark and the wordmark at the bottom. */
+@font-face{font-family:"Saira Stencil One";src:url("../../ui/frontend/fonts/SairaStencilOne-Regular.ttf")}
+@font-face{font-family:"PT Sans";font-weight:700;src:url("../../ui/frontend/fonts/PTSans-Bold.ttf")}
+html,body{margin:0;width:1280px;height:720px;overflow:hidden;font-synthesis:none}
+body{position:relative;background:#07080b}
+.shot{position:absolute;left:0;top:0;width:1280px;height:853px;background:url("main.png") 0 0 / 1280px auto no-repeat}
+.floor{position:absolute;left:0;right:0;bottom:0;height:330px;background:linear-gradient(180deg,rgba(7,8,11,0),rgba(7,8,11,.94) 48%,#07080b)}
+.glow{position:absolute;inset:0;background:radial-gradient(50% 60% at 0% 100%,rgba(29,77,255,.34),transparent 70%),radial-gradient(40% 60% at 100% 100%,rgba(255,106,20,.22),transparent 70%)}
+.brand{position:absolute;left:48px;bottom:44px;display:flex;align-items:center;gap:32px}
+.brand img{width:150px;height:150px;flex:none}
+.wm{font-family:"Saira Stencil One",sans-serif;font-size:118px;line-height:.92;color:#fff;letter-spacing:.02em;white-space:nowrap}
+.wm i{font-style:normal;color:#ff6a14}
+.wm small{display:block;font:700 22px "PT Sans",sans-serif;letter-spacing:.34em;color:#c3c8d6;margin-top:18px;white-space:nowrap}
+.line{position:absolute;left:0;right:0;bottom:0;height:6px;background:#ff6a14}
+</style></head><body>
+<div class="shot"></div><div class="floor"></div><div class="glow"></div>
+<div class="brand">
+	<img src="file:///G:/Projects/HomeNetwork/branding/final/svg/zd1.svg" alt="">
+	<div class="wm"><i>M</i>ODVAULT<small>MOD MANAGER · DARKTIDE</small></div>
+</div>
+<div class="line"></div>
+</body></html>
