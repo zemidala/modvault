@@ -8,9 +8,11 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/zemidala/modvault/core/deploy"
 	"github.com/zemidala/modvault/core/fsx"
+	"github.com/zemidala/modvault/core/manifest"
 	"github.com/zemidala/modvault/core/profile"
 	"github.com/zemidala/modvault/core/store"
 	"github.com/zemidala/modvault/i18n"
@@ -26,9 +28,6 @@ const (
 	outsideLink     = "link"     // ссылка на папку — обычно мод в разработке
 	outsideLeftover = "leftover" // пустая папка, оставшаяся от Vortex
 )
-
-// asideDir — папка в игре, куда «Взять в Modvault» на время отодвигает мод.
-const asideDir = ".modvault-aside"
 
 // vortexLeftover — метка, которую Vortex кладёт в каждую папку, созданную им.
 const vortexLeftover = "__folder_managed_by_vortex"
@@ -297,14 +296,6 @@ func blockedIssues(changes []linkChange) []Issue {
 	return out
 }
 
-// enableIn включает мод в наборе; новый мод набор мог уже подхватить сам.
-func enableIn(p *profile.Profile, v store.Version) error {
-	if p.Index(v.ModID) >= 0 {
-		return p.SetEnabled(v.ModID, true)
-	}
-	return p.Add(v.ModID, v.ID)
-}
-
 // OutsideResult — состояние окна после действия с модом вне Modvault.
 type OutsideResult struct {
 	State   State  `json:"state"`
@@ -312,8 +303,9 @@ type OutsideResult struct {
 }
 
 // TakeOutside берёт в Modvault мод, положенный в игру вручную: его файлы
-// переходят в хранилище, мод включается в текущем наборе и остаётся в игре
-// таким же — теперь его можно выключать, переставлять и включать в наборы.
+// копируются в хранилище, а файлы в игре программа записывает как свои —
+// они остаются на месте. Больше ничего: в наборе мод выключен, игра не
+// меняется до «Развернуть» или пока мод не включат.
 func (a *Manager) TakeOutside(id string) (OutsideResult, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -324,21 +316,26 @@ func (a *Manager) TakeOutside(id string) (OutsideResult, error) {
 	if err != nil {
 		return OutsideResult{}, err
 	}
-	deployed, ok := a.deployedProfile()
-	if !ok {
-		return OutsideResult{}, i18n.NewError("сначала разверните набор: так программа знает, что уже лежит в игре")
-	}
 	game := a.settings.GameDir
-	rel := a.modsPath(o.Folder)
-	folder := filepath.Join(game, filepath.FromSlash(rel))
+	folder := filepath.Join(game, filepath.FromSlash(a.modsPath(o.Folder)))
 	var files []string
+	dirs := []string{a.modsPath(o.Folder)}
 	err = filepath.WalkDir(folder, func(p string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() || d.Name() == vortexLeftover {
+		if err != nil || d.Name() == vortexLeftover {
 			return err
 		}
 		r, err := filepath.Rel(game, p)
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if p != folder {
+				dirs = append(dirs, filepath.ToSlash(r))
+			}
+			return nil
+		}
 		files = append(files, filepath.ToSlash(r))
-		return err
+		return nil
 	})
 	if err != nil {
 		return OutsideResult{}, err
@@ -355,70 +352,46 @@ func (a *Manager) TakeOutside(id string) (OutsideResult, error) {
 	if err != nil {
 		return OutsideResult{}, err
 	}
-	undoStore := func() { a.store.RemoveMod(v.ModID, true) }
-
-	p, _, err := a.loadProfile()
-	if err == nil {
-		err = enableIn(&p, v)
+	// Файлы в игре — теперь файлы этого мода: так программа сможет убрать их,
+	// когда мод выключен, и положить снова, когда включат.
+	err = func() error {
+		m, err := a.deployer.Manifest()
+		if err != nil {
+			return err
+		}
+		now := time.Now().UTC().Truncate(time.Second)
+		for _, f := range v.Files {
+			if err := m.Set(manifest.Entry{Path: f.Path, ModID: v.ModID, VersionID: v.ID, Hash: f.Hash, Size: f.Size, Method: manifest.MethodCopy, Deployed: now}); err != nil {
+				return err
+			}
+		}
+		for _, d := range dirs {
+			if err := m.AddDir(d); err != nil {
+				return err
+			}
+		}
+		return m.Save()
+	}()
+	if err != nil {
+		a.store.RemoveMod(v.ModID, true)
+		return OutsideResult{}, err
 	}
+	p, _, err := a.loadProfile() // новый мод входит в набор выключенным
 	if err == nil {
 		err = a.profiles.Save(p)
 	}
 	if err != nil {
-		undoStore()
 		return OutsideResult{}, err
 	}
-	undoProfile := func() {
-		if p.Remove(v.ModID) == nil {
-			a.profiles.Save(p)
-		}
-		undoStore()
-	}
-
-	// Папку убираем с дороги, а развёртывание кладёт на её место те же файлы
-	// из хранилища. Сбой — и папка возвращается. Отодвигаем внутри самой
-	// игры: на том же диске переименование срабатывает всегда.
-	asideRoot := filepath.Join(game, asideDir)
-	aside := filepath.Join(asideRoot, o.Folder)
-	os.RemoveAll(aside)
-	defer os.Remove(asideRoot) // пустую папку не оставляем
-	if err := os.MkdirAll(asideRoot, 0o755); err != nil {
-		undoProfile()
-		return OutsideResult{}, err
-	}
-	if err := os.Rename(folder, aside); err != nil {
-		undoProfile()
-		return OutsideResult{}, i18n.Errorf("папку %s не удалось освободить: %w", folder, err)
-	}
-	enableIn(&deployed, v)
-	sources, _, err := a.sources(deployed)
-	var plan *deploy.Plan
-	if err == nil {
-		plan, err = a.deployer.Plan(sources, deployed.Winners)
-	}
-	if err == nil {
-		_, err = a.deployer.Apply(plan)
-	}
-	if err != nil {
-		if rerr := os.Rename(aside, folder); rerr != nil {
-			err = errors.Join(err, i18n.Errorf("папка мода осталась в %s", aside))
-		}
-		undoProfile()
-		return OutsideResult{}, err
-	}
-	a.recovery = deploy.NothingToRecover
-	a.rememberProfile(deployed)
-	fsx.Trash(aside) // файлы мода уже в хранилище и в игре
-
-	msg := i18n.Sprintf("«%s» теперь в Modvault: файлы в хранилище, мод включён в наборе «%s» и остаётся в игре", v.Name, p.Name)
+	msg := i18n.Sprintf("«%s» теперь в Modvault, в наборе выключен. Его файлы пока в игре: включите мод, чтобы он остался, или нажмите «Развернуть» — программа уберёт его из игры", v.Name)
 	a.note(EventInstall, msg)
 	st, err := a.state()
 	return OutsideResult{State: st, Message: msg}, err
 }
 
-// LinkOutside подключает ссылку на папку как мод в разработке: в игре
-// остаётся ссылка на папку проекта, правки сразу видны в игре, а мод можно
-// выключать и включать в наборы.
+// LinkOutside подключает ссылку на папку как мод в разработке. Больше
+// ничего: в наборе мод выключен, ссылка в игре остаётся до «Развернуть» или
+// пока мод не включат.
 func (a *Manager) LinkOutside(id string) (OutsideResult, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -433,10 +406,7 @@ func (a *Manager) LinkOutside(id string) (OutsideResult, error) {
 	if err != nil {
 		return OutsideResult{}, err
 	}
-	p, _, err := a.loadProfile()
-	if err == nil {
-		err = enableIn(&p, v)
-	}
+	p, _, err := a.loadProfile() // новый мод входит в набор выключенным
 	if err == nil {
 		err = a.profiles.Save(p)
 	}
@@ -444,18 +414,7 @@ func (a *Manager) LinkOutside(id string) (OutsideResult, error) {
 		a.store.RemoveMod(v.ModID, true)
 		return OutsideResult{}, err
 	}
-	// Мод уже в игре: служебные файлы (порядок загрузки) догоняют его сразу.
-	if deployed, ok := a.deployedProfile(); ok && enableIn(&deployed, v) == nil {
-		if sources, _, err := a.sources(deployed); err == nil {
-			if plan, err := a.deployer.Plan(sources, deployed.Winners); err == nil && !plan.Empty() {
-				if _, err := a.deployer.Apply(plan); err == nil {
-					a.recovery = deploy.NothingToRecover
-					a.rememberProfile(deployed)
-				}
-			}
-		}
-	}
-	msg := i18n.Sprintf("«%s» подключён как мод в разработке: в игре ссылка на %s. Его можно выключать и включать в наборы", v.Name, o.Target)
+	msg := i18n.Sprintf("«%s» подключён как мод в разработке, в наборе выключен. Ссылка на %s пока в игре: включите мод, чтобы она осталась, или нажмите «Развернуть» — ссылка уберётся", v.Name, o.Target)
 	a.note(EventInstall, msg)
 	st, err := a.state()
 	return OutsideResult{State: st, Message: msg}, err

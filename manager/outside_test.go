@@ -82,10 +82,16 @@ func TestOutsideFolders(t *testing.T) {
 	}
 }
 
-// Ручной мод переходит в хранилище и остаётся в игре теми же файлами.
+// «Взять в Modvault» только берёт мод: в наборе он выключен, файлы в игре не
+// тронуты. Дальше им управляют как любым другим модом.
 func TestTakeOutside(t *testing.T) {
 	a, game, _ := outsideGame(t)
-	before := snapshot(t, filepath.Join(game, "mods", "manual_mod"))
+	dir := filepath.Join(game, "mods", "manual_mod")
+	before := snapshot(t, dir)
+	same := func() bool {
+		after := snapshot(t, dir)
+		return len(after) == len(before) && after["manual_mod.mod"] == before["manual_mod.mod"] && after["scripts/manual_mod.lua"] == before["scripts/manual_mod.lua"]
+	}
 	res, err := a.TakeOutside(outsidePrefix + "manual_mod")
 	if err != nil {
 		t.Fatal(err)
@@ -94,29 +100,40 @@ func TestTakeOutside(t *testing.T) {
 		t.Error("мод всё ещё вне Modvault")
 	}
 	m := findMod(t, res.State, "manual_mod")
-	if !m.Enabled || m.State != "Развёрнут" || res.State.PlanTitle != "" {
-		t.Errorf("после переноса: %+v, план %q %v", m, res.State.PlanTitle, res.State.Plan)
+	if m.Enabled || m.State != "Выключен, ждёт развёртывания" || !same() {
+		t.Errorf("после переноса: %+v, файлы %v", m, snapshot(t, dir))
 	}
-	if after := snapshot(t, filepath.Join(game, "mods", "manual_mod")); len(after) != len(before) || after["manual_mod.mod"] != before["manual_mod.mod"] || after["scripts/manual_mod.lua"] != before["scripts/manual_mod.lua"] {
-		t.Errorf("файлы в игре: было %v, стало %v", before, after)
-	}
-	// Теперь мод выключается, как любой другой.
-	if _, err := a.SetEnabled("manual_mod", false); err != nil {
+	// Включили — мод остаётся в игре; ждёт только порядок загрузки.
+	s, err := a.SetEnabled("manual_mod", true)
+	if err != nil {
 		t.Fatal(err)
 	}
+	if m := findMod(t, s, "manual_mod"); m.State != "Развёрнут" || !onlyLoadOrder(s.Plan) {
+		t.Errorf("после включения: %+v, план %v", m, s.Plan)
+	}
+	// Выключили и развернули — мод ушёл из игры.
+	a.SetEnabled("manual_mod", false)
 	if _, err := a.Deploy(); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(game, "mods", "manual_mod", "manual_mod.mod")); !os.IsNotExist(err) {
+	if _, err := os.Stat(dir); !os.IsNotExist(err) {
 		t.Errorf("выключенный мод остался в игре: %v", err)
+	}
+	// Включили снова — вернулся теми же файлами.
+	a.SetEnabled("manual_mod", true)
+	if _, err := a.Deploy(); err != nil {
+		t.Fatal(err)
+	}
+	if !same() {
+		t.Errorf("мод вернулся не теми файлами: %v", snapshot(t, dir))
 	}
 	if _, err := a.TakeOutside(outsidePrefix + "manual_mod"); err == nil {
 		t.Error("взят мод, которого вне Modvault уже нет")
 	}
 }
 
-// Ссылка на папку проекта становится модом в разработке: его выключают и
-// включают, а папка проекта не страдает.
+// «Подключить как мод в разработке» только подключает: в наборе мод
+// выключен, ссылка в игре на месте. Папка проекта не страдает.
 func TestLinkOutside(t *testing.T) {
 	a, game, project := outsideGame(t)
 	link := filepath.Join(game, "mods", "devmod")
@@ -125,44 +142,51 @@ func TestLinkOutside(t *testing.T) {
 		t.Fatal(err)
 	}
 	m := findMod(t, res.State, "devmod")
-	if !m.Enabled || m.State != "Развёрнут" || !fsx.SamePath(m.Link, project) || res.State.PlanTitle != "" {
-		t.Errorf("после подключения: %+v, план %v", m, res.State.Plan)
+	if m.Enabled || m.State != "Выключен, ждёт развёртывания" || !fsx.SamePath(m.Link, project) {
+		t.Errorf("после подключения: %+v", m)
+	}
+	if cur, ok := fsx.LinkTarget(link); !ok || !fsx.SamePath(cur, project) {
+		t.Errorf("подключение тронуло ссылку: %q, %v", cur, ok)
+	}
+	if !strings.Contains(strings.Join(res.State.Plan, " | "), "devmod — убрать ссылку на папку проекта") {
+		t.Errorf("план: %v", res.State.Plan)
+	}
+	if _, ok := outsideRow(res.State, "devmod"); ok {
+		t.Error("подключённый мод показан как чужой")
 	}
 
-	s, err := a.SetEnabled("devmod", false)
+	// Включили — ссылка остаётся; ждёт только порядок загрузки.
+	s, err := a.SetEnabled("devmod", true)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(strings.Join(s.Plan, " | "), "devmod — убрать ссылку на папку проекта") || s.PlanTitle == "" {
-		t.Errorf("план после выключения: %q %v", s.PlanTitle, s.Plan)
+	if m := findMod(t, s, "devmod"); m.State != "Развёрнут" || !onlyLoadOrder(s.Plan) {
+		t.Errorf("после включения: %+v, план %v", m, s.Plan)
 	}
+	// Правка в проекте сразу видна в игре.
+	os.WriteFile(filepath.Join(project, "new.lua"), []byte("-- новое"), 0o644)
+	if data, err := os.ReadFile(filepath.Join(link, "new.lua")); err != nil || string(data) != "-- новое" {
+		t.Errorf("правка проекта в игре: %q, %v", data, err)
+	}
+
+	// Выключили и развернули — ссылки нет, проект цел.
+	a.SetEnabled("devmod", false)
 	if _, err := a.Deploy(); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := fsx.LinkTarget(link); ok {
 		t.Error("ссылка осталась у выключенного мода")
 	}
-	if _, err := os.Stat(filepath.Join(project, "devmod.mod")); err != nil {
+	if _, err := os.Stat(filepath.Join(project, "new.lua")); err != nil {
 		t.Errorf("папка проекта пострадала: %v", err)
 	}
-	if _, ok := outsideRow(state(t, a), "devmod"); ok {
-		t.Error("выключенный мод в разработке показан как чужой")
-	}
-
-	if _, err := a.SetEnabled("devmod", true); err != nil {
-		t.Fatal(err)
-	}
-	res2, err := a.Deploy()
-	if err != nil {
+	// Включили и развернули — ссылка вернулась.
+	a.SetEnabled("devmod", true)
+	if _, err := a.Deploy(); err != nil {
 		t.Fatal(err)
 	}
 	if cur, ok := fsx.LinkTarget(link); !ok || !fsx.SamePath(cur, project) {
-		t.Errorf("ссылка не вернулась: %q, %v; %q", cur, ok, res2.Message)
-	}
-	// Правка в проекте сразу видна в игре.
-	os.WriteFile(filepath.Join(project, "new.lua"), []byte("-- новое"), 0o644)
-	if data, err := os.ReadFile(filepath.Join(link, "new.lua")); err != nil || string(data) != "-- новое" {
-		t.Errorf("правка проекта в игре: %q, %v", data, err)
+		t.Errorf("ссылка не вернулась: %q, %v", cur, ok)
 	}
 
 	// Удаление мода снимает ссылку, папка проекта остаётся.
@@ -177,10 +201,9 @@ func TestLinkOutside(t *testing.T) {
 	}
 }
 
-// Устаревшая запись о развёртывании не мешает: удалённый мод из неё выпадает,
-// и обновление или перенос мода в хранилище всё равно доходят до игры.
+// Устаревшая запись о развёртывании не мешает: удалённый мод из неё выпадает.
 func TestStaleDeployedProfile(t *testing.T) {
-	a, game, _ := outsideGame(t)
+	a, _, _ := outsideGame(t)
 	a.addArchive(writeZip(t, "Healthbars.zip", map[string]string{"mods/hb/hb.mod": "1"}))
 	if _, err := a.Deploy(); err != nil {
 		t.Fatal(err)
@@ -192,10 +215,14 @@ func TestStaleDeployedProfile(t *testing.T) {
 	if !ok || deployed.Index("healthbars") >= 0 {
 		t.Fatalf("запись о развёртывании: %+v, %v", deployed.Entries, ok)
 	}
-	if _, err := a.TakeOutside(outsidePrefix + "manual_mod"); err != nil {
-		t.Fatalf("перенос при устаревшей записи: %v", err)
+}
+
+// onlyLoadOrder — план меняет разве что порядок загрузки.
+func onlyLoadOrder(plan []string) bool {
+	for _, line := range plan {
+		if !strings.HasPrefix(line, "Порядок загрузки модов") {
+			return false
+		}
 	}
-	if _, err := os.Stat(filepath.Join(game, asideDir)); !os.IsNotExist(err) {
-		t.Errorf("временная папка осталась в игре: %v", err)
-	}
+	return true
 }
