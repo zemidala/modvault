@@ -245,7 +245,7 @@ window.MODVAULT_EN = {
   "Мод лежит в игре вне Modvault, игра грузит его всегда. Возьмите его в Modvault, чтобы выключать и включать в наборы": "The mod is in the game outside Modvault, and the game always loads it. Take it into Modvault to disable it and add it to sets",
   "Мод переходит в хранилище…": "Moving the mod into the store…",
   "Подключить как мод в разработке": "Connect as a mod in development",
-  "вне": "outside",
+  "вне": "out",
   "Нужен модам": "Needed by",
   "Нужен модам: ": "Needed by: ",
   "Требует: ": "Requires: ",
