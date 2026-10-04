@@ -18,6 +18,24 @@ function el(tag, className, text) {
   return node;
 }
 
+// Значки списка модов: контуры 16×16 цветом текста.
+const ICONS = {
+  nexus: '<path d="M8 1.5 14 5v6l-6 3.5L2 11V5z"/>',
+  disk: '<rect x="2" y="2.5" width="12" height="3.5"/><path d="M3 6v7.5h10V6M6.5 9h3"/>',
+  link: '<path d="M6.5 9.5l3-3M7.5 4.5l1-1a2.8 2.8 0 0 1 4 4l-1 1M8.5 11.5l-1 1a2.8 2.8 0 0 1-4-4l1-1"/>',
+  manual: '<path d="M1.5 3.5h5l1.5 1.5h6.5v8h-13z"/>',
+  requires: '<path d="M1.5 8h8M6.5 5l3 3-3 3M13 2.5v11"/>',
+  needed: '<path d="M14.5 8h-8M9.5 5l-3 3 3 3M3 2.5v11"/>',
+  conflict: '<path d="M2.5 2.5l11 11M13.5 2.5l-11 11M2.5 10.5l3 3M10.5 13.5l3-3"/>',
+};
+
+// icon — значок из ICONS с подсказкой.
+function icon(name, title) {
+  const node = el("span", "ico ico-" + name);
+  node.innerHTML = `<svg viewBox="0 0 16 16" aria-hidden="true">${ICONS[name]}</svg>`;
+  if (title) node.title = title;
+  return node;
+}
 
 let toastTimer = 0;
 function toast(text, level, sticky) {

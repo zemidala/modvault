@@ -449,9 +449,14 @@ func (a *Manager) realState() (State, error) {
 		if row.Version == "" {
 			row.Version = "—"
 		}
-		if v.Link != "" {
-			row.Source, row.Link = i18n.Sprintf("папка проекта: %s", v.Link), v.Link
+		row.Kind = "disk"
+		switch {
+		case v.Link != "":
+			row.Source, row.Link, row.Kind = i18n.Sprintf("папка проекта: %s", v.Link), v.Link, "link"
+		case v.NexusID != 0:
+			row.Kind = "nexus"
 		}
+		row.Requires, row.Needed = []string{}, []string{}
 		switch {
 		case e.Enabled && plan == nil:
 			row.State, row.Level = i18n.T("В хранилище"), LevelOK
@@ -530,8 +535,25 @@ func (a *Manager) realState() (State, error) {
 			s.Mods[i].RunErrors, s.Mods[i].RunError = t.count, t.first
 		}
 	}
-	orderIssues, note := a.orderIssues(p)
+	orderIssues, note, requires := a.orderIssues(p)
 	s.Issues = append(s.Issues, orderIssues...)
+	rowOf := make(map[string]*Mod, len(s.Mods))
+	for i := range s.Mods {
+		rowOf[s.Mods[i].ID] = &s.Mods[i]
+	}
+	for id, deps := range requires {
+		if row, ok := rowOf[id]; ok {
+			row.Requires = deps
+			names := make([]string, len(deps))
+			for i, d := range deps {
+				names[i] = names0(rowOf, d)
+				if dep, ok := rowOf[d]; ok {
+					dep.Needed = append(dep.Needed, id)
+				}
+			}
+			row.DependsOn = strings.Join(names, ", ")
+		}
+	}
 	s.OrderNote = note
 	if plan != nil {
 		s.Issues = append(s.Issues, a.driftIssues(plan, names)...)
@@ -539,7 +561,6 @@ func (a *Manager) realState() (State, error) {
 	}
 	s.Issues = append(s.Issues, blockedIssues(links)...)
 	outsideList := a.outsideFolders()
-	s.Mods = append(s.Mods, outsideRows(outsideList)...)
 	if issue, ok := leftoverIssue(outsideList); ok {
 		s.Issues = append(s.Issues, issue)
 	}
@@ -547,7 +568,23 @@ func (a *Manager) realState() (State, error) {
 	if plan != nil {
 		conflictList = a.conflicts(plan, p)
 		s.Issues = append(s.Issues, conflictIssues(conflictList)...)
+		for _, c := range conflictList {
+			if c.Resolved {
+				continue
+			}
+			for _, m := range c.Mods {
+				if row, ok := rowOf[m.ID]; ok {
+					row.Conflicts++
+					if row.Conflict == "" {
+						row.Conflict = c.Key
+					}
+				}
+			}
+		}
 	}
+	// Строки модов вне Modvault — последними: выше rowOf держит указатели
+	// на строки, и добавление раньше могло бы перенести их в новый массив.
+	s.Mods = append(s.Mods, outsideRows(outsideList)...)
 
 	// Скрытые замечания не считаются и в строке состояния.
 	s.Issues, s.HiddenIssues = a.splitHidden(s.Issues)
@@ -802,4 +839,12 @@ func (a *Manager) IgnoreManagers() (State, error) {
 		return State{}, err
 	}
 	return a.state()
+}
+
+// names0 — название мода строки id; если строки нет — сам id.
+func names0(rows map[string]*Mod, id string) string {
+	if row, ok := rows[id]; ok {
+		return row.Name
+	}
+	return id
 }

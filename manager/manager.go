@@ -136,6 +136,17 @@ type Mod struct {
 	// Link — папка, на которую ведёт ссылка: у мода в разработке и у
 	// ссылки вне Modvault.
 	Link string `json:"link"`
+	// Kind — откуда мод: "nexus", "disk" (архив или файлы с диска), "link"
+	// (мод в разработке); у модов вне Modvault — пусто, вид в Outside.
+	Kind string `json:"kind"`
+	// Requires — моды набора, без которых этот не работает; Needed — моды,
+	// которым нужен этот. По правилам require из файлов .mod.
+	Requires []string `json:"requires"`
+	Needed   []string `json:"needed"`
+	// Conflict — нерешённый конфликт файлов с участием мода (ключ для
+	// разбора), Conflicts — сколько таких конфликтов.
+	Conflict  string `json:"conflict"`
+	Conflicts int    `json:"conflicts"`
 }
 
 // Manager — Modvault целиком. Методы с заглавной буквы безопасны для

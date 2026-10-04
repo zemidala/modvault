@@ -3,10 +3,12 @@ package manager
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
 	"github.com/zemidala/modvault/core/profile"
+	"github.com/zemidala/modvault/core/store"
 	"github.com/zemidala/modvault/game"
 	"github.com/zemidala/modvault/i18n"
 	"github.com/zemidala/modvault/rules"
@@ -24,12 +26,16 @@ func (a *Manager) orderInfo(p profile.Profile) ([]ordered, game.Ordering, error)
 	mods := make([]ordered, 0, len(p.Entries))
 	infos := make([]game.ModInfo, 0, len(p.Entries))
 	files := map[string]map[string]string{} // мод → путь в игре → файл в хранилище
+	links := map[string]store.Version{}     // мод в разработке: файлы — в папке проекта
 	for _, e := range p.Entries {
 		v, err := a.store.Get(e.ModID, e.VersionID)
 		if err != nil {
 			return nil, game.Ordering{}, err
 		}
 		o := ordered{entry: e, name: v.Name}
+		if v.Link != "" {
+			links[e.ModID] = v
+		}
 		if l, err := a.layout(v); err == nil {
 			infos = append(infos, game.ModInfo{ModID: e.ModID, Enabled: e.Enabled, Layout: l})
 			if l.Role == game.RoleNone {
@@ -46,6 +52,11 @@ func (a *Manager) orderInfo(p profile.Profile) ([]ordered, game.Ordering, error)
 	ord := a.game.Ordering(game.OrderContext{
 		Dir: a.settings.GameDir, Mods: infos,
 		Read: func(modID, gamePath string) ([]byte, error) {
+			if v, ok := links[modID]; ok {
+				if rest, ok := strings.CutPrefix(gamePath, v.LinkPath+"/"); ok {
+					return os.ReadFile(filepath.Join(v.Link, filepath.FromSlash(rest)))
+				}
+			}
 			src, ok := files[modID][strings.ToLower(gamePath)]
 			if !ok {
 				return nil, os.ErrNotExist
@@ -187,10 +198,12 @@ func (a *Manager) Sort() (State, error) {
 
 // orderIssues — замечания о зависимостях и порядке — и пояснение, кто
 // задаёт порядок загрузки.
-func (a *Manager) orderIssues(p profile.Profile) ([]Issue, string) {
+// Третье значение — зависимости: мод → моды профиля, без которых он не
+// работает (по правилам require).
+func (a *Manager) orderIssues(p profile.Profile) ([]Issue, string, map[string][]string) {
 	mods, ord, err := a.orderInfo(p)
 	if err != nil {
-		return nil, ""
+		return nil, "", nil
 	}
 	var issues []Issue
 	loaded := loadedFolders(mods)
@@ -207,6 +220,16 @@ func (a *Manager) orderIssues(p profile.Profile) ([]Issue, string) {
 			return m.name
 		}
 		return folder
+	}
+
+	requires := map[string][]string{}
+	for _, r := range ord.Rules {
+		from, ok1 := owner[strings.ToLower(r.Mod)]
+		to, ok2 := owner[strings.ToLower(r.Other)]
+		if r.Kind != rules.Requires || !ok1 || !ok2 || from.entry.ModID == to.entry.ModID || slices.Contains(requires[from.entry.ModID], to.entry.ModID) {
+			continue
+		}
+		requires[from.entry.ModID] = append(requires[from.entry.ModID], to.entry.ModID)
 	}
 
 	for _, r := range rules.Missing(loaded, ord.Rules) {
@@ -241,7 +264,7 @@ func (a *Manager) orderIssues(p profile.Profile) ([]Issue, string) {
 		if !ord.LastOrderTime.IsZero() {
 			note += i18n.T(" «Отсортировать по правилам» покажет порядок последнего запуска игры (") + ord.LastOrderTime.Format("02.01.2006 15:04") + ")."
 		}
-		return issues, note
+		return issues, note, requires
 	}
 	if n := len(rules.Violations(loaded, ord.Rules)); n > 0 {
 		issues = append(issues, Issue{
@@ -250,5 +273,5 @@ func (a *Manager) orderIssues(p profile.Profile) ([]Issue, string) {
 			Level:  LevelWarn, Action: i18n.T("Отсортировать"), Command: "Sort",
 		})
 	}
-	return issues, ""
+	return issues, "", requires
 }

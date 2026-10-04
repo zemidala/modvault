@@ -55,6 +55,7 @@ function wire() {
     const anchor = menu.dataset.anchor ? document.getElementById(menu.dataset.anchor) : null;
     if (!anchor || !anchor.contains(event.target)) hideMenu();
   });
+  renderLegend();
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") hideMenu();
     // Ctrl+A в списке модов выделяет все видные моды, Esc снимает выделение;

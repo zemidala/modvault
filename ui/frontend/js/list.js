@@ -260,6 +260,8 @@ function renderMods() {
 
   // Избранные моды стоят первыми, дальше — по выбранному столбцу; номер у
   // каждого — его место в порядке загрузки.
+  const chosen = state.mods.find((m) => m.id === selectedId);
+  const related = { requires: new Set(chosen ? chosen.requires || [] : []), needed: new Set(chosen ? chosen.needed || [] : []) };
   const shown = state.mods.map((mod, index) => ({ mod, index }));
   sortMods(shown);
   renderSortHeads();
@@ -302,6 +304,9 @@ function renderMods() {
     row.dataset.id = mod.id;
 
     row.classList.toggle("favorite", !!mod.favorite);
+    // У выбранного мода подсвечены связанные: что ему нужно и кому нужен он.
+    row.classList.toggle("rel-requires", related.requires.has(mod.id));
+    row.classList.toggle("rel-needed", related.needed.has(mod.id));
     const nameCell = el("td", "name");
     nameCell.title = mod.name + ((mod.sets || []).length ? t(" — в наборах: ") + mod.sets.join(", ") : "");
     const star = el("button", "star", mod.favorite ? "★" : "☆");
@@ -313,7 +318,17 @@ function renderMods() {
       call(() => backend().SetFavorite([mod.id], !mod.favorite));
     });
     if (mod.outside) star.hidden = true; // избранное — для модов хранилища
-    nameCell.append(star, mod.name);
+    nameCell.append(star, kindIcon(mod), mod.name);
+    // Связи мода: что ему нужно, кому нужен он, с кем он спорит за файлы.
+    if ((mod.requires || []).length) {
+      nameCell.append(badge("requires", mod.requires.length, t("Требует: ") + modNames(mod.requires), () => selectMod(mod.id)));
+    }
+    if ((mod.needed || []).length) {
+      nameCell.append(badge("needed", mod.needed.length, t("Нужен модам: ") + modNames(mod.needed), () => selectMod(mod.id)));
+    }
+    if (mod.conflicts) {
+      nameCell.append(badge("conflict", mod.conflicts, t`Конфликт файлов: ${mod.conflicts} — щёлкните, чтобы разобрать`, () => run("ChooseWinner", mod.conflict)));
+    }
     if (mod.runErrors) {
       // Игра сама записала, что этот мод выдавал ошибки в прошлом запуске.
       const warn = el("span", "run-errors", `⚠ ${mod.runErrors}`);
@@ -493,10 +508,64 @@ function renderCard() {
   $("card-nexus").hidden = !mod.nexusId;
   $("card-message").hidden = !canMessage(mod);
 
+  const needed = mod.needed || [];
+  $("card-needed-label").hidden = !needed.length;
+  $("card-needed").hidden = !needed.length;
+  $("card-needed").textContent = modNames(needed);
   const hasDeps = mod.dependsOn !== "";
   $("card-depends-label").hidden = !hasDeps;
   $("card-depends").hidden = !hasDeps;
   $("card-depends").textContent = mod.dependsOn;
+}
+
+// renderLegend — пояснение к значкам над списком.
+function renderLegend() {
+  const items = [
+    [icon("nexus"), t("с Nexus")], [icon("disk"), t("с диска")], [icon("link"), t("ссылка на папку проекта")],
+    [icon("manual"), t("положен вручную")], [icon("requires"), t("требует другие моды")], [icon("needed"), t("нужен другим")],
+    [icon("conflict"), t("конфликт файлов")],
+    [el("span", "swatch swatch-requires"), t("у выбранного: что ему нужно")], [el("span", "swatch swatch-needed"), t("кому нужен он")],
+  ];
+  $("legend").replaceChildren(...items.map(([mark, text]) => {
+    const item = el("span");
+    item.append(mark, text);
+    return item;
+  }));
+}
+
+// kindIcon — значок того, откуда мод.
+function kindIcon(mod) {
+  if (mod.outside === "link") return icon("link", t`Ссылка на папку вне Modvault: ${mod.link}`);
+  if (mod.outside) return icon("manual", t("Положен в игру вручную, вне Modvault"));
+  if (mod.kind === "link") return icon("link", t`Мод в разработке: в игре ссылка на ${mod.link}`);
+  if (mod.kind === "nexus") return icon("nexus", t("Мод с Nexus Mods"));
+  return icon("disk", t("Мод добавлен с диска"));
+}
+
+// badge — значок связи с числом; щелчок выполняет action.
+function badge(name, n, title, action) {
+  const node = el("button", "badge badge-" + name);
+  node.append(icon(name), String(n));
+  node.title = title;
+  node.setAttribute("aria-label", title);
+  node.addEventListener("click", (event) => {
+    event.stopPropagation();
+    action();
+  });
+  return node;
+}
+
+// modNames — названия модов по идентификаторам.
+function modNames(ids) {
+  return ids.map((id) => (state.mods.find((m) => m.id === id) || { name: id }).name).join(", ");
+}
+
+// selectMod выбирает мод: открывается карточка, связанные подсвечены.
+function selectMod(id) {
+  selectedId = id;
+  hideFiles();
+  renderMods();
+  renderCard();
 }
 
 // takeLabel — как взять мод вне Modvault под управление.

@@ -133,7 +133,7 @@ func outsideRows(list []outside) []Mod {
 		}
 		row := Mod{
 			ID: outsidePrefix + o.Folder, Name: o.Folder, Version: "—", Enabled: true,
-			Sets: []string{}, Outside: o.Kind, Link: o.Target,
+			Sets: []string{}, Requires: []string{}, Needed: []string{}, Outside: o.Kind, Link: o.Target,
 			State: i18n.T("В игре, вне Modvault"), Level: LevelOK,
 			Source: i18n.T("положен в игру вручную"),
 		}

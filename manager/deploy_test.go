@@ -314,3 +314,24 @@ func TestVortexDrift(t *testing.T) {
 		t.Errorf("план: %v", s.Plan)
 	}
 }
+
+// Строка мода говорит, откуда он, что ему нужно, кому нужен он и с кем он
+// спорит за файлы.
+func TestModRelations(t *testing.T) {
+	a, _, g := newGame(t)
+	a.addArchive(writeZip(t, "dml.zip", dmlArchive))
+	a.addArchive(writeZip(t, "Base Lib.zip", map[string]string{"mods/baselib/baselib.mod": "return {}", "bundle/shared.patch_001": "lib"}))
+	a.addArchive(writeZip(t, "Fancy HUD.zip", map[string]string{"mods/fancyhud/fancyhud.mod": `return { require = { "baselib" } }`, "bundle/shared.patch_001": "hud"}))
+	a.setGame(g)
+	s := state(t, a)
+	hud, lib := findMod(t, s, "fancy_hud"), findMod(t, s, "base_lib")
+	if strings.Join(hud.Requires, ",") != "base_lib" || strings.Join(lib.Needed, ",") != "fancy_hud" || hud.DependsOn != "Base Lib" {
+		t.Errorf("зависимости: требует %v (%q), нужен %v", hud.Requires, hud.DependsOn, lib.Needed)
+	}
+	if hud.Kind != "disk" || lib.Kind != "disk" {
+		t.Errorf("источник: %q, %q", hud.Kind, lib.Kind)
+	}
+	if hud.Conflicts != 1 || lib.Conflicts != 1 || hud.Conflict == "" {
+		t.Errorf("конфликт: %d %q, %d", hud.Conflicts, hud.Conflict, lib.Conflicts)
+	}
+}
