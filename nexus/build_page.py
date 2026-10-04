@@ -43,7 +43,7 @@ data = {
         [
             "Hello,",
             "",
-            "Mod page: https://www.nexusmods.com/warhammer40kdarktide/mods/НОМЕР",
+            "Mod page: https://www.nexusmods.com/warhammer40kdarktide/mods/1411",
             "File: Modvault-%s.zip (contains a single Modvault.exe)" % version,
             "SHA-256 of Modvault.exe: %s" % sha,
             "",
