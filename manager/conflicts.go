@@ -335,7 +335,9 @@ func conflictStatus(list []ConflictInfo) (StatusItem, bool) {
 			open++
 		}
 	}
-	item := StatusItem{Label: i18n.T("Конфликты"), Value: i18n.Sprintf("%d · все разобраны", len(list)), Level: LevelOK, Command: "ShowConflicts"}
+	// Разобранные конфликты строку состояния не занимают: вернуться к ним
+	// можно из «Настроек».
+	item := StatusItem{Label: i18n.T("Конфликты"), Value: i18n.Sprintf("%d · все разобраны", len(list)), Level: LevelOK, Command: "ShowConflicts", Quiet: true}
 	if open > 0 {
 		item.Value, item.Level = i18n.Sprintf("%d · ждут решения: %d", len(list), open), LevelWarn
 	}

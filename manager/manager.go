@@ -68,6 +68,9 @@ type StatusItem struct {
 	Level Level  `json:"level"`
 	// Command — метод Manager, который вызывает щелчок по значению.
 	Command string `json:"command"`
+	// Quiet — всё в порядке и сказать нечего: в строке состояния пункт не
+	// показывается, в «Настройках» остаётся.
+	Quiet bool `json:"quiet"`
 }
 
 // Issue — замечание в блоке «Требуют внимания».

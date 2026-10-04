@@ -206,6 +206,12 @@ func TestChooseWinner(t *testing.T) {
 	if v := statusValue(s, "Конфликты"); v != "1 · все разобраны" {
 		t.Errorf("строка состояния: %q", v)
 	}
+	// Всё разобрано — в строке состояния пункт не показывается.
+	for _, item := range s.Status {
+		if item.Label == "Конфликты" && !item.Quiet {
+			t.Error("разобранные конфликты занимают строку состояния")
+		}
+	}
 	// Выбор победителя «по порядку загрузки» — тоже решение.
 	if _, err := a.SetWinner(issue.Arg, "beta"); err != nil {
 		t.Fatal(err)

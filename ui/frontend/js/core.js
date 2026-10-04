@@ -70,6 +70,7 @@ function renderStatus() {
   const box = $("status");
   box.replaceChildren();
   for (const item of state.status) {
+    if (item.quiet) continue; // всё в порядке — пункт есть только в «Настройках»
     const node = el("span", "status-item");
     node.dataset.level = item.level;
     let value = el("span", "status-value", item.value);
