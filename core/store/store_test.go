@@ -530,3 +530,27 @@ func TestAddFilesUnknownVersion(t *testing.T) {
 		t.Errorf("те же файлы второй раз: %v, want fs.ErrExist", err)
 	}
 }
+
+// Мод в разработке хранит не файлы, а путь к папке проекта.
+func TestAddLink(t *testing.T) {
+	s, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	project := filepath.Join(t.TempDir(), "auspex_vitals")
+	os.MkdirAll(project, 0o755)
+	v, err := s.AddLink("auspex_vitals", "mods/auspex_vitals", project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.Get(v.ModID, v.ID)
+	if err != nil || got.Link != project || got.LinkPath != "mods/auspex_vitals" || len(got.Files) != 0 {
+		t.Errorf("версия: %+v, %v", got, err)
+	}
+	if _, err := s.AddLink("auspex_vitals", "mods/auspex_vitals", project); !errors.Is(err, fs.ErrExist) {
+		t.Errorf("повторное добавление: %v", err)
+	}
+	if _, err := s.AddLink("other", "mods/other", filepath.Join(project, "нет")); err == nil {
+		t.Error("ссылка на несуществующую папку принята")
+	}
+}

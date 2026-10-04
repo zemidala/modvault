@@ -74,6 +74,9 @@ func (*Darktide) Managers(dir string) []string {
 	return nil
 }
 
+// ModsDir — папка модов: загрузчик грузит каждую её подпапку.
+func (*Darktide) ModsDir() string { return "mods" }
+
 // Generate собирает mod_load_order.txt и пропатченную базу бандлов.
 func (d *Darktide) Generate(ctx game.Context) ([]game.Generated, []game.Notice, error) {
 	if err := os.MkdirAll(ctx.WorkDir, 0o755); err != nil {

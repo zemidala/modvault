@@ -77,6 +77,18 @@ function wire() {
     return res.state;
   }));
   $("card-show-files").addEventListener("click", toggleFiles);
+  $("card-take").addEventListener("click", () => {
+    const mod = state.mods.find((m) => m.id === selectedId);
+    if (mod) takeOutside(mod);
+  });
+  $("card-folder").addEventListener("click", async () => {
+    const mod = state.mods.find((m) => m.id === selectedId);
+    try {
+      if (mod) await backend().OpenLink(mod.link);
+    } catch (err) {
+      toast(String(err), "error");
+    }
+  });
   $("check-updates").addEventListener("click", () => checkUpdates(false));
   $("card-update").addEventListener("click", () => act(() => backend().UpdateMod(selectedId), $("card-update"), t("Обновление: запрос к Nexus…")));
   $("card-message").addEventListener("click", () => {

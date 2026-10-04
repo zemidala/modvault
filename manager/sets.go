@@ -379,11 +379,24 @@ func (a *Manager) switchSet(name string) (SetResult, error) {
 		msg += i18n.Sprintf(". В игру он не попал: игрой управляет %s", strings.Join(managers, i18n.T(" и ")))
 	default:
 		plan, err := a.plan()
-		if err == nil && !plan.Empty() {
-			if _, err = a.deployer.Apply(plan); err == nil {
-				a.recovery = deploy.NothingToRecover
-				a.rememberDeployed()
-				msg = i18n.Sprintf("Набор «%s» в игре: %d %s", name, len(plan.Changes), plural(len(plan.Changes), "изменение", "изменения", "изменений"))
+		var links []linkChange
+		if err == nil {
+			if p, _, perr := a.loadProfile(); perr == nil {
+				links = a.linkChanges(p)
+			}
+		}
+		if err == nil && (!plan.Empty() || linkCount(links) > 0) {
+			if !plan.Empty() {
+				if _, err = a.deployer.Apply(plan); err == nil {
+					a.recovery = deploy.NothingToRecover
+					a.rememberDeployed()
+				}
+			}
+			if err == nil {
+				var linked int
+				linked, err = a.applyLinks(links)
+				n := len(plan.Changes) + linked
+				msg = i18n.Sprintf("Набор «%s» в игре: %d %s", name, n, plural(n, "изменение", "изменения", "изменений"))
 			}
 		} else if err == nil {
 			msg += i18n.T(": игра уже совпадает с ним")

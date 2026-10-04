@@ -238,5 +238,12 @@ window.MODVAULT_EN = {
   "♥ Снять одобрение на Nexus": "♥ Withdraw endorsement on Nexus",
   "⚙ Столбцы": "⚙ Columns",
   "✉ Написать автору…": "✉ Write to author…",
-  "✓ Актуально": "✓ Up to date"
+  "✓ Актуально": "✓ Up to date",
+  "Открыть папку проекта": "Open project folder",
+  "Взять в Modvault": "Take into Modvault",
+  "Мод вне Modvault: его место в порядке загрузки решает загрузчик": "Mod outside Modvault: the loader decides its place in the load order",
+  "Мод лежит в игре вне Modvault, игра грузит его всегда. Возьмите его в Modvault, чтобы выключать и включать в наборы": "The mod is in the game outside Modvault, and the game always loads it. Take it into Modvault to disable it and add it to sets",
+  "Мод переходит в хранилище…": "Moving the mod into the store…",
+  "Подключить как мод в разработке": "Connect as a mod in development",
+  "вне": "outside"
 };

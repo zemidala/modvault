@@ -58,8 +58,12 @@ type Version struct {
 	NexusFileID int       `json:"nexusFileId,omitempty"` // номер файла на Nexus; 0 — неизвестен
 	// AsIs — файлы уже разложены так, как лежат в игре (например, приняты
 	// у другого менеджера модов), раскладывать их заново не нужно.
-	AsIs  bool   `json:"asIs,omitempty"`
-	Files []File `json:"files"`
+	AsIs bool `json:"asIs,omitempty"`
+	// Link — мод в разработке: файлов в хранилище нет, в игру ложится
+	// ссылка LinkPath (путь в игре) на папку проекта Link.
+	Link     string `json:"link,omitempty"`
+	LinkPath string `json:"linkPath,omitempty"`
+	Files    []File `json:"files"`
 }
 
 // Mod — мод со всеми его версиями, от старой к новой по времени добавления.
@@ -307,6 +311,36 @@ func (s *Store) AddFiles(root string, files []string, info Info) (Version, error
 		Added: time.Now().UTC().Truncate(time.Second),
 	}
 	return s.finish(stage, final, v, sorted)
+}
+
+// linkVersion — идентификатор единственной версии мода-ссылки.
+const linkVersion = "link"
+
+// AddLink добавляет мод в разработке: в игре по пути linkPath будет лежать
+// ссылка на папку проекта target, и правки в проекте сразу видны в игре.
+func (s *Store) AddLink(name, linkPath, target string) (Version, error) {
+	modID := Slug(name)
+	if err := checkID(modID); err != nil {
+		return Version{}, i18n.Errorf("название мода %q: %w", name, err)
+	}
+	if fi, err := os.Stat(target); err != nil {
+		return Version{}, err
+	} else if !fi.IsDir() {
+		return Version{}, i18n.Errorf("%s — не папка", target)
+	}
+	if _, err := os.Stat(filepath.Join(s.root, modsDir, modID)); err == nil {
+		return Version{}, i18n.Errorf("мод «%s» уже есть в хранилище: %w", name, fs.ErrExist)
+	}
+	stage, err := os.MkdirTemp(filepath.Join(s.root, tmpDir), "add-")
+	if err != nil {
+		return Version{}, err
+	}
+	defer os.RemoveAll(stage)
+	v := Version{
+		ModID: modID, ID: linkVersion, Name: name,
+		Added: time.Now().UTC().Truncate(time.Second), Link: target, LinkPath: linkPath,
+	}
+	return s.finish(stage, s.versionDir(modID, linkVersion), v, nil)
 }
 
 // Get возвращает сведения о версии мода.

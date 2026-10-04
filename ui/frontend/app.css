@@ -731,6 +731,8 @@ button.busy::after,
 .mods td.num { cursor: grab; user-select: none; }
 .mods td.num::before { content: "⋮⋮"; margin-right: 6px; letter-spacing: -3px; color: var(--brass-line); }
 .mods tr:hover td.num::before { color: var(--brass); }
+.mods td.num.outside { cursor: default; }
+.mods td.num.outside::before { visibility: hidden; }
 body.dragging, body.dragging * { cursor: grabbing !important; user-select: none; }
 .mods tbody tr.drag-source { opacity: 0.45; }
 .mods tbody tr.drop-before td { box-shadow: inset 0 3px 0 var(--orange-worn); }

@@ -119,6 +119,9 @@ type Game interface {
 	Generate(ctx Context) ([]Generated, []Notice, error)
 	// Managers перечисляет другие менеджеры модов, найденные в папке игры.
 	Managers(dir string) []string
+	// ModsDir — папка в игре (через «/»), где каждая подпапка — мод; пусто —
+	// такой папки у игры нет.
+	ModsDir() string
 	// Launch запускает игру.
 	Launch(inst Install) error
 	// LastRun рассказывает о последнем запуске игры по её журналу: какие

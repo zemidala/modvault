@@ -445,15 +445,39 @@ func (a *App) OpenNexus(id string) error {
 
 // BisectAsk объясняет, как идёт поиск сбойного мода, и спрашивает согласия.
 func (a *App) BisectAsk() Ask {
+	outside := ""
+	if names := a.m.OutsideNames(); len(names) > 0 {
+		outside = "\n\n" + i18n.Sprintf("Моды вне Modvault (%s) остаются в игре на всех шагах: поиск их не проверяет. Чтобы проверить и их, сначала возьмите их в Modvault.", strings.Join(names, ", "))
+	}
 	return Ask{
 		Title: i18n.T("Найти сбойный мод"),
 		Message: i18n.Sprintf("Если игра падает или ведёт себя странно, а в «Требуют внимания» виновника нет, программа найдёт его делением пополам.\n\n"+
 			"Первый запуск — без модов набора: если проблема осталась, дело не в них. Дальше программа включает часть модов и просит запустить игру. "+
 			"Вы отвечаете, осталась ли проблема, — и круг сужается вдвое. Для 140 модов это около 10 запусков игры вместо 140.\n\n"+
 			"Виновник называется, только когда проблема повторилась с ним одним. Если её вызывают несколько модов вместе, программа найдёт всё сочетание — это дольше.\n\n"+
-			"Поиск идёт во временном наборе «%s»: ваш набор не меняется, и в конце программа вернёт игру к нему. Прервать поиск можно в любой момент.", manager.BisectSet),
+			"Поиск идёт во временном наборе «%s»: ваш набор не меняется, и в конце программа вернёт игру к нему. Прервать поиск можно в любой момент.", manager.BisectSet) + outside,
 		OK: i18n.T("Начать поиск"),
 	}
+}
+
+// TakeOutside берёт в Modvault мод, положенный в игру вручную.
+func (a *App) TakeOutside(id string) (manager.OutsideResult, error) { return a.m.TakeOutside(id) }
+
+// LinkOutside подключает ссылку на папку как мод в разработке.
+func (a *App) LinkOutside(id string) (manager.OutsideResult, error) { return a.m.LinkOutside(id) }
+
+// CleanLeftovers убирает в Корзину пустые папки, оставшиеся от Vortex.
+func (a *App) CleanLeftovers() (manager.OutsideResult, error) { return a.m.CleanLeftovers() }
+
+// OpenLink открывает в Проводнике папку проекта мода в разработке.
+func (a *App) OpenLink(target string) error {
+	for _, m := range a.m.LinkTargets() {
+		if m == target {
+			runtime.BrowserOpenURL(a.ctx, target)
+			return nil
+		}
+	}
+	return i18n.NewError("такой папки проекта нет")
 }
 
 // StartBisect начинает поиск сбойного мода.

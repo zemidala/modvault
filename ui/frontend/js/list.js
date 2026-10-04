@@ -274,7 +274,12 @@ function renderMods() {
     row.classList.toggle("picked", picked.has(mod.id));
 
     const toggleCell = el("td", "tgl");
-    if (mod.pinned) {
+    if (mod.outside) {
+      // Мод вне Modvault игра грузит всегда: выключить его можно, только взяв в Modvault.
+      const always = el("span", "always", t("вне"));
+      always.title = t("Мод лежит в игре вне Modvault, игра грузит его всегда. Возьмите его в Modvault, чтобы выключать и включать в наборы");
+      toggleCell.append(always);
+    } else if (mod.pinned) {
       toggleCell.append(el("span", "always", t("всегда")));
     } else {
       const toggle = el("button", "switch");
@@ -307,6 +312,7 @@ function renderMods() {
       event.stopPropagation();
       call(() => backend().SetFavorite([mod.id], !mod.favorite));
     });
+    if (mod.outside) star.hidden = true; // избранное — для модов хранилища
     nameCell.append(star, mod.name);
     if (mod.runErrors) {
       // Игра сама записала, что этот мод выдавал ошибки в прошлом запуске.
@@ -355,9 +361,14 @@ function renderMods() {
     if (!sets.length) setsCell.append("—");
 
     // За номер мод тянут, чтобы переставить его в порядке загрузки.
-    const numCell = el("td", "num", String(index + 1));
-    numCell.title = t("Потяните, чтобы переставить мод в порядке загрузки");
-    numCell.addEventListener("mousedown", (event) => dragStart(event, mod));
+    const numCell = el("td", "num", mod.outside ? "—" : String(index + 1));
+    if (mod.outside) {
+      numCell.classList.add("outside");
+      numCell.title = t("Мод вне Modvault: его место в порядке загрузки решает загрузчик");
+    } else {
+      numCell.title = t("Потяните, чтобы переставить мод в порядке загрузки");
+      numCell.addEventListener("mousedown", (event) => dragStart(event, mod));
+    }
     numCell.addEventListener("click", (event) => event.stopPropagation());
     row.append(numCell, toggleCell, nameCell, authorCell, categoryCell, ratingCell, statsCell, versionCell, updateTd, setsCell, installedCell, stateCell);
 
@@ -368,6 +379,10 @@ function renderMods() {
       renderCard();
     };
     row.addEventListener("click", (event) => {
+      if (mod.outside) {
+        select(); // выделять вместе с модами хранилища нечего: наборы их не знают
+        return;
+      }
       if (event.ctrlKey || event.metaKey) {
         if (!picked.delete(mod.id)) picked.add(mod.id);
         pickAnchor = mod.id;
@@ -386,6 +401,7 @@ function renderMods() {
     });
     row.addEventListener("contextmenu", (event) => {
       event.preventDefault();
+      if (mod.outside) return showMenu({ x: event.clientX, y: event.clientY }, [{ title: mod.name }, { label: takeLabel(mod), action: () => takeOutside(mod) }]);
       openRowMenu(mod, event.clientX, event.clientY);
     });
     body.append(row);
@@ -450,8 +466,13 @@ function renderCard() {
   $("card-category-label").hidden = !mod.category;
   $("card-category").hidden = !mod.category;
   $("card-category").textContent = mod.category || "";
-  $("card-installed").textContent = new Date(mod.installed).toLocaleString(LOCALE);
+  $("card-installed").textContent = mod.outside ? "—" : new Date(mod.installed).toLocaleString(LOCALE);
   $("card-versions-button").hidden = mod.versions < 2;
+  // Мод вне Modvault можно только взять под управление; у ссылки — открыть папку.
+  for (const id of ["card-show-files", "card-remove"]) $(id).hidden = !!mod.outside;
+  $("card-take").hidden = !mod.outside;
+  $("card-take").textContent = takeLabel(mod);
+  $("card-folder").hidden = !mod.link;
   for (const id of ["card-rating-label", "card-rating", "card-stats-label", "card-stats"]) $(id).hidden = !mod.hasStats;
   $("card-rating").textContent = mod.hasStats ? mod.endorsements.toLocaleString(LOCALE) : "";
   $("card-stats").textContent = mod.hasStats ? downloadsText(mod) : "";
@@ -459,8 +480,8 @@ function renderCard() {
   $("card-sets-label").hidden = !sets.length;
   $("card-sets").hidden = !sets.length;
   $("card-sets").textContent = sets.join(", ");
-  $("card-files").textContent = String(mod.files);
-  $("card-versions").textContent = String(mod.versions);
+  $("card-files").textContent = mod.outside || mod.link ? "—" : String(mod.files);
+  $("card-versions").textContent = mod.outside ? "—" : String(mod.versions);
   $("card-state").textContent = mod.state;
 
   const hasUpdate = mod.available !== "";
@@ -476,6 +497,22 @@ function renderCard() {
   $("card-depends-label").hidden = !hasDeps;
   $("card-depends").hidden = !hasDeps;
   $("card-depends").textContent = mod.dependsOn;
+}
+
+// takeLabel — как взять мод вне Modvault под управление.
+function takeLabel(mod) {
+  return mod.outside === "link" ? t("Подключить как мод в разработке") : t("Взять в Modvault");
+}
+
+// takeOutside берёт мод вне Modvault под управление: ручной — в хранилище,
+// ссылку на папку — как мод в разработке.
+function takeOutside(mod) {
+  const request = mod.outside === "link" ? () => backend().LinkOutside(mod.id) : () => backend().TakeOutside(mod.id);
+  return act(async () => {
+    const res = await request();
+    selectedId = null;
+    return res;
+  }, $("card-take"), mod.outside === "link" ? null : t("Мод переходит в хранилище…"));
 }
 
 function renderPlan() {

@@ -117,6 +117,11 @@ const commands = {
     await showConflicts();
     return state;
   },
+  CleanLeftovers: async () => {
+    const res = await backend().CleanLeftovers();
+    toast(res.message);
+    return res.state;
+  },
   ChooseWinner: async (key) => {
     const winner = await ask(await backend().WinnerAsk(key));
     return winner === null ? state : backend().SetWinner(key, winner);

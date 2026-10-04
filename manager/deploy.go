@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -151,6 +152,10 @@ func (a *Manager) Play() error {
 
 // layout раскладывает версию мода по папкам игры.
 func (a *Manager) layout(v store.Version) (game.Layout, error) {
+	if v.Link != "" {
+		// Мод в разработке: в игру идёт ссылка на папку, а не файлы.
+		return game.Layout{Kind: i18n.T("папка проекта"), Folders: []string{path.Base(v.LinkPath)}}, nil
+	}
 	paths := make([]string, len(v.Files))
 	for i, f := range v.Files {
 		paths[i] = f.Path
@@ -187,17 +192,29 @@ func (a *Manager) Deploy() (DeployResult, error) {
 		return DeployResult{}, err
 	}
 
+	p, _, err := a.loadProfile()
+	if err != nil {
+		return DeployResult{}, err
+	}
+	links := a.linkChanges(p)
 	msg := i18n.T("Игра уже совпадает с набором")
-	if !plan.Empty() {
-		res, err := a.deployer.Apply(plan)
-		if err != nil {
-			return DeployResult{}, err
+	if !plan.Empty() || linkCount(links) > 0 {
+		var res deploy.Result
+		if !plan.Empty() {
+			if res, err = a.deployer.Apply(plan); err != nil {
+				return DeployResult{}, err
+			}
+			a.recovery = deploy.NothingToRecover
+			a.rememberDeployed()
 		}
-		a.recovery = deploy.NothingToRecover
-		a.rememberDeployed()
-		msg = i18n.Sprintf("Развёрнуто: %d %s", res.Changes, plural(res.Changes, "изменение", "изменения", "изменений"))
+		linked, err := a.applyLinks(links)
+		changes := res.Changes + linked
+		msg = i18n.Sprintf("Развёрнуто: %d %s", changes, plural(changes, "изменение", "изменения", "изменений"))
 		if res.Displaced != "" {
 			msg += i18n.T(". Файлы, изменённые вне программы, сохранены в ") + res.Displaced
+		}
+		if err != nil {
+			msg += i18n.T(". Ссылку на папку проекта положить не удалось: ") + err.Error()
 		}
 		a.note(EventDeploy, i18n.Sprintf("Набор «%s»: %s", a.profileName(), msg))
 	}
@@ -382,6 +399,10 @@ func (a *Manager) realState() (State, error) {
 			}
 		}
 	}
+	links := a.linkChanges(p)
+	for _, c := range links {
+		pending[c.ModID] = pending[c.ModID] || !c.Blocked
+	}
 
 	byID := make(map[string]store.Mod, len(mods))
 	for _, m := range mods {
@@ -427,6 +448,9 @@ func (a *Manager) realState() (State, error) {
 		}
 		if row.Version == "" {
 			row.Version = "—"
+		}
+		if v.Link != "" {
+			row.Source, row.Link = i18n.Sprintf("папка проекта: %s", v.Link), v.Link
 		}
 		switch {
 		case e.Enabled && plan == nil:
@@ -511,7 +535,13 @@ func (a *Manager) realState() (State, error) {
 	s.OrderNote = note
 	if plan != nil {
 		s.Issues = append(s.Issues, a.driftIssues(plan, names)...)
-		s.Plan, s.PlanTitle = planLines(plan, names, a.serviceLine)
+		s.Plan, s.PlanTitle = planLines(plan, names, a.serviceLine, linkLines(links))
+	}
+	s.Issues = append(s.Issues, blockedIssues(links)...)
+	outsideList := a.outsideFolders()
+	s.Mods = append(s.Mods, outsideRows(outsideList)...)
+	if issue, ok := leftoverIssue(outsideList); ok {
+		s.Issues = append(s.Issues, issue)
 	}
 	var conflictList []ConflictInfo
 	if plan != nil {
@@ -655,8 +685,8 @@ func (a *Manager) serviceLine(c deploy.Change) string {
 
 // Служебные файлы в плане идут каждый своей строкой: это не мод, и
 // пользователю важно, что именно меняется.
-func planLines(plan *deploy.Plan, names func(string) string, service func(deploy.Change) string) ([]string, string) {
-	if plan.Empty() {
+func planLines(plan *deploy.Plan, names func(string) string, service func(deploy.Change) string, links []string) ([]string, string) {
+	if plan.Empty() && len(links) == 0 {
 		return []string{}, ""
 	}
 	type counts struct{ add, replace, remove int }
@@ -705,7 +735,8 @@ func planLines(plan *deploy.Plan, names func(string) string, service func(deploy
 		lines = append(lines, names(id)+" — "+strings.Join(parts, ", "))
 	}
 	lines = append(lines, serviceLines...)
-	n := len(plan.Changes)
+	lines = append(lines, links...)
+	n := len(plan.Changes) + len(links)
 	return lines, i18n.Sprintf("План развёртывания: %d %s", n, plural(n, "изменение", "изменения", "изменений"))
 }
 

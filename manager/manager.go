@@ -130,6 +130,12 @@ type Mod struct {
 	Pinned bool     `json:"pinned"`
 	State  string   `json:"state"`
 	Level  Level    `json:"level"`
+	// Outside — мод лежит в игре вне Modvault: "manual" — положен вручную,
+	// "link" — ссылка на папку; пусто — мод хранилища.
+	Outside string `json:"outside"`
+	// Link — папка, на которую ведёт ссылка: у мода в разработке и у
+	// ссылки вне Modvault.
+	Link string `json:"link"`
 }
 
 // Manager — Modvault целиком. Методы с заглавной буквы безопасны для
@@ -489,6 +495,19 @@ func (a *Manager) RemoveMod(id string, permanent bool) (State, error) {
 }
 
 func (a *Manager) removeMod(id string, permanent bool) error {
+	// Мод в разработке уходит из игры сразу: ссылка — не файлы, её учёт
+	// после удаления мода вести некому. Папка проекта не трогается.
+	for _, v := range a.linkedVersions() {
+		if v.ModID != id || a.settings.GameDir == "" {
+			continue
+		}
+		full := filepath.Join(a.settings.GameDir, filepath.FromSlash(v.LinkPath))
+		if cur, ok := fsx.LinkTarget(full); ok && fsx.SamePath(cur, v.Link) {
+			if err := fsx.RemoveLink(full); err != nil {
+				return err
+			}
+		}
+	}
 	if err := a.store.RemoveMod(id, permanent); err != nil {
 		return err
 	}
