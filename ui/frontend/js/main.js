@@ -57,6 +57,17 @@ function wire() {
   });
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") hideMenu();
+    // Ctrl+A в списке модов выделяет все видные моды, Esc снимает выделение;
+    // в полях ввода и открытых окнах клавиши работают как обычно.
+    const typing = event.target.closest && event.target.closest("input, textarea, select");
+    const dialog = document.querySelector(".sheet-backdrop:not([hidden])");
+    if (typing || dialog || $("view-mods").hidden) return;
+    if ((event.ctrlKey || event.metaKey) && event.code === "KeyA") {
+      event.preventDefault();
+      pickAll();
+    } else if (event.key === "Escape" && picked.size) {
+      clearPicked();
+    }
   });
 
   $("add-mod").addEventListener("click", async () => {

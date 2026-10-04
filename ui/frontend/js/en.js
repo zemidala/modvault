@@ -12,7 +12,7 @@ window.MODVAULT_EN = {
   " — похоже, проблемы нет.": " — it looks like there is no problem.",
   " — щёлкните, чтобы открыть подробности": " — click to see details",
   "Щёлкните, чтобы открыть пояснение": "Click to see the explanation",
-  "Ctrl + щелчок или Shift + щелчок — выделить несколько модов, чтобы собрать из них набор. Правая кнопка мыши на моде — убрать из набора, добавить или перенести в другой. Щелчок по названию столбца сортирует список.": "Ctrl + click or Shift + click — select several mods to make a set of them. Right-click a mod — remove it from the set, add or move it to another. Click a column name to sort the list.",
+  "Ctrl + щелчок или Shift + щелчок — выделить несколько модов, Ctrl + A — все видные, чтобы собрать из них набор. Правая кнопка мыши на моде — убрать из набора, добавить или перенести в другой. Щелчок по названию столбца сортирует список.": "Ctrl + click or Shift + click — select several mods, Ctrl + A — all shown ones, to make a set of them. Right-click a mod — remove it from the set, add or move it to another. Click a column name to sort the list.",
   "{} МБ": "{} MB",
   "{} из {}": "{} of {}",
   "{} мин": "{} min",

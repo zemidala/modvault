@@ -10,7 +10,23 @@ function pickRange(toId) {
   const from = ids.indexOf(pickAnchor ?? selectedId ?? ids[0]);
   const to = ids.indexOf(toId);
   if (from < 0 || to < 0) return;
-  for (let i = Math.min(from, to); i <= Math.max(from, to); i++) picked.add(ids[i]);
+  for (let i = Math.min(from, to); i <= Math.max(from, to); i++) {
+    if (!isOutside(ids[i])) picked.add(ids[i]);
+  }
+}
+
+// isOutside — строка мода вне Modvault: наборы его не знают, выделять нечего.
+function isOutside(id) {
+  return id.startsWith("outside:");
+}
+
+// pickAll выделяет все моды, видные в списке с учётом поиска и фильтров.
+function pickAll() {
+  for (const row of document.querySelectorAll("#mods tr")) {
+    if (!isOutside(row.dataset.id)) picked.add(row.dataset.id);
+  }
+  renderMods();
+  renderPicked();
 }
 
 function clearPicked() {
