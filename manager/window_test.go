@@ -94,7 +94,7 @@ func TestSettings(t *testing.T) {
 	ctx := context.Background()
 	login(t, a)
 	s := state(t, a)
-	for _, key := range []string{SettingCheckOnStart, SettingDeployUpdates, SettingDirectLaunch} {
+	for _, key := range []string{SettingCheckOnStart, SettingDirectLaunch} {
 		if !setting(t, s, key).On {
 			t.Errorf("настройка %s по умолчанию выключена", key)
 		}
@@ -122,16 +122,17 @@ func TestSettings(t *testing.T) {
 		t.Error("настройка не сохранилась")
 	}
 
-	// «Обновлённый мод сразу попадает в игру» выключено — обновление ждёт кнопки.
+	// Обновление сразу в игре, а новый мод так и ждёт «Развернуть».
 	for i, version := range []string{"1.0", "2.0"} {
 		f.add(t, 30, "Flux", fakeFile{ID: 300 + i, Version: version, Category: "MAIN"}, map[string]string{"Flux/Flux.mod": "return {} -- " + version})
 	}
 	a.InstallLink(ctx, link(30, 300), nil)
 	a.Deploy()
-	a.SetSetting(SettingDeployUpdates, false)
+	f.add(t, 31, "Glow", fakeFile{ID: 310, Version: "1.0", Category: "MAIN"}, map[string]string{"Glow/Glow.mod": "return {}"})
+	a.InstallLink(ctx, link(31, 310), nil) // новый мод ждёт «Развернуть»
 	res, err := a.InstallLink(ctx, link(30, 301), nil)
-	if err != nil || res.State.PlanTitle == "" || !strings.Contains(res.Message, "по кнопке «Развернуть»") {
-		t.Errorf("обновление при ручном развёртывании: %v, %q", err, res.Message)
+	if err != nil || res.State.PlanTitle == "" || !strings.Contains(res.Message, "новая версия уже в игре") {
+		t.Errorf("обновление при ждущих изменениях: %v, %q, план %q", err, res.Message, res.State.PlanTitle)
 	}
 }
 

@@ -12,11 +12,10 @@ import (
 
 // Ключи настроек.
 const (
-	SettingCheckOnStart  = "checkOnStart"
-	SettingDeployUpdates = "deployUpdates"
-	SettingDirectLaunch  = "directLaunch"
-	SettingEnglish       = "english"
-	SettingNxm           = "nxm" // переключает окно: ему известен путь к программе
+	SettingCheckOnStart = "checkOnStart"
+	SettingDirectLaunch = "directLaunch"
+	SettingEnglish      = "english"
+	SettingNxm          = "nxm" // переключает окно: ему известен путь к программе
 )
 
 // Setting — настройка-переключатель.
@@ -34,11 +33,6 @@ func (a *Manager) settingsList() []Setting {
 			Key: SettingCheckOnStart, Title: i18n.T("Проверять обновления при запуске"),
 			Detail: i18n.T("Программа сама спрашивает Nexus о новых версиях, когда открывается окно. Выключено — только по кнопке «Проверить обновления»."),
 			On:     a.settings.UpdateCheck != updateCheckManual,
-		},
-		{
-			Key: SettingDeployUpdates, Title: i18n.T("Обновлённый мод сразу попадает в игру"),
-			Detail: i18n.T("После обновления включённого мода новая версия сама ложится в игру. Выключено — по кнопке «Развернуть»."),
-			On:     !a.settings.ManualUpdates,
 		},
 		{
 			Key: SettingDirectLaunch, Title: i18n.T("Запускать игру без лаунчера"),
@@ -75,8 +69,6 @@ func (a *Manager) SetSetting(key string, on bool) (State, error) {
 		if on {
 			a.settings.UpdateCheck = ""
 		}
-	case SettingDeployUpdates:
-		a.settings.ManualUpdates = !on
 	case SettingDirectLaunch:
 		a.settings.LaunchViaLauncher = !on
 	case SettingEnglish:

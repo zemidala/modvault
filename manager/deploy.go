@@ -44,8 +44,6 @@ type settings struct {
 	// UpdateCheck — когда проверять обновления модов: "start" или пусто —
 	// сама при запуске окна, "manual" — только по кнопке.
 	UpdateCheck string `json:"updateCheck,omitempty"`
-	// ManualUpdates — обновлённый мод попадает в игру только по кнопке.
-	ManualUpdates bool `json:"manualUpdates,omitempty"`
 	// LaunchViaLauncher — «Играть» запускает игру через её лаунчер.
 	LaunchViaLauncher bool `json:"launchViaLauncher,omitempty"`
 	// SetupHidden — памятка «Начало работы» скрыта пользователем.

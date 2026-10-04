@@ -185,10 +185,13 @@ const (
 )
 
 func (a *Manager) rememberDeployed() {
-	p, _, err := a.loadProfile()
-	if err != nil {
-		return
+	if p, _, err := a.loadProfile(); err == nil {
+		a.rememberProfile(p)
 	}
+}
+
+// rememberProfile запоминает, какой профиль теперь в игре.
+func (a *Manager) rememberProfile(p profile.Profile) {
 	dir := a.gameState(a.settings.GameDir)
 	last := filepath.Join(dir, lastDeployed)
 	if data, err := os.ReadFile(last); err == nil {
@@ -197,6 +200,20 @@ func (a *Manager) rememberDeployed() {
 	if data, err := json.MarshalIndent(p, "", "  "); err == nil {
 		fsx.WriteFile(last, data)
 	}
+}
+
+// deployedProfile — профиль, развёрнутый в игру последним: то, что в ней
+// лежит сейчас. false — Modvault в эту игру ещё не развёртывал.
+func (a *Manager) deployedProfile() (profile.Profile, bool) {
+	data, err := os.ReadFile(filepath.Join(a.gameState(a.settings.GameDir), lastDeployed))
+	if err != nil {
+		return profile.Profile{}, false
+	}
+	var p profile.Profile
+	if json.Unmarshal(data, &p) != nil {
+		return profile.Profile{}, false
+	}
+	return p, true
 }
 
 // Rollback возвращает профиль к тому, каким он был при предпоследнем

@@ -132,7 +132,6 @@ func (a *Manager) UseVersion(id, versionID string) (SetResult, error) {
 	if err != nil {
 		return SetResult{}, i18n.Errorf("версии %q у мода нет", versionID)
 	}
-	synced := a.inSync()
 	p, _, err := a.loadProfile()
 	if err != nil {
 		return SetResult{}, err
@@ -144,7 +143,7 @@ func (a *Manager) UseVersion(id, versionID string) (SetResult, error) {
 		return SetResult{}, err
 	}
 	a.shareVersion(id, versionID)
-	msg := a.deployUpdate(i18n.Sprintf("Выбрана версия: %s %s", v.Name, v.Version), v, synced)
+	msg := a.deployUpdate(i18n.Sprintf("Выбрана версия: %s %s", v.Name, v.Version), v)
 	a.note(EventInstall, msg)
 	st, err := a.state()
 	return SetResult{State: st, Message: msg}, err

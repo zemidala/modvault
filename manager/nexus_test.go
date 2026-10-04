@@ -640,12 +640,13 @@ func TestUpdateKeepsModState(t *testing.T) {
 		t.Errorf("после обновления: %+v", m)
 	}
 
-	// В профиле ждёт чужое изменение: без спроса его не развёртываем.
+	// В наборе ждёт чужое изменение: обновлённый мод всё равно сразу в игре,
+	// а чужое изменение так и ждёт «Развернуть».
 	if _, err := a.InstallLink(ctx, link(31, 310), nil); err != nil {
 		t.Fatal(err)
 	}
 	res, err = a.InstallLink(ctx, link(30, 302), nil)
-	if err != nil || inGame() != "return {} -- 2.0" || planned() == "" || !strings.Contains(res.Message, "ждут и другие изменения") {
+	if err != nil || inGame() != "return {} -- 3.0" || planned() == "" || !strings.Contains(res.Message, "уже в игре") {
 		t.Errorf("обновление при чужих изменениях: %v, в игре %q, сообщение %q", err, inGame(), res.Message)
 	}
 	if _, ok := snapshot(t, g)["mods/Glow/Glow.mod"]; ok {

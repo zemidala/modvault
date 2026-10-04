@@ -288,7 +288,6 @@ func (a *Manager) installFile(ctx context.Context, c *nexus.Client, domain strin
 	delete(known.Gone, modID)
 	a.saveUpdates(known)
 
-	synced := a.inSync() // до обновления: потом профиль уже отличается от игры
 	v, prev, err := a.addVersion(archive, info)
 	if err != nil {
 		if errors.Is(err, errAlreadyStored) {
@@ -301,7 +300,7 @@ func (a *Manager) installFile(ctx context.Context, c *nexus.Client, domain strin
 
 	msg := i18n.Sprintf("Установлен: %s %s", v.Name, v.Version)
 	if prev != "" {
-		msg = a.deployUpdate(i18n.Sprintf("Обновлён: %s до %s", v.Name, v.Version), v, synced)
+		msg = a.deployUpdate(i18n.Sprintf("Обновлён: %s до %s", v.Name, v.Version), v)
 	} else if a.deployer != nil {
 		msg += i18n.T(". Чтобы он попал в игру — «Развернуть»")
 	}
@@ -332,23 +331,13 @@ func (a *Manager) cleanDownloads() {
 	}
 }
 
-// inSync сообщает, что игра сейчас совпадает с профилем и развёртывать
-// в неё можно: папка выбрана и ею не управляет другой менеджер модов.
-func (a *Manager) inSync() bool {
-	if a.deployer == nil || a.deployErr != nil || len(a.managers()) > 0 {
-		return false
-	}
-	plan, err := a.plan()
-	return err == nil && plan.Empty()
-}
-
-// deployUpdate доводит обновление мода до игры, не спрашивая: включённый
-// мод остаётся включённым, значит, новая версия сразу ложится на место
-// прежней; выключенный остаётся выключенным. synced — совпадала ли игра
-// с профилем до обновления: если нет, в профиле есть и другие
-// неразвёрнутые изменения, и развёртывать их заодно без спроса нельзя.
+// deployUpdate доводит обновление мода до игры, не спрашивая: кто нажал
+// «Обновить», тот хочет новую версию. Мод остаётся в том же состоянии, что
+// и до обновления: был в игре — в игре новая версия; выключен или ещё ждёт
+// развёртывания — так и остаётся. Остальные ждущие изменения набора не
+// трогаются: развёртывается то, что уже в игре, с новой версией этого мода.
 // Возвращает сообщение для пользователя.
-func (a *Manager) deployUpdate(msg string, v store.Version, synced bool) string {
+func (a *Manager) deployUpdate(msg string, v store.Version) string {
 	p, _, err := a.loadProfile()
 	if err != nil {
 		return msg
@@ -356,20 +345,25 @@ func (a *Manager) deployUpdate(msg string, v store.Version, synced bool) string 
 	if i := p.Index(v.ModID); i < 0 || !p.Entries[i].Enabled {
 		return msg + i18n.T(". Мод выключен и остаётся выключенным")
 	}
-	if a.deployer == nil {
-		return msg
-	}
-	if a.settings.ManualUpdates {
+	if a.deployer == nil || a.deployErr != nil || len(a.managers()) > 0 {
 		return msg + i18n.T(". В игру он попадёт по кнопке «Развернуть»")
 	}
-	if !synced {
-		return msg + i18n.T(". В игру он попадёт по кнопке «Развернуть»: там ждут и другие изменения")
+	deployed, ok := a.deployedProfile()
+	if i := deployed.Index(v.ModID); !ok || i < 0 || !deployed.Entries[i].Enabled {
+		return msg + i18n.T(". В игре этого мода ещё не было: он попадёт туда по кнопке «Развернуть»")
 	}
-	plan, err := a.plan()
+	if err := deployed.SetVersion(v.ModID, v.ID); err != nil {
+		return msg + i18n.T(". В игру он попадёт по кнопке «Развернуть»")
+	}
+	sources, _, err := a.sources(deployed)
+	var plan *deploy.Plan
+	if err == nil {
+		plan, err = a.deployer.Plan(sources, deployed.Winners)
+	}
 	if err == nil && !plan.Empty() {
 		if _, err = a.deployer.Apply(plan); err == nil {
 			a.recovery = deploy.NothingToRecover
-			a.rememberDeployed()
+			a.rememberProfile(deployed)
 		}
 	}
 	if err != nil {
