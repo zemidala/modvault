@@ -213,6 +213,23 @@ func (a *Manager) deployedProfile() (profile.Profile, bool) {
 	if json.Unmarshal(data, &p) != nil {
 		return profile.Profile{}, false
 	}
+	// Запись могла устареть: мод с тех пор удалён, прежняя версия убрана.
+	// Удалённый мод выпадает, у оставшегося берётся версия из текущего набора.
+	current, _, _ := a.loadProfile()
+	entries := p.Entries[:0]
+	for _, e := range p.Entries {
+		if _, err := a.store.Get(e.ModID, e.VersionID); err == nil {
+			entries = append(entries, e)
+			continue
+		}
+		if i := current.Index(e.ModID); i >= 0 {
+			if _, err := a.store.Get(e.ModID, current.Entries[i].VersionID); err == nil {
+				e.VersionID = current.Entries[i].VersionID
+				entries = append(entries, e)
+			}
+		}
+	}
+	p.Entries = entries
 	return p, true
 }
 

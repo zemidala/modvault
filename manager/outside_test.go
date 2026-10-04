@@ -176,3 +176,26 @@ func TestLinkOutside(t *testing.T) {
 		t.Errorf("удаление мода задело проект: %v", err)
 	}
 }
+
+// Устаревшая запись о развёртывании не мешает: удалённый мод из неё выпадает,
+// и обновление или перенос мода в хранилище всё равно доходят до игры.
+func TestStaleDeployedProfile(t *testing.T) {
+	a, game, _ := outsideGame(t)
+	a.addArchive(writeZip(t, "Healthbars.zip", map[string]string{"mods/hb/hb.mod": "1"}))
+	if _, err := a.Deploy(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.RemoveMod("healthbars", true); err != nil {
+		t.Fatal(err)
+	}
+	deployed, ok := a.deployedProfile()
+	if !ok || deployed.Index("healthbars") >= 0 {
+		t.Fatalf("запись о развёртывании: %+v, %v", deployed.Entries, ok)
+	}
+	if _, err := a.TakeOutside(outsidePrefix + "manual_mod"); err != nil {
+		t.Fatalf("перенос при устаревшей записи: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(game, asideDir)); !os.IsNotExist(err) {
+		t.Errorf("временная папка осталась в игре: %v", err)
+	}
+}

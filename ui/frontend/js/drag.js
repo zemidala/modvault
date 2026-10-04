@@ -45,7 +45,7 @@ function dragMove(event) {
   else if (event.clientY > window.innerHeight - 90) window.scrollBy(0, 14);
   const under = document.elementFromPoint(event.clientX, event.clientY);
   const row = under && under.closest("#mods tr");
-  if (!row || dragging.ids.includes(row.dataset.id)) return;
+  if (!row || dragging.ids.includes(row.dataset.id) || isOutside(row.dataset.id)) return;
   const box = row.getBoundingClientRect();
   dragging.after = event.clientY > box.top + box.height / 2;
   dragging.target = row.dataset.id;

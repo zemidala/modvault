@@ -27,6 +27,9 @@ const (
 	outsideLeftover = "leftover" // пустая папка, оставшаяся от Vortex
 )
 
+// asideDir — папка в игре, куда «Взять в Modvault» на время отодвигает мод.
+const asideDir = ".modvault-aside"
+
 // vortexLeftover — метка, которую Vortex кладёт в каждую папку, созданную им.
 const vortexLeftover = "__folder_managed_by_vortex"
 
@@ -78,7 +81,11 @@ func (a *Manager) outsideFolders() []outside {
 		}
 		full := filepath.Join(root, name)
 		if target, ok := fsx.LinkTarget(full); ok {
-			out = append(out, outside{Folder: name, Kind: outsideLink, Target: target})
+			// Символическая ссылка может вести относительно своей папки.
+			if !filepath.IsAbs(target) {
+				target = filepath.Join(root, target)
+			}
+			out = append(out, outside{Folder: name, Kind: outsideLink, Target: filepath.Clean(target)})
 			continue
 		}
 		if !e.IsDir() {
@@ -369,10 +376,13 @@ func (a *Manager) TakeOutside(id string) (OutsideResult, error) {
 	}
 
 	// Папку убираем с дороги, а развёртывание кладёт на её место те же файлы
-	// из хранилища. Сбой — и папка возвращается.
-	aside := filepath.Join(a.gameState(game), "taking", o.Folder)
+	// из хранилища. Сбой — и папка возвращается. Отодвигаем внутри самой
+	// игры: на том же диске переименование срабатывает всегда.
+	asideRoot := filepath.Join(game, asideDir)
+	aside := filepath.Join(asideRoot, o.Folder)
 	os.RemoveAll(aside)
-	if err := os.MkdirAll(filepath.Dir(aside), 0o755); err != nil {
+	defer os.Remove(asideRoot) // пустую папку не оставляем
+	if err := os.MkdirAll(asideRoot, 0o755); err != nil {
 		undoProfile()
 		return OutsideResult{}, err
 	}
