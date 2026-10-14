@@ -3,6 +3,7 @@ package manager
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -165,6 +166,35 @@ func TestLocalDetails(t *testing.T) {
 	dev = findMod(t, state(t, a), "devmod")
 	if dev.Version != "0.4.0" || dev.Author != "Сам" || dev.AuthorFrom != "из файла devmod.mod" {
 		t.Errorf("после правки проекта: %+v", dev)
+	}
+}
+
+// Правила из .mod мода в разработке читаются из папки проекта: если он
+// требует выключенный мод, это видно и мод можно включить одной кнопкой.
+func TestLinkModRules(t *testing.T) {
+	a, _, project := outsideGame(t)
+	os.WriteFile(filepath.Join(project, "devmod.mod"), []byte(`return { require = { "manual_mod" } }`), 0o644)
+	if _, err := a.LinkOutside(outsidePrefix + "devmod"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.TakeOutside(outsidePrefix + "manual_mod"); err != nil {
+		t.Fatal(err)
+	}
+	s, err := a.SetEnabled("devmod", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found *Issue
+	for i, is := range s.Issues {
+		if strings.Contains(is.Title, "«devmod» не заработает") {
+			found = &s.Issues[i]
+		}
+	}
+	if found == nil || found.Command != "EnableMod" || found.Arg != "manual_mod" {
+		t.Fatalf("замечание о выключенном требовании: %+v; все: %s", found, issueTitles(s))
+	}
+	if dev := findMod(t, s, "devmod"); !slices.Contains(dev.Requires, "manual_mod") {
+		t.Errorf("требования мода в разработке: %v", dev.Requires)
 	}
 }
 

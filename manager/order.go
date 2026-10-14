@@ -34,24 +34,41 @@ func (a *Manager) orderInfo(p profile.Profile) ([]ordered, game.Ordering, error)
 			return nil, game.Ordering{}, err
 		}
 		o := ordered{entry: e, name: v.Name}
-		if v.Link != "" {
-			links[e.ModID] = v
-		}
 		if l, err := a.layout(v); err == nil {
-			infos = append(infos, game.ModInfo{ModID: e.ModID, Enabled: e.Enabled, Layout: l})
 			if l.Role == game.RoleNone {
 				o.folders = l.Folders
 			}
-			root := a.store.FilesDir(e.ModID, e.VersionID)
-			files[e.ModID] = make(map[string]string, len(l.Paths))
-			for src, dst := range l.Paths {
-				files[e.ModID][strings.ToLower(dst)] = filepath.Join(root, filepath.FromSlash(src))
+			if v.Link != "" {
+				links[e.ModID] = v
+				l.Paths = linkModFile(v)
+			} else {
+				files[e.ModID] = a.storeFiles(e, l)
 			}
+			infos = append(infos, game.ModInfo{ModID: e.ModID, Enabled: e.Enabled, Layout: l})
 		}
 		mods = append(mods, o)
 	}
 	ord := a.game.Ordering(game.OrderContext{Dir: a.settings.GameDir, Mods: infos, Read: modReader(files, links)})
 	return mods, ord, nil
+}
+
+// linkModFile — раскладка для чтения файла .mod мода в разработке. В его
+// обычной раскладке только папка (в игру идёт ссылка, а не файлы), а правила,
+// версия и автор лежат в .mod в папке проекта.
+func linkModFile(v store.Version) map[string]string {
+	mod := v.LinkPath + "/" + path.Base(v.LinkPath) + ".mod"
+	return map[string]string{path.Base(mod): mod}
+}
+
+// storeFiles — файлы версии в хранилище: путь в игре в нижнем регистре →
+// файл на диске.
+func (a *Manager) storeFiles(e profile.Entry, l game.Layout) map[string]string {
+	root := a.store.FilesDir(e.ModID, e.VersionID)
+	out := make(map[string]string, len(l.Paths))
+	for src, dst := range l.Paths {
+		out[strings.ToLower(dst)] = filepath.Join(root, filepath.FromSlash(src))
+	}
+	return out
 }
 
 // modReader читает файл мода по его пути в игре: из хранилища (files: мод →
@@ -88,16 +105,10 @@ func (a *Manager) localDetails(p profile.Profile) map[string]game.Details {
 			continue
 		}
 		if v.Link != "" {
-			// В раскладке ссылки только папка: файл .mod читается из проекта.
 			links[e.ModID] = v
-			mod := v.LinkPath + "/" + path.Base(v.LinkPath) + ".mod"
-			l.Paths = map[string]string{path.Base(mod): mod}
+			l.Paths = linkModFile(v)
 		} else {
-			root := a.store.FilesDir(e.ModID, e.VersionID)
-			files[e.ModID] = make(map[string]string, len(l.Paths))
-			for src, dst := range l.Paths {
-				files[e.ModID][strings.ToLower(dst)] = filepath.Join(root, filepath.FromSlash(src))
-			}
+			files[e.ModID] = a.storeFiles(e, l)
 		}
 		infos = append(infos, game.ModInfo{ModID: e.ModID, Enabled: e.Enabled, Layout: l})
 	}
