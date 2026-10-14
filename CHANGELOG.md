@@ -13,11 +13,16 @@ points also go to the Nexus Mods changelog.
 
 - Mods in development and mods added from disk show their version and author from their own `.mod` file (`version = "…"`, `author = "…"`). Such values are marked with a file icon and a dotted underline: they are not from Nexus. A mod in development without an author shows your Nexus name. Raise the version in your project, and the list shows it at once.
 
+### Fixed
+- **Open project folder** in the mod card and the folder buttons in **Settings** did nothing: the folders open in Explorer again.
+
 ---
 
 Скачайте **`Modvault.exe`** ниже и замените им старый файл — моды и настройки сохранятся.
 
 - У модов в разработке и модов с диска видны версия и автор из их собственного файла `.mod` (`version = "…"`, `author = "…"`). Такие значения помечены значком файла и пунктиром: они не с Nexus. У мода в разработке без автора стоит ваше имя на Nexus. Подняли версию в проекте — список сразу показывает новую.
+
+Исправлено: кнопка **«Открыть папку проекта»** в карточке мода и кнопки папок в **«Настройках»** ничего не делали — теперь папки открываются в Проводнике.
 
 ## 0.2.2
 

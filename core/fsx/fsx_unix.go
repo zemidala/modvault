@@ -51,3 +51,8 @@ func linkError(err error) error {
 func trash(path string) error {
 	return fmt.Errorf("%w: %s", ErrTrashUnavailable, path)
 }
+
+// OpenFolder вне Windows не поддерживается: окно Modvault есть только там.
+func OpenFolder(dir string) error {
+	return fmt.Errorf("%s: %w", dir, errors.ErrUnsupported)
+}

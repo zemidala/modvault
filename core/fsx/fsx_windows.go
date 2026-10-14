@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"golang.org/x/sys/windows"
+
+	"github.com/zemidala/modvault/i18n"
 )
 
 // Антивирус и индексатор держат свежий файл доли секунды, поэтому занятость
@@ -114,4 +116,19 @@ func linkError(err error) error {
 		return fmt.Errorf("%w: %w", ErrLinkUnsupported, err)
 	}
 	return err
+}
+
+// OpenFolder показывает папку в Проводнике.
+func OpenFolder(dir string) error {
+	if fi, err := os.Stat(dir); err != nil {
+		return err
+	} else if !fi.IsDir() {
+		return i18n.Errorf("%s — не папка", dir)
+	}
+	verb, _ := windows.UTF16PtrFromString("open")
+	target, err := windows.UTF16PtrFromString(dir)
+	if err != nil {
+		return err
+	}
+	return windows.ShellExecute(0, verb, target, nil, nil, windows.SW_SHOWNORMAL)
 }

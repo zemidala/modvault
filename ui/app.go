@@ -473,8 +473,7 @@ func (a *App) CleanLeftovers() (manager.OutsideResult, error) { return a.m.Clean
 func (a *App) OpenLink(target string) error {
 	for _, m := range a.m.LinkTargets() {
 		if m == target {
-			runtime.BrowserOpenURL(a.ctx, target)
-			return nil
+			return fsx.OpenFolder(target)
 		}
 	}
 	return i18n.NewError("такой папки проекта нет")
@@ -738,8 +737,8 @@ func (a *App) OpenFolder(kind string) error {
 	if !ok {
 		return i18n.NewError("такой папки нет")
 	}
-	runtime.BrowserOpenURL(a.ctx, path)
-	return nil
+	// BrowserOpenURL у Wails пути на диске молча отбрасывает: только веб-адреса.
+	return fsx.OpenFolder(path)
 }
 
 // OpenProject открывает страницу программы на GitHub.
