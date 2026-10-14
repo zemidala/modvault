@@ -56,7 +56,8 @@ gh attestation verify Modvault.exe -R zemidala/modvault
 It shows the workflow run and the commit the file was built from. The same file is in the Nexus Mods
 archive; its SHA-256 is in the release description.
 
-To build it yourself, check out the release tag and use Go 1.27.0 (the version pinned in the workflow):
+To build it yourself, check out the release tag and use Go 1.27.2, the version pinned in the workflow
+(with any Go 1.21 or newer installed, set `GOTOOLCHAIN=go1.27.2` and Go downloads and uses that version):
 
 ```
 go build -trimpath -tags desktop,production -ldflags "-H windowsgui -s -w -X github.com/zemidala/modvault/internal/version.Version=X.Y.Z" -o Modvault.exe ./cmd/modvault-gui
