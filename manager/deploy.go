@@ -409,6 +409,7 @@ func (a *Manager) realState() (State, error) {
 		byID[m.ID] = m
 	}
 	updates := a.loadUpdates()
+	details := a.localDetails(p)
 	inSets := a.setsByMod(p)
 	favorite := map[string]bool{}
 	for _, id := range a.settings.Favorites {
@@ -445,6 +446,18 @@ func (a *Manager) realState() (State, error) {
 			row.UpdateStatus = "current"
 		default:
 			row.UpdateStatus = "unknown"
+		}
+		if d, ok := details[e.ModID]; ok {
+			if row.Version == "" && d.Version != "" {
+				row.Version, row.VersionFrom = d.Version, i18n.Sprintf("из файла %s", d.File)
+			}
+			if row.Author == "" && d.Author != "" {
+				row.Author, row.AuthorFrom = d.Author, i18n.Sprintf("из файла %s", d.File)
+			}
+		}
+		if row.Author == "" && v.Link != "" && a.settings.NexusUser != "" {
+			// Мод в разработке — ваш: пока он сам не назвал автора.
+			row.Author, row.AuthorFrom = a.settings.NexusUser, i18n.T("ваше имя на Nexus: мод в разработке")
 		}
 		if row.Version == "" {
 			row.Version = "—"

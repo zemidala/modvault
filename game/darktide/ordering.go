@@ -3,10 +3,12 @@ package darktide
 import (
 	"bufio"
 	"bytes"
+	"maps"
 	"os"
 	"path"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/zemidala/modvault/game"
@@ -25,6 +27,8 @@ var (
 	luaString       = regexp.MustCompile(`"([^"]*)"|'([^']*)'`)
 	// load_after = { "a", "b" } в файле .mod
 	modRuleField = regexp.MustCompile(`\b(load_before|load_after|require)\s*=\s*\{([^{}]*)\}`)
+	// version = "1.2.0", author = "…" в файле .mod
+	modInfoField = regexp.MustCompile(`\b(version|author)\s*=\s*(?:"([^"]*)"|'([^']*)')`)
 	// local _audio = { "Audio" } — общий список, на который ссылаются правила загрузчика
 	luaLocalList = regexp.MustCompile(`\blocal\s+(\w+)\s*=\s*\{([^{}]*)\}`)
 	// local after_presets = { ... }
@@ -61,6 +65,44 @@ func ParseModRules(folder string, modFile []byte) []rules.Rule {
 	for _, m := range modRuleField.FindAllStringSubmatch(stripLuaComments(modFile), -1) {
 		for _, other := range luaStrings(m[2]) {
 			out = append(out, rules.Rule{Kind: ruleKinds[m[1]], Mod: folder, Other: other, Source: i18n.T("файл ") + folder + ".mod"})
+		}
+	}
+	return out
+}
+
+// ParseModDetails читает из файла .mod версию и автора, если мод их указал.
+func ParseModDetails(modFile []byte) (version, author string) {
+	for _, m := range modInfoField.FindAllStringSubmatch(stripLuaComments(modFile), -1) {
+		value := strings.TrimSpace(m[2] + m[3])
+		switch {
+		case m[1] == "version" && version == "":
+			version = value
+		case m[1] == "author" && author == "":
+			author = value
+		}
+	}
+	return version, author
+}
+
+// Details читает версию и автора из файлов .mod. Если у мода несколько
+// папок, берётся первая по алфавиту, где они указаны.
+func (*Darktide) Details(ctx game.OrderContext) map[string]game.Details {
+	out := map[string]game.Details{}
+	for _, m := range ctx.Mods {
+		dsts := slices.Sorted(maps.Values(m.Layout.Paths))
+		for _, dst := range dsts {
+			folder, ok := modFile(dst)
+			if !ok || !strings.EqualFold(strings.TrimSuffix(path.Base(dst), path.Ext(dst)), folder) {
+				continue
+			}
+			data, err := ctx.Read(m.ModID, dst)
+			if err != nil {
+				continue
+			}
+			if version, author := ParseModDetails(data); version != "" || author != "" {
+				out[m.ModID] = game.Details{Version: version, Author: author, File: path.Base(dst)}
+				break
+			}
 		}
 	}
 	return out

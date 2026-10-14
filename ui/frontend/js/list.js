@@ -359,9 +359,10 @@ function renderMods() {
     statsCell.title = mod.hasStats ? downloadsText(mod) : statsHint(mod);
     const authorCell = el("td", "author");
     authorCell.title = mod.author || (mod.nexusId ? t("Автор станет известен после проверки обновлений") : t("У мода нет номера на Nexus: автор неизвестен"));
-    authorCell.append(authorLink(mod) || mod.author || "—");
-    const versionCell = el("td", "version", mod.version);
-    versionCell.title = mod.version;
+    authorCell.append(mod.authorFrom ? localValue(mod.author, mod.authorFrom) : authorLink(mod) || mod.author || "—");
+    const versionCell = el("td", "version");
+    versionCell.append(mod.versionFrom ? localValue(mod.version, mod.versionFrom) : mod.version);
+    if (!mod.versionFrom) versionCell.title = mod.version;
     const updateTd = el("td", "update");
     updateCell(updateTd, mod);
 
@@ -476,8 +477,8 @@ function renderCard() {
   $("card-source").textContent = mod.source;
   $("card-author-label").hidden = !mod.author;
   $("card-author").hidden = !mod.author;
-  $("card-author").replaceChildren(authorLink(mod) || mod.author || "");
-  $("card-version").textContent = mod.version;
+  $("card-author").replaceChildren(...cardValue(mod.author, mod.authorFrom, authorLink(mod)));
+  $("card-version").replaceChildren(...cardValue(mod.version, mod.versionFrom));
   $("card-category-label").hidden = !mod.category;
   $("card-category").hidden = !mod.category;
   $("card-category").textContent = mod.category || "";
@@ -518,12 +519,19 @@ function renderCard() {
   $("card-depends").textContent = mod.dependsOn;
 }
 
+// cardValue — значение для карточки мода; у значения не с Nexus — пометка и
+// строкой ниже откуда оно взято.
+function cardValue(text, from, link) {
+  if (!from) return [link || text || ""];
+  return [localValue(text, from), el("span", "local-from", from)];
+}
+
 // renderLegend — пояснение к значкам над списком.
 function renderLegend() {
   const items = [
     [icon("nexus"), t("с Nexus")], [icon("disk"), t("с диска")], [icon("link"), t("ссылка на папку проекта")],
     [icon("manual"), t("положен вручную")], [icon("requires"), t("требует другие моды")], [icon("needed"), t("нужен другим")],
-    [icon("conflict"), t("конфликт файлов")],
+    [icon("conflict"), t("конфликт файлов")], [icon("local"), t("из файлов мода, не с Nexus")],
     [el("span", "swatch swatch-requires"), t("у выбранного: что ему нужно")], [el("span", "swatch swatch-needed"), t("кому нужен он")],
   ];
   $("legend").replaceChildren(...items.map(([mark, text]) => {

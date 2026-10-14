@@ -2,6 +2,7 @@ package manager
 
 import (
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -49,22 +50,61 @@ func (a *Manager) orderInfo(p profile.Profile) ([]ordered, game.Ordering, error)
 		}
 		mods = append(mods, o)
 	}
-	ord := a.game.Ordering(game.OrderContext{
-		Dir: a.settings.GameDir, Mods: infos,
-		Read: func(modID, gamePath string) ([]byte, error) {
-			if v, ok := links[modID]; ok {
-				if rest, ok := strings.CutPrefix(gamePath, v.LinkPath+"/"); ok {
-					return os.ReadFile(filepath.Join(v.Link, filepath.FromSlash(rest)))
-				}
-			}
-			src, ok := files[modID][strings.ToLower(gamePath)]
-			if !ok {
-				return nil, os.ErrNotExist
-			}
-			return os.ReadFile(src)
-		},
-	})
+	ord := a.game.Ordering(game.OrderContext{Dir: a.settings.GameDir, Mods: infos, Read: modReader(files, links)})
 	return mods, ord, nil
+}
+
+// modReader читает файл мода по его пути в игре: из хранилища (files: мод →
+// путь в игре в нижнем регистре → файл) или, у мода в разработке, из папки
+// проекта.
+func modReader(files map[string]map[string]string, links map[string]store.Version) func(modID, gamePath string) ([]byte, error) {
+	return func(modID, gamePath string) ([]byte, error) {
+		if v, ok := links[modID]; ok {
+			if rest, ok := strings.CutPrefix(gamePath, v.LinkPath+"/"); ok {
+				return os.ReadFile(filepath.Join(v.Link, filepath.FromSlash(rest)))
+			}
+		}
+		src, ok := files[modID][strings.ToLower(gamePath)]
+		if !ok {
+			return nil, os.ErrNotExist
+		}
+		return os.ReadFile(src)
+	}
+}
+
+// localDetails читает версию и автора из файлов модов, о которых Nexus
+// ничего не сообщает: модов в разработке и модов с диска.
+func (a *Manager) localDetails(p profile.Profile) map[string]game.Details {
+	var infos []game.ModInfo
+	files := map[string]map[string]string{}
+	links := map[string]store.Version{}
+	for _, e := range p.Entries {
+		v, err := a.store.Get(e.ModID, e.VersionID)
+		if err != nil || v.NexusID != 0 {
+			continue
+		}
+		l, err := a.layout(v)
+		if err != nil {
+			continue
+		}
+		if v.Link != "" {
+			// В раскладке ссылки только папка: файл .mod читается из проекта.
+			links[e.ModID] = v
+			mod := v.LinkPath + "/" + path.Base(v.LinkPath) + ".mod"
+			l.Paths = map[string]string{path.Base(mod): mod}
+		} else {
+			root := a.store.FilesDir(e.ModID, e.VersionID)
+			files[e.ModID] = make(map[string]string, len(l.Paths))
+			for src, dst := range l.Paths {
+				files[e.ModID][strings.ToLower(dst)] = filepath.Join(root, filepath.FromSlash(src))
+			}
+		}
+		infos = append(infos, game.ModInfo{ModID: e.ModID, Enabled: e.Enabled, Layout: l})
+	}
+	if len(infos) == 0 {
+		return nil
+	}
+	return a.game.Details(game.OrderContext{Dir: a.settings.GameDir, Mods: infos, Read: modReader(files, links)})
 }
 
 // loadedFolders — папки включённых модов в порядке профиля.

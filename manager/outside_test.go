@@ -132,6 +132,42 @@ func TestTakeOutside(t *testing.T) {
 	}
 }
 
+// У модов не с Nexus автор и версия берутся из их файлов .mod и помечаются;
+// у мода в разработке без автора — имя владельца ключа Nexus.
+func TestLocalDetails(t *testing.T) {
+	a, game, project := outsideGame(t)
+	a.settings.NexusUser = "frinteza78"
+	os.WriteFile(filepath.Join(project, "devmod.mod"), []byte(`return { packages = {}, version = "0.3.0" }`), 0o644)
+	os.WriteFile(filepath.Join(game, "mods", "manual_mod", "manual_mod.mod"), []byte(`return { version = "1.0.0", author = "Кто-то" }`), 0o644)
+	if _, err := a.LinkOutside(outsidePrefix + "devmod"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.TakeOutside(outsidePrefix + "manual_mod"); err != nil {
+		t.Fatal(err)
+	}
+
+	s := state(t, a)
+	dev := findMod(t, s, "devmod")
+	if dev.Version != "0.3.0" || dev.VersionFrom != "из файла devmod.mod" ||
+		dev.Author != "frinteza78" || dev.AuthorFrom != "ваше имя на Nexus: мод в разработке" {
+		t.Errorf("мод в разработке (выключен): %+v", dev)
+	}
+	disk := findMod(t, s, "manual_mod")
+	if disk.Version != "1.0.0" || disk.Author != "Кто-то" || disk.AuthorFrom != "из файла manual_mod.mod" {
+		t.Errorf("мод с диска: %+v", disk)
+	}
+	if dml := findMod(t, s, "dml"); dml.AuthorFrom != "" {
+		t.Errorf("мод с диска без автора в .mod получил автора: %+v", dml)
+	}
+
+	// Подняли версию в проекте — список показывает новую сразу.
+	os.WriteFile(filepath.Join(project, "devmod.mod"), []byte(`return { version = "0.4.0", author = "Сам" }`), 0o644)
+	dev = findMod(t, state(t, a), "devmod")
+	if dev.Version != "0.4.0" || dev.Author != "Сам" || dev.AuthorFrom != "из файла devmod.mod" {
+		t.Errorf("после правки проекта: %+v", dev)
+	}
+}
+
 // «Подключить как мод в разработке» только подключает: в наборе мод
 // выключен, ссылка в игре на месте. Папка проекта не страдает.
 func TestLinkOutside(t *testing.T) {

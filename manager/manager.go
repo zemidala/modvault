@@ -98,6 +98,11 @@ type Mod struct {
 	Available string `json:"available"`
 	Source    string `json:"source"`
 	Author    string `json:"author"` // автор по сведениям Nexus; пусто — неизвестен
+	// AuthorFrom и VersionFrom — откуда взяты автор и версия, если не с
+	// Nexus и не из хранилища: «из файла X.mod», «ваше имя на Nexus».
+	// Окно помечает такие значения.
+	AuthorFrom  string `json:"authorFrom"`
+	VersionFrom string `json:"versionFrom"`
 	// Category — категория мода на Nexus; пусто — неизвестна.
 	Category string `json:"category"`
 	// Installed — когда выбранная версия мода добавлена в хранилище.

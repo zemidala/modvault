@@ -95,6 +95,14 @@ type Ordering struct {
 	LastOrderTime time.Time
 }
 
+// Details — что мод сообщает о себе в своих файлах. Пустое поле — мод его
+// не указал.
+type Details struct {
+	Version string
+	Author  string
+	File    string // откуда взято: имя файла мода
+}
+
 // Game — плагин игры.
 type Game interface {
 	ID() string
@@ -115,6 +123,9 @@ type Game interface {
 	Originals(dir string) map[string]string
 	// Ordering сообщает правила порядка загрузки и то, кто его задаёт.
 	Ordering(ctx OrderContext) Ordering
+	// Details читает версию и автора из файлов модов — включённых и
+	// выключенных. Моды, о которых файлы ничего не говорят, в ответ не попадают.
+	Details(ctx OrderContext) map[string]Details
 	// Generate собирает служебные файлы: порядок загрузки, патчи.
 	Generate(ctx Context) ([]Generated, []Notice, error)
 	// Managers перечисляет другие менеджеры модов, найденные в папке игры.

@@ -27,7 +27,17 @@ const ICONS = {
   requires: '<path d="M1.5 8h8M6.5 5l3 3-3 3M13 2.5v11"/>',
   needed: '<path d="M14.5 8h-8M9.5 5l-3 3 3 3M3 2.5v11"/>',
   conflict: '<path d="M2.5 2.5l11 11M13.5 2.5l-11 11M2.5 10.5l3 3M10.5 13.5l3-3"/>',
+  local: '<path d="M3.5 1.5h6l3 3v10h-9z"/><path d="M9.5 1.5v3h3M5.5 8.5h5M5.5 11h5"/>',
 };
+
+// localValue — значение не с Nexus (из файла мода и т. п.): с пунктиром и
+// значком; from — откуда оно взято, для подсказки.
+function localValue(text, from) {
+  const node = el("span", "local");
+  node.append(el("span", "local-text", text), icon("local"));
+  node.title = t("Не с Nexus: ") + from;
+  return node;
+}
 
 // icon — значок из ICONS с подсказкой.
 function icon(name, title) {

@@ -44,6 +44,23 @@ func TestParseModRules(t *testing.T) {
 	}
 }
 
+func TestParseModDetails(t *testing.T) {
+	mod := []byte(`return {
+	run = function() new_mod("X", { mod_script = "X/scripts/mods/X/X" }) end,
+	-- version = "0.0.0-закомментировано",
+	packages = {},
+	version = " 0.2.0 ",
+	author = 'frinteza78',
+	mod_version = "не то поле",
+}`)
+	if v, a := ParseModDetails(mod); v != "0.2.0" || a != "frinteza78" {
+		t.Errorf("версия %q, автор %q", v, a)
+	}
+	if v, a := ParseModDetails([]byte(`return { run = function() end, packages = {} }`)); v != "" || a != "" {
+		t.Errorf("мод без сведений: версия %q, автор %q", v, a)
+	}
+}
+
 const sampleLoader = `--#region AML
 local function aml_hook_load_order(ModManager)
 	local _audio = {
