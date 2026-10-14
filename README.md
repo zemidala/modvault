@@ -31,17 +31,36 @@ go build -tags desktop,production -ldflags "-H windowsgui" -o bin/modvault-gui.e
 
 ### Release build
 
-This is how `Modvault.exe` in the releases is built.
+Releases are built by GitHub Actions ([release.yml](.github/workflows/release.yml)), not on a developer's PC.
+A tag `vX.Y.Z` on a commit in `main` starts the workflow: it checks that the version matches, runs the tests,
+builds `Modvault.exe`, attests its provenance, publishes the release here and in `modvault-releases`, and
+uploads the new version to [Nexus Mods](https://www.nexusmods.com/warhammer40kdarktide/mods/1411).
+A tag with a suffix (`vX.Y.Z-rc1`) makes a pre-release on GitHub only.
+
+To prepare a release:
 
 1. Set the version in `cmd/modvault-gui/winres/winres.json` (`version`, `file_version`,
    `product_version`, `FileVersion`, `ProductVersion`), then in `cmd/modvault-gui` run
-   `go run github.com/tc-hib/go-winres@latest make --arch amd64`.
-2. Build the single exe:
-   ```
-   go build -trimpath -tags desktop,production -ldflags "-H windowsgui -s -w -X github.com/zemidala/modvault/internal/version.Version=X.Y.Z" -o Modvault.exe ./cmd/modvault-gui
-   ```
-3. Tag `vX.Y.Z` here; the release with `Modvault.exe` and its SHA-256 goes to this repository and to
-   `modvault-releases`.
+   `go run github.com/tc-hib/go-winres@v0.3.3 make --arch amd64`.
+2. Add a `## X.Y.Z` section to [CHANGELOG.md](CHANGELOG.md): English, a line `---`, Russian.
+3. Commit to `main`, tag `vX.Y.Z` and push the tag.
+
+#### Checking a release
+
+Every `Modvault.exe` has a build provenance attestation. With the [GitHub CLI](https://cli.github.com/):
+
+```
+gh attestation verify Modvault.exe -R zemidala/modvault
+```
+
+It shows the workflow run and the commit the file was built from. The same file is in the Nexus Mods
+archive; its SHA-256 is in the release description.
+
+To build it yourself, check out the release tag and use Go 1.27.0 (the version pinned in the workflow):
+
+```
+go build -trimpath -tags desktop,production -ldflags "-H windowsgui -s -w -X github.com/zemidala/modvault/internal/version.Version=X.Y.Z" -o Modvault.exe ./cmd/modvault-gui
+```
 
 ## Layout
 
@@ -88,5 +107,6 @@ Saira Stencil One (SIL Open Font License 1.1, texts in `ui/frontend/fonts`).
 Как устроено: моды лежат в отдельном хранилище и попадают в игру жёсткими ссылками; программа знает, какой
 файл какому моду принадлежит; любая операция либо завершается целиком, либо откатывается.
 
-Сборка и выпуск описаны выше, в разделах «Build» и «Release build». План разработки —
+Сборка и выпуск описаны выше, в разделах «Build» и «Release build». Выпуски собирает GitHub Actions из
+исходников тега; проверить файл: `gh attestation verify Modvault.exe -R zemidala/modvault`. План разработки —
 [docs/PLAN.md](docs/PLAN.md).

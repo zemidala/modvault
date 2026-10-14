@@ -1,0 +1,234 @@
+name: Release
+
+# Тег vX.Y.Z — выпуск: сборка, подтверждение происхождения, релизы в modvault и
+# modvault-releases, новая версия файла на Nexus Mods.
+# Тег vX.Y.Z-rc1 (любой суффикс) — пробный выпуск: только pre-release на GitHub.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  # Версия Go закреплена: с ней и с флагами ниже сборка из тега даёт тот же exe побайтно.
+  GO_VERSION: '1.27.0'
+
+jobs:
+  build:
+    name: Сборка
+    runs-on: windows-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+      sha256: ${{ steps.hash.outputs.sha256 }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Версия из тега
+        id: version
+        run: |
+          ver="${GITHUB_REF_NAME#v}"
+          if ! [[ "$ver" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
+            echo "::error::Тег $GITHUB_REF_NAME: нужен vX.Y.Z или vX.Y.Z-rc1"; exit 1
+          fi
+          base="${ver%%-*}"
+          pre=false; [ "$ver" != "$base" ] && pre=true
+          { echo "version=$ver"; echo "base=$base"; echo "prerelease=$pre"; } >> "$GITHUB_OUTPUT"
+          echo "Версия $ver, pre-release: $pre"
+
+      - name: Тег стоит на коммите из main
+        run: |
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::Коммит тега $GITHUB_REF_NAME не входит в main"; exit 1
+          fi
+
+      - name: Версия в winres.json совпадает с тегом
+        env:
+          BASE: ${{ steps.version.outputs.base }}
+        run: |
+          python - <<'EOF'
+          import json, os, sys
+          base = os.environ["BASE"]
+          w = json.load(open("cmd/modvault-gui/winres/winres.json", encoding="utf-8"))
+          v = w["RT_VERSION"]["#1"]["0000"]
+          # Числовые поля — из четырёх частей (0.2.1.0), строковые — как в теге (0.2.1).
+          fields = [
+              ("identity.version", w["RT_MANIFEST"]["#1"]["0409"]["identity"]["version"], base + ".0"),
+              ("file_version", v["fixed"]["file_version"], base + ".0"),
+              ("product_version", v["fixed"]["product_version"], base + ".0"),
+              ("FileVersion", v["info"]["0409"]["FileVersion"], base),
+              ("ProductVersion", v["info"]["0409"]["ProductVersion"], base),
+          ]
+          bad = [f"{name} = {got}, нужно {want}" for name, got, want in fields if got != want]
+          if bad:
+              print("::error::winres.json не обновлён под " + base + ": " + "; ".join(bad)
+                    + ". Обновите его и пересоберите .syso (README, Release build).")
+              sys.exit(1)
+          print("winres.json:", base)
+          EOF
+
+      - name: Раздел в CHANGELOG.md
+        run: python .github/release_notes.py check "${{ steps.version.outputs.version }}"
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Vet и тесты
+        run: |
+          go vet ./...
+          go test ./...
+
+      - name: Сборка Modvault.exe
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          mkdir -p dist bin
+          go build -trimpath -tags desktop,production \
+            -ldflags "-H windowsgui -s -w -X github.com/zemidala/modvault/internal/version.Version=$VERSION" \
+            -o dist/Modvault.exe ./cmd/modvault-gui
+          go build -trimpath -ldflags "-X github.com/zemidala/modvault/internal/version.Version=$VERSION" \
+            -o bin/modvault.exe ./cmd/modvault
+
+      - name: Проверка собранного
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          BASE: ${{ steps.version.outputs.base }}
+        run: |
+          set -e
+          got="$(bin/modvault.exe version | tr -d '\r')"
+          [ "$got" = "modvault $VERSION" ] || { echo "::error::CLI: «$got», нужно «modvault $VERSION»"; exit 1; }
+          info="$(go version -m dist/Modvault.exe)"
+          echo "$info" | grep -q "vcs.revision=$GITHUB_SHA" || { echo "::error::exe собран не из $GITHUB_SHA"; exit 1; }
+          echo "$info" | grep -q "vcs.modified=false" || { echo "::error::exe собран из изменённого дерева"; exit 1; }
+          file="$(powershell -NoProfile -Command "(Get-Item dist/Modvault.exe).VersionInfo.FileVersion")"
+          file="$(echo "$file" | tr -d '\r')"
+          [ "$file" = "$BASE" ] || { echo "::error::Свойства exe: версия «$file», нужно «$BASE» (.syso не пересобран?)"; exit 1; }
+          echo "$info" | head -3
+
+      - name: Архив и SHA-256
+        id: hash
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          powershell -NoProfile -Command "Compress-Archive -Path dist/Modvault.exe -DestinationPath dist/Modvault-$VERSION.zip"
+          sha="$(sha256sum dist/Modvault.exe | cut -d' ' -f1 | tr a-f A-F)"
+          echo "sha256=$sha" >> "$GITHUB_OUTPUT"
+          echo "SHA-256 Modvault.exe: $sha" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Подтверждение происхождения
+        uses: actions/attest@v4
+        with:
+          subject-path: |
+            dist/Modvault.exe
+            dist/Modvault-${{ steps.version.outputs.version }}.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: modvault
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30
+
+  release:
+    name: Релизы на GitHub
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.build.outputs.version }}
+      PRERELEASE: ${{ needs.build.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: modvault
+          path: dist
+
+      - name: Описание выпуска
+        env:
+          SHA256: ${{ needs.build.outputs.sha256 }}
+          COMMIT: ${{ github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          got="$(sha256sum dist/Modvault.exe | cut -d' ' -f1 | tr a-f A-F)"
+          [ "$got" = "$SHA256" ] || { echo "::error::SHA-256 скачанного exe не совпал со сборкой"; exit 1; }
+          python .github/release_notes.py github "$VERSION" > notes.md
+          cat notes.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Релиз в modvault
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/publish_release.sh "${{ github.repository }}"
+
+      - name: Релиз в modvault-releases
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+        run: bash .github/publish_release.sh zemidala/modvault-releases
+
+  nexus:
+    name: Nexus Mods
+    needs: [build, release]
+    if: needs.build.outputs.prerelease == 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Ключ Nexus лежит в секретах окружения nexus: его видит только этот шаг.
+    environment: nexus
+    env:
+      VERSION: ${{ needs.build.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: modvault
+          path: dist
+
+      - name: Список изменений
+        id: notes
+        run: |
+          {
+            echo "text<<CHANGELOG_EOF"
+            python .github/release_notes.py nexus "$VERSION"
+            echo "CHANGELOG_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      # Действие Nexus Mods получает ключ API: закреплено по коммиту, не по тегу.
+      - name: Новая версия файла на Nexus
+        uses: Nexus-Mods/upload-action@98532f7670c27cbecc78fae03fa3e278147827e2 # v1.0.0-beta.11
+        with:
+          api_key: ${{ secrets.NEXUSMODS_API_KEY }}
+          mod_id: 1411
+          file_id: 8083722
+          filename: dist/Modvault-${{ env.VERSION }}.zip
+          version: ${{ env.VERSION }}
+          display_name: Modvault
+          description: >-
+            Unpack Modvault.exe into any folder and run it. It is a program, not a mod: do not install it
+            with Vortex. Not code-signed yet: if SmartScreen warns, choose More info - Run anyway.
+            Windows 10/11, 64-bit.
+          category: main
+          archive_existing_version: true
+          allow_mod_manager_download: false
+          primary_mod_manager_download: false
+          update_mod_version: true
+          changelog: ${{ steps.notes.outputs.text }}
