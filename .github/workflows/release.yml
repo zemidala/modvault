@@ -92,10 +92,13 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
+      # Как в ci.yml: из Git Bash без -race TestBusyRead на машине GitHub падает.
       - name: Vet и тесты
+        shell: pwsh
         run: |
           go vet ./...
-          go test ./...
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          go test -race ./...
 
       - name: Сборка Modvault.exe
         env:
