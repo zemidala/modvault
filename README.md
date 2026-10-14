@@ -63,6 +63,8 @@ To build it yourself, check out the release tag and use Go 1.27.2, the version p
 go build -trimpath -tags desktop,production -ldflags "-H windowsgui -s -w -X github.com/zemidala/modvault/internal/version.Version=X.Y.Z" -o Modvault.exe ./cmd/modvault-gui
 ```
 
+The build is reproducible: from a clean checkout of the tag this gives the same SHA-256 as the released file.
+
 ## Layout
 
 ```
