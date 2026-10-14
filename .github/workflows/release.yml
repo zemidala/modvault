@@ -222,7 +222,8 @@ jobs:
         uses: Nexus-Mods/upload-action@98532f7670c27cbecc78fae03fa3e278147827e2 # v1.0.0-beta.11
         with:
           api_key: ${{ secrets.NEXUSMODS_API_KEY }}
-          mod_id: 1411
+          # API v3 ждёт уникальный номер мода (Files → Advanced → Unique Mod ID), а не 1411 из адреса.
+          mod_id: '21230023345539'
           file_id: 8083722
           filename: dist/Modvault-${{ env.VERSION }}.zip
           version: ${{ env.VERSION }}
