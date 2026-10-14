@@ -43,6 +43,7 @@ func (a *Manager) orderInfo(p profile.Profile) ([]ordered, game.Ordering, error)
 				l.Paths = linkModFile(v)
 			} else {
 				files[e.ModID] = a.storeFiles(e, l)
+				l.Paths = withoutLost(l.Paths, e.ModID, p.Winners)
 			}
 			infos = append(infos, game.ModInfo{ModID: e.ModID, Enabled: e.Enabled, Layout: l})
 		}
@@ -58,6 +59,28 @@ func (a *Manager) orderInfo(p profile.Profile) ([]ordered, game.Ordering, error)
 func linkModFile(v store.Version) map[string]string {
 	mod := v.LinkPath + "/" + path.Base(v.LinkPath) + ".mod"
 	return map[string]string{path.Base(mod): mod}
+}
+
+// withoutLost убирает из раскладки мода файлы, победителем которых выбран
+// другой мод: в игре лежит не его вариант. Так игра читает, например, скрипт
+// загрузчика того мода, чей файл на самом деле в игре.
+func withoutLost(paths map[string]string, modID string, winners map[string]string) map[string]string {
+	if len(winners) == 0 {
+		return paths
+	}
+	lost := map[string]bool{}
+	for path, winner := range winners {
+		if winner != modID {
+			lost[strings.ToLower(path)] = true
+		}
+	}
+	out := make(map[string]string, len(paths))
+	for src, dst := range paths {
+		if !lost[strings.ToLower(dst)] {
+			out[src] = dst
+		}
+	}
+	return out
 }
 
 // storeFiles — файлы версии в хранилище: путь в игре в нижнем регистре →
@@ -170,6 +193,9 @@ type SortPlan struct {
 	// Auto — загрузчик сам расставляет моды; сортировка лишь показывает в
 	// списке порядок, который видит игра.
 	Auto bool `json:"auto"`
+	// Conflicts — конфликты файлов, которые сортировка решит: мод, который
+	// по правилам должен перекрывать другой, встанет ниже него.
+	Conflicts []string `json:"conflicts"`
 }
 
 // sorted возвращает профиль с модами в целевом порядке. Выключенные моды
@@ -180,8 +206,10 @@ func (a *Manager) sorted(p profile.Profile) (profile.Profile, SortPlan, error) {
 	if err != nil {
 		return p, SortPlan{}, err
 	}
+	extra, solved := a.conflictRules(p, mods)
+	ord.Rules = append(slices.Clip(ord.Rules), extra...)
 	res := targetOrder(loadedFolders(mods), ord)
-	plan := SortPlan{Cycles: res.Cycles, Auto: ord.Auto, Moves: []string{}}
+	plan := SortPlan{Cycles: res.Cycles, Auto: ord.Auto, Moves: []string{}, Conflicts: solved}
 
 	pos := make(map[string]int, len(res.Order))
 	for i, f := range res.Order {
@@ -215,6 +243,50 @@ func (a *Manager) sorted(p profile.Profile) (profile.Profile, SortPlan, error) {
 		}
 	}
 	return out, plan, nil
+}
+
+// conflictRules — правила «ниже» для конфликтов файлов, где известно, чей
+// вариант должен остаться в игре (вид ordered: так сказано в правилах модов),
+// а победителя пользователь не выбирал. В игре остаётся файл мода, стоящего
+// ниже, поэтому такой мод встаёт после остальных участников. Второе
+// значение — строки о конфликтах, где победитель от этого сменится.
+func (a *Manager) conflictRules(p profile.Profile, mods []ordered) ([]rules.Rule, []string) {
+	plan, err := a.plan()
+	if err != nil || plan == nil {
+		return nil, []string{}
+	}
+	folder := map[string]string{}
+	for _, m := range mods {
+		if m.entry.Enabled && len(m.folders) > 0 {
+			folder[m.entry.ModID] = m.folders[0]
+		}
+	}
+	var out []rules.Rule
+	solved := []string{}
+	for _, c := range a.conflicts(plan, p) {
+		win, ok := folder[c.Suggested]
+		if c.Pinned || c.Kind != ConflictOrdered || !ok {
+			continue
+		}
+		var name string
+		var others []string
+		changes := false
+		for _, m := range c.Mods {
+			if m.ID == c.Suggested {
+				name, changes = m.Name, !m.Winner
+				continue
+			}
+			if f, ok := folder[m.ID]; ok {
+				out = append(out, rules.Rule{Kind: rules.After, Mod: win, Other: f, Source: i18n.T("конфликт файлов")})
+				others = append(others, i18n.Quote(m.Name))
+			}
+		}
+		if changes && len(others) > 0 {
+			solved = append(solved, i18n.Sprintf("%s перекроет %s: %d %s", i18n.Quote(name), strings.Join(others, ", "),
+				c.Total, plural(c.Total, "общий файл", "общих файла", "общих файлов")))
+		}
+	}
+	return out, solved
 }
 
 // SortPreview показывает, что изменит сортировка, ничего не меняя.

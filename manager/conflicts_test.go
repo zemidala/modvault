@@ -113,3 +113,64 @@ func TestConflictDuplicate(t *testing.T) {
 		t.Errorf("два варианта одного мода: %+v", c)
 	}
 }
+
+// Мод, которому нужен другой (require), — дополнение к нему: совет называет его
+// победителем, а сортировка ставит ниже, чтобы в игре остались его файлы.
+// Победителя, выбранного вручную, сортировка не трогает.
+func TestConflictRequiresSort(t *testing.T) {
+	a, _, g := newGame(t)
+	if _, err := a.setGame(g); err != nil {
+		t.Fatal(err)
+	}
+	add := func(name string, files map[string]string) {
+		t.Helper()
+		if _, err := a.addArchive(writeZip(t, name+".zip", files)); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+	}
+	// Перевод добавлен раньше и стоит выше основы: сейчас побеждает основа.
+	// (Не «Base»: mods/base — папка самого загрузчика.)
+	add("Translation", map[string]string{"mods/Translation/Translation.mod": `return { require = { "Weapons" } }`, "mods/Weapons/loc.lua": "ru"})
+	add("Weapons", map[string]string{"mods/Weapons/Weapons.mod": "return {}", "mods/Weapons/loc.lua": "en"})
+
+	list, err := a.Conflicts()
+	if err != nil || len(list) != 1 {
+		t.Fatalf("конфликты: %+v, %v", list, err)
+	}
+	c := list[0]
+	if c.Kind != ConflictOrdered || c.Suggested != "translation" || !strings.Contains(c.Advice, "требует") {
+		t.Errorf("совет по require: %+v", c)
+	}
+
+	plan, err := a.SortPreview()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plan.Conflicts) != 1 || !strings.Contains(plan.Conflicts[0], "«Translation» перекроет «Weapons»") || len(plan.Moves) == 0 {
+		t.Errorf("предпросмотр: %+v", plan)
+	}
+	if _, err := a.Sort(); err != nil {
+		t.Fatal(err)
+	}
+	// Ключ конфликта — участники по порядку: после сортировки он другой.
+	if list, err = a.Conflicts(); err != nil || len(list) != 1 {
+		t.Fatalf("конфликты после сортировки: %+v, %v", list, err)
+	}
+	c = list[0]
+	for _, m := range c.Mods {
+		if m.Winner != (m.ID == "translation") {
+			t.Errorf("после сортировки победитель не перевод: %+v", m)
+		}
+	}
+	if plan, _ := a.SortPreview(); len(plan.Conflicts) != 0 || len(plan.Moves) != 0 {
+		t.Errorf("повторная сортировка что-то меняет: %+v", plan)
+	}
+
+	// Выбрали основу вручную — сортировка с этим не спорит.
+	if _, err := a.SetWinner(c.Key, "weapons"); err != nil {
+		t.Fatal(err)
+	}
+	if plan, _ := a.SortPreview(); len(plan.Conflicts) != 0 {
+		t.Errorf("сортировка спорит с выбором победителя: %+v", plan)
+	}
+}

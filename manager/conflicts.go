@@ -188,12 +188,15 @@ func (a *Manager) advise(info *ConflictInfo, identical bool, folders map[string]
 		return
 	}
 
-	// Автор одного из модов сам указал порядок: кто грузится позже, тот и
-	// должен перекрывать.
-	if later, earlier, ok := ruleOrder(info.Mods, folders, modRules); ok {
+	// Автор одного из модов сам указал порядок или зависимость: кто грузится
+	// позже или кому нужен другой мод, тот и должен перекрывать.
+	if later, earlier, requires, ok := ruleOrder(info.Mods, folders, modRules); ok {
 		info.Kind = ConflictOrdered
 		info.Suggested = later.ID
 		info.Advice = i18n.Sprintf("Автор указал, что %s грузится после %s — значит, он рассчитан на то, чтобы перекрывать его файлы. Победителем стоит выбрать %s.", quote(later), quote(earlier), quote(later))
+		if requires {
+			info.Advice = i18n.Sprintf("%s требует %s — значит, это дополнение к нему (патч, перевод, надстройка) и рассчитан на то, чтобы перекрывать его файлы. Победителем стоит выбрать %s.", quote(later), quote(earlier), quote(later))
+		}
 		if later.Winner {
 			info.Advice += i18n.T(" Сейчас так и есть: достаточно подтвердить.")
 		}
@@ -245,14 +248,17 @@ func sharedFolder(mods []ConflictMod, folders map[string][]string) string {
 }
 
 // ruleOrder ищет среди правил авторов указание, что один участник конфликта
-// грузится после другого.
-func ruleOrder(mods []ConflictMod, folders map[string][]string, modRules []rules.Rule) (later, earlier ConflictMod, ok bool) {
+// грузится после другого, а если такого нет — что он требует другого
+// (requires): мод, которому нужен другой, — дополнение к нему.
+func ruleOrder(mods []ConflictMod, folders map[string][]string, modRules []rules.Rule) (later, earlier ConflictMod, requires, ok bool) {
 	owner := map[string]ConflictMod{}
 	for _, m := range mods {
 		for _, f := range folders[m.ID] {
 			owner[strings.ToLower(f)] = m
 		}
 	}
+	var dep [2]ConflictMod
+	hasDep := false
 	for _, r := range modRules {
 		x, okX := owner[strings.ToLower(r.Mod)]
 		y, okY := owner[strings.ToLower(r.Other)]
@@ -261,12 +267,19 @@ func ruleOrder(mods []ConflictMod, folders map[string][]string, modRules []rules
 		}
 		switch r.Kind {
 		case rules.After:
-			return x, y, true
+			return x, y, false, true
 		case rules.Before:
-			return y, x, true
+			return y, x, false, true
+		case rules.Requires:
+			if !hasDep {
+				dep, hasDep = [2]ConflictMod{x, y}, true
+			}
 		}
 	}
-	return ConflictMod{}, ConflictMod{}, false
+	if hasDep {
+		return dep[0], dep[1], true, true
+	}
+	return ConflictMod{}, ConflictMod{}, false, false
 }
 
 // Conflicts возвращает разбор всех конфликтов файлов текущего набора.

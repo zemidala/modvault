@@ -281,9 +281,13 @@ func (a *App) SortAsk() (Ask, error) {
 		return Ask{}, err
 	}
 	ask := Ask{Title: i18n.T("Отсортировать по правилам")}
-	intro := i18n.T("Моды встанут так, как требуют правила их авторов.")
+	intro := i18n.T("Моды встанут так, как требуют правила их авторов. В конфликте файлов в игре остаётся вариант мода, стоящего ниже, — поэтому дополнения и патчи встанут ниже модов, которые они правят.")
 	if plan.Auto {
-		intro = i18n.T("Ваш загрузчик модов сам расставляет их при запуске игры. Список встанет в том порядке, в каком игра загрузила моды в последний раз; на саму игру это не повлияет.")
+		intro = i18n.T("Порядок загрузки задаёт ваш загрузчик модов: при запуске игры он сам расставляет моды, сортировка на него не влияет. Список встанет в том порядке, в каком игра загрузила моды в последний раз. Порядок списка важен для конфликтов файлов: в игре остаётся вариант мода, стоящего ниже.")
+	}
+	var solved string
+	if len(plan.Conflicts) > 0 {
+		solved = i18n.Sprintf("\n\nКонфликты файлов, которые решит сортировка (%d):\n", len(plan.Conflicts)) + strings.Join(plan.Conflicts, "\n")
 	}
 	if len(plan.Moves) == 0 {
 		ask.Message = intro + i18n.T("\n\nПередвигать нечего: порядок уже такой.")
@@ -294,7 +298,7 @@ func (a *App) SortAsk() (Ask, error) {
 	if len(lines) > show {
 		lines = append(append([]string(nil), lines[:show]...), i18n.Sprintf("…и ещё %d", len(plan.Moves)-show))
 	}
-	ask.Message = i18n.Sprintf("%s\n\nПередвинется %d %s:\n%s", intro, len(plan.Moves),
+	ask.Message = i18n.Sprintf("%s%s\n\nПередвинется %d %s:\n%s", intro, solved, len(plan.Moves),
 		plural(len(plan.Moves), "мод", "мода", "модов"), strings.Join(lines, "\n"))
 	ask.OK = i18n.T("Отсортировать")
 	return ask, nil

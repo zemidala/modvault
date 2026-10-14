@@ -154,3 +154,39 @@ func TestSortAutoLoader(t *testing.T) {
 		t.Errorf("порядок по журналу загрузчика: %s", ids(s))
 	}
 }
+
+// Скрипт загрузчика читается у того мода, чей файл на самом деле в игре: AML
+// и DML кладут один и тот же mods/base/mod_manager.lua, и если победителем
+// выбран AML, загрузчик — AML, хотя DML стоит ниже.
+func TestLoaderScriptWinner(t *testing.T) {
+	a, _, g := newGame(t)
+	a.addArchive(writeZip(t, "aml.zip", map[string]string{
+		"mods/base/mod_manager.lua": "local function aml_hook_load_order(ModManager) end",
+	}))
+	a.addArchive(writeZip(t, "dml.zip", dmlArchive))
+	a.addArchive(modZip(t, "Alpha", `return {}`))
+	a.setGame(g)
+
+	if plan, err := a.SortPreview(); err != nil || plan.Auto {
+		t.Fatalf("без выбора победителя в игре скрипт DML: %+v, %v", plan, err)
+	}
+	list, err := a.Conflicts()
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := ""
+	for _, c := range list {
+		if strings.Contains(c.Key, "aml") {
+			key = c.Key
+		}
+	}
+	if key == "" {
+		t.Fatalf("нет конфликта AML и DML: %+v", list)
+	}
+	if _, err := a.SetWinner(key, "aml"); err != nil {
+		t.Fatal(err)
+	}
+	if plan, err := a.SortPreview(); err != nil || !plan.Auto {
+		t.Errorf("победитель — AML, а загрузчик не узнан: %+v, %v", plan, err)
+	}
+}
