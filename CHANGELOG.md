@@ -7,12 +7,22 @@ SmartScreen note, the build details and the SHA-256 line itself. The English bul
 points also go to the Nexus Mods changelog.
 -->
 
-## Unreleased
+## 0.3.0
+
+**Download `Modvault.exe` below** and replace the old exe with it — your mods and settings stay.
+
+- **Sign in to Nexus Mods in the browser** instead of pasting a personal API key. Click **Nexus** in the status bar: Modvault opens the Nexus page, you allow access, and the browser hands the sign-in back to Modvault. Nexus asks that apps work this way, and personal keys are meant for developers only. Modvault keeps the sign-in in Windows Credential Manager and renews it itself.
+- The API key saved by earlier versions is deleted on the first start, so sign in once more after updating. **Sign out** (click your name in the status bar) ends Modvault's access on the Nexus side as well.
 
 ### Fixed
 - **Take over from Vortex** stopped with "could not find the folder where Vortex keeps mods" when Vortex had deployed mods with symlinks. Vortex does that when its mod folder is on a different drive from the game (Symlink Deployment). Modvault now takes the folder from Vortex's own deployment file and follows symlinks too. If Vortex moved the files into the game instead (Move Deployment), Modvault explains how to switch Vortex to Hardlink or Symlink Deployment first.
 
 ---
+
+Скачайте **`Modvault.exe`** ниже и замените им старый файл — моды и настройки сохранятся.
+
+- **Вход в Nexus Mods через браузер** вместо личного ключа API. Нажмите **Nexus** в строке состояния: Modvault откроет страницу Nexus, вы разрешите доступ, и браузер вернёт вход в Modvault. Так Nexus просит работать программы, а личные ключи у него только для разработчиков. Вход хранится в диспетчере учётных данных Windows, продлевает его Modvault сам.
+- Ключ API, сохранённый прошлыми версиями, при первом запуске удаляется: после обновления войдите ещё раз. **Выход** (щелчок по своему имени в строке состояния) отзывает доступ Modvault и на стороне Nexus.
 
 ### Исправлено
 - **«Перенять у Vortex»** останавливалось с ошибкой «не найдена папка, где Vortex хранит моды», если Vortex разложил моды символическими ссылками. Так он делает, когда его папка с модами лежит на другом диске, не там, где игра (Symlink Deployment). Теперь Modvault берёт папку из файла учёта самого Vortex и понимает символические ссылки. Если Vortex перенёс файлы в игру (Move Deployment), Modvault подскажет сначала переключить Vortex на Hardlink или Symlink Deployment.

@@ -174,10 +174,11 @@ type Manager struct {
 	recovery  deploy.Recovery   // что сделано с прерванным развёртыванием при запуске
 	service   map[string]string // служебный файл в игре → что это за файл
 
-	keys      nexus.Keys     // где лежит ключ Nexus
-	protocol  nexus.Protocol // кто открывает ссылки nxm://; nil — этим не управляем
-	nexusBase string         // адрес API Nexus; пусто — настоящий
-	nexus     *nexus.Client  // клиент с ключом; nil — ещё не создан
+	keys      nexus.Keys     // where the Nexus sign-in (refresh token) is kept
+	protocol  nexus.Protocol // who opens nxm:// links; nil: not ours to manage
+	nexusBase string         // Nexus API address; empty: the real one
+	nexusAuth *nexus.Auth    // fake sign-in in tests; nil: the real one
+	nexus     *nexus.Client  // signed-in client; nil: not made yet
 	// downloading — номера файлов Nexus, которые сейчас скачиваются.
 	downloading map[int]bool
 	// downloads — загрузки этого запуска программы для раздела «Загрузки».
@@ -256,6 +257,8 @@ func New() *Manager {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.keys, a.protocol = nexus.SystemKeys(), nexus.SystemProtocol()
+	nexus.ForgetOldKey()
+	a.forgetOldKey()
 	if a.openErr == nil && a.settings.GameDir == "" && len(installs) > 0 {
 		a.setInstall(installs[0])
 	}

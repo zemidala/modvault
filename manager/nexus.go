@@ -29,34 +29,91 @@ const (
 	nexusSource  = "Nexus Mods"
 )
 
-// errNoNexusKey — ключ ещё не введён.
-var errNoNexusKey = i18n.NewError("ключ Nexus не задан: щёлкните «Nexus» в строке состояния или выполните modvault nexus login")
+// errNoNexusKey means nobody has signed in yet.
+var errNoNexusKey = i18n.NewError("вход в Nexus не выполнен: щёлкните «Nexus» в строке состояния или выполните modvault nexus login")
 
-// client возвращает клиента Nexus с сохранённым ключом.
+// devKeyEnv names the environment variable with a personal API key. Nexus
+// allows personal keys only while developing, so the window never asks for
+// one and nothing stores it.
+const devKeyEnv = "MODVAULT_NEXUS_KEY"
+
+// client returns the Nexus client of the saved sign-in.
 func (a *Manager) client() (*nexus.Client, error) {
 	if a.nexus != nil {
 		return a.nexus, nil
 	}
-	key, err := a.keys.Load()
-	if err != nil {
-		return nil, i18n.Errorf("ключ Nexus не прочитан: %w", err)
+	if key := os.Getenv(devKeyEnv); key != "" {
+		a.nexus = newClient(a.nexusBase, key, nil)
+		return a.nexus, nil
 	}
-	if key == "" {
+	refresh, err := a.keys.Load()
+	if err != nil {
+		return nil, i18n.Errorf("вход в Nexus не прочитан: %w", err)
+	}
+	if refresh == "" {
 		return nil, errNoNexusKey
 	}
-	a.nexus = newClient(a.nexusBase, key)
+	a.nexus = newClient(a.nexusBase, "", a.session(nexus.Tokens{}))
 	return a.nexus, nil
 }
 
-// newClient создаёт клиента Nexus. base — адрес подменного сервера (в
-// тестах); пусто — настоящий Nexus. Оба API подменяются разом: клиент с
-// подменным старым API не должен ходить на настоящий новый.
-func newClient(base, key string) *nexus.Client {
-	c := &nexus.Client{Base: base, Key: key, Version: version.Version}
+// anyClient returns the signed-in client or, without a sign-in, a client
+// for public data only.
+func (a *Manager) anyClient() *nexus.Client {
+	if c, err := a.client(); err == nil {
+		return c
+	}
+	return newClient(a.nexusBase, "", nil)
+}
+
+// newClient makes a Nexus client. base is a fake server address (in tests);
+// empty means the real Nexus. Both APIs are swapped together: a client with
+// a fake old API must not reach the real new one.
+func newClient(base, key string, s *nexus.Session) *nexus.Client {
+	c := &nexus.Client{Base: base, Key: key, Session: s, Version: version.Version}
 	if base != "" {
 		c.Graph = base + "/graphql"
 	}
 	return c
+}
+
+// auth returns the Nexus sign-in; tests put a fake one into nexusAuth.
+func (a *Manager) auth() *nexus.Auth {
+	if a.nexusAuth != nil {
+		return a.nexusAuth
+	}
+	return &nexus.Auth{Version: version.Version}
+}
+
+// session makes a sign-in session that keeps the user name in the settings
+// up to date. Requests to Nexus never run under a.mu, so Changed may lock it.
+func (a *Manager) session(t nexus.Tokens) *nexus.Session {
+	s := nexus.NewSession(a.auth(), a.keys, t)
+	s.Changed = func(u nexus.User) {
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		if u.Name == "" {
+			a.nexus = nil
+		}
+		if a.settings.NexusUser != u.Name || a.settings.NexusPremium != u.Premium {
+			a.settings.NexusUser, a.settings.NexusPremium = u.Name, u.Premium
+			a.saveSettings()
+		}
+	}
+	return s
+}
+
+// forgetOldKey forgets the user of the personal API key of Modvault 0.2.x
+// (New erases the key itself): Nexus does not allow personal keys in a
+// public program, so whoever used one has to sign in again.
+func (a *Manager) forgetOldKey() {
+	if a.openErr != nil || a.settings.NexusUser == "" {
+		return
+	}
+	if refresh, err := a.keys.Load(); err == nil && refresh == "" {
+		a.settings.NexusUser, a.settings.NexusPremium = "", false
+		a.saveSettings()
+	}
 }
 
 // domain — имя игры в адресах Nexus.
@@ -68,38 +125,38 @@ func (a *Manager) domain() (string, error) {
 	return d, nil
 }
 
-// NexusUser возвращает имя владельца сохранённого ключа; пусто — ключа нет.
+// NexusUser returns the name of the signed-in user; empty means not signed in.
 func (a *Manager) NexusUser() string {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return a.settings.NexusUser
 }
 
-// NexusLogin проверяет ключ на Nexus и запоминает его.
-func (a *Manager) NexusLogin(ctx context.Context, key string) (State, error) {
-	key = strings.TrimSpace(key)
-	if key == "" {
-		return State{}, i18n.NewError("ключ пуст")
-	}
+// NexusLogin signs in through the Nexus page in the browser: open shows it,
+// then Modvault waits for the user to allow access (cancel through ctx).
+func (a *Manager) NexusLogin(ctx context.Context, open func(string) error) (State, error) {
 	a.mu.Lock()
-	base := a.nexusBase
+	err := a.openErr
+	auth := a.auth()
 	a.mu.Unlock()
-
-	c := newClient(base, key)
-	user, err := c.Validate(ctx)
+	if err != nil {
+		return State{}, err
+	}
+	t, err := auth.Login(ctx, open)
+	if err != nil {
+		return State{}, err
+	}
+	user, err := auth.User(t.Access)
 	if err != nil {
 		return State{}, err
 	}
 
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if a.openErr != nil {
-		return State{}, a.openErr
+	if err := a.keys.Save(t.Refresh); err != nil {
+		return State{}, i18n.Errorf("вход не сохранён в учётных данных Windows: %w", err)
 	}
-	if err := a.keys.Save(key); err != nil {
-		return State{}, i18n.Errorf("ключ не сохранён в учётных данных Windows: %w", err)
-	}
-	a.nexus = c
+	a.nexus = newClient(a.nexusBase, "", a.session(t))
 	a.settings.NexusUser, a.settings.NexusPremium = user.Name, user.Premium
 	if err := a.saveSettings(); err != nil {
 		return State{}, err
@@ -107,16 +164,24 @@ func (a *Manager) NexusLogin(ctx context.Context, key string) (State, error) {
 	return a.state()
 }
 
-// NexusLogout забывает ключ.
-func (a *Manager) NexusLogout() (State, error) {
+// NexusLogout revokes the sign-in on Nexus and forgets it.
+func (a *Manager) NexusLogout(ctx context.Context) (State, error) {
 	a.mu.Lock()
-	defer a.mu.Unlock()
-	if a.openErr != nil {
-		return State{}, a.openErr
-	}
-	if err := a.keys.Delete(); err != nil {
+	err := a.openErr
+	s := a.session(nexus.Tokens{})
+	a.mu.Unlock()
+	if err != nil {
 		return State{}, err
 	}
+	// Revoking is a courtesy: if Nexus is slow, the sign-in is erased anyway.
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	if err := s.Logout(ctx); err != nil {
+		return State{}, err
+	}
+
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	a.nexus = nil
 	a.settings.NexusUser, a.settings.NexusPremium = "", false
 	if err := a.saveSettings(); err != nil {
@@ -1119,9 +1184,9 @@ func (a *Manager) nexusStatus() []StatusItem {
 	if a.game.NexusDomain() == "" {
 		return nil
 	}
-	item := StatusItem{Label: "Nexus", Value: i18n.T("ключ не задан"), Level: LevelOff, Command: "NexusKey"}
+	item := StatusItem{Label: "Nexus", Value: i18n.T("вход не выполнен"), Level: LevelOff, Command: "NexusLogin"}
 	if a.settings.NexusUser != "" {
-		item.Value, item.Level = a.settings.NexusUser, LevelOK
+		item.Value, item.Level, item.Command = a.settings.NexusUser, LevelOK, "NexusLogout"
 		if a.settings.NexusPremium {
 			item.Value += " · Premium"
 		}

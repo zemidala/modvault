@@ -430,6 +430,9 @@ tr[data-enabled="false"] .name, tr[data-enabled="false"] .version { color: var(-
 .sheet-actions { display: flex; justify-content: flex-end; }
 
 .ask { width: min(620px, 100%); }
+.login-step { display: flex; flex-direction: column; gap: 10px; line-height: 1.45; }
+.login-list { margin: 0; padding-left: 20px; }
+.login-list li::marker { color: var(--brass); }
 .ask-message { white-space: pre-line; line-height: 1.45; overflow-y: auto; overflow-wrap: anywhere; user-select: text; }
 .ask .field { flex: 0 0 auto; }
 .sheet-actions { gap: 8px; }

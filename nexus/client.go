@@ -32,8 +32,8 @@ const DefaultGraph = "https://api.nexusmods.com/v2/graphql"
 var (
 	// ErrNoKey — ключ API не задан.
 	ErrNoKey = i18n.NewError("ключ Nexus не задан")
-	// ErrUnauthorized — Nexus не принял ключ.
-	ErrUnauthorized = i18n.NewError("Nexus не принял ключ")
+	// ErrUnauthorized means Nexus rejected the sign-in or the key.
+	ErrUnauthorized = i18n.NewError("Nexus не принял вход")
 	// ErrForbidden — действие недоступно этой учётной записи (например,
 	// прямая загрузка без Premium) или ссылка с сайта устарела.
 	ErrForbidden = i18n.NewError("Nexus отказал")
@@ -50,12 +50,13 @@ type Limits struct {
 	Hourly int
 }
 
-// Client — клиент API Nexus Mods. Годится для вызова из разных потоков.
+// Client is a Nexus Mods API client, safe for use from several goroutines.
 type Client struct {
-	Base    string // пусто — DefaultBase
-	Graph   string // пусто — DefaultGraph
-	Key     string
-	Version string // версия программы для заголовков запроса
+	Base    string   // empty: DefaultBase
+	Graph   string   // empty: DefaultGraph
+	Key     string   // personal API key, for development only
+	Session *Session // OAuth sign-in; wins over Key
+	Version string   // program version for request headers
 	HTTP    *http.Client
 
 	mu     sync.Mutex
@@ -86,9 +87,64 @@ func (c *Client) get(ctx context.Context, path string, query url.Values, out any
 	return c.do(ctx, http.MethodGet, path, query, nil, out)
 }
 
+// signedIn reports whether there is anything to sign requests with.
+func (c *Client) signedIn() bool { return c.Key != "" || c.Session != nil }
+
+// sign puts the key or the access token into the request; stale means Nexus
+// rejected the previous token.
+func (c *Client) sign(ctx context.Context, req *http.Request, stale bool) error {
+	if c.Session != nil {
+		token, err := c.Session.Token(ctx, stale)
+		if err != nil {
+			return err
+		}
+		req.Header.Set("Authorization", "Bearer "+token)
+	} else if c.Key != "" {
+		req.Header.Set("apikey", c.Key)
+	}
+	return nil
+}
+
+// send sends the request made by build. If Nexus rejects the access token
+// (it may expire early), the token is refreshed and the request is retried
+// once.
+func (c *Client) send(ctx context.Context, build func() (*http.Request, error)) (*http.Response, error) {
+	hc := c.HTTP
+	if hc == nil {
+		hc = defaultHTTP
+	}
+	for stale := false; ; stale = true {
+		req, err := build()
+		if err != nil {
+			return nil, err
+		}
+		if err := c.sign(ctx, req, stale); err != nil {
+			return nil, err
+		}
+		req.Header.Set("User-Agent", "Modvault/"+c.Version)
+		req.Header.Set("Application-Name", "Modvault")
+		req.Header.Set("Application-Version", c.Version)
+		resp, err := hc.Do(req)
+		if err != nil {
+			// A network error carries the request URL, which may hold the key
+			// of a link from the site: only the cause goes out.
+			var uerr *url.Error
+			if errors.As(err, &uerr) {
+				err = uerr.Err
+			}
+			return nil, i18n.Errorf("Nexus недоступен: %w", err)
+		}
+		if resp.StatusCode == http.StatusUnauthorized && c.Session != nil && !stale {
+			resp.Body.Close()
+			continue
+		}
+		return resp, nil
+	}
+}
+
 // do выполняет запрос к API; body, если задано, уходит в теле как JSON.
 func (c *Client) do(ctx context.Context, method, path string, query url.Values, body, out any) error {
-	if c.Key == "" {
+	if !c.signedIn() {
 		return ErrNoKey
 	}
 	u := c.Base
@@ -99,41 +155,31 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 	if len(query) > 0 {
 		u += "?" + query.Encode()
 	}
-	var payload io.Reader
+	var data []byte
 	if body != nil {
-		data, err := json.Marshal(body)
-		if err != nil {
+		var err error
+		if data, err = json.Marshal(body); err != nil {
 			return err
 		}
-		payload = bytes.NewReader(data)
 	}
-	req, err := http.NewRequestWithContext(ctx, method, u, payload)
+	resp, err := c.send(ctx, func() (*http.Request, error) {
+		var payload io.Reader
+		if body != nil {
+			payload = bytes.NewReader(data)
+		}
+		req, err := http.NewRequestWithContext(ctx, method, u, payload)
+		if err != nil {
+			return nil, err
+		}
+		if body != nil {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		req.Header.Set("Accept", "application/json")
+		req.Header.Set("Protocol-Version", protocolVersion)
+		return req, nil
+	})
 	if err != nil {
 		return err
-	}
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-	req.Header.Set("apikey", c.Key)
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", "Modvault/"+c.Version)
-	req.Header.Set("Application-Name", "Modvault")
-	req.Header.Set("Application-Version", c.Version)
-	req.Header.Set("Protocol-Version", protocolVersion)
-
-	hc := c.HTTP
-	if hc == nil {
-		hc = defaultHTTP
-	}
-	resp, err := hc.Do(req)
-	if err != nil {
-		// В тексте ошибки сети есть адрес запроса, а в нём может быть ключ
-		// ссылки с сайта: наружу идёт только причина.
-		var uerr *url.Error
-		if errors.As(err, &uerr) {
-			err = uerr.Err
-		}
-		return i18n.Errorf("Nexus недоступен: %w", err)
 	}
 	defer resp.Body.Close()
 	c.remember(resp.Header)
@@ -232,28 +278,17 @@ func (c *Client) graph(ctx context.Context, query string, vars map[string]any, o
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, bytes.NewReader(data))
+	// Public data is served without sign-in too: then the request goes unsigned.
+	resp, err := c.send(ctx, func() (*http.Request, error) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, bytes.NewReader(data))
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Content-Type", "application/json")
+		return req, nil
+	})
 	if err != nil {
 		return err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if c.Key != "" { // открытые сведения отдаются и без ключа
-		req.Header.Set("apikey", c.Key)
-	}
-	req.Header.Set("User-Agent", "Modvault/"+c.Version)
-	req.Header.Set("Application-Name", "Modvault")
-	req.Header.Set("Application-Version", c.Version)
-	hc := c.HTTP
-	if hc == nil {
-		hc = defaultHTTP
-	}
-	resp, err := hc.Do(req)
-	if err != nil {
-		var uerr *url.Error
-		if errors.As(err, &uerr) {
-			err = uerr.Err
-		}
-		return i18n.Errorf("Nexus недоступен: %w", err)
 	}
 	defer resp.Body.Close()
 	answer, err := io.ReadAll(io.LimitReader(resp.Body, 32<<20))
@@ -302,7 +337,7 @@ func (c *Client) SendMessage(ctx context.Context, to int, title, body string) er
 			Success bool `json:"success"`
 		} `json:"createMessage"`
 	}
-	if c.Key == "" {
+	if !c.signedIn() {
 		return ErrNoKey
 	}
 	const query = "mutation($to: [Int!]!, $title: String!, $body: String!) { createMessage(to: $to, title: $title, body: $body) { success } }"

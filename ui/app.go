@@ -93,6 +93,9 @@ type App struct {
 	pending []string // аргументы запуска, которые ждут готовности страницы
 
 	window WindowState // размер и место окна с прошлого запуска
+
+	cancelLogin context.CancelFunc // stops a Nexus sign-in in progress
+	loginPage   string             // the Nexus sign-in page of that sign-in
 }
 
 func NewApp(m *manager.Manager) *App {
@@ -387,28 +390,73 @@ func (a *App) DeleteSetAsk(name string) Ask {
 // DeleteSet удаляет набор.
 func (a *App) DeleteSet(name string) (manager.State, error) { return a.m.DeleteSet(name) }
 
-// NexusKeyAsk — вопрос с полем для ключа Nexus.
-func (a *App) NexusKeyAsk() Ask {
-	ask := Ask{Title: i18n.T("Ключ Nexus Mods"), OK: i18n.T("Сохранить"), Input: true, Secret: true, Placeholder: "Personal API Key"}
-	ask.Message = i18n.T("Ключ нужен, чтобы ставить моды кнопкой «Mod Manager Download» на сайте и проверять обновления.\n\n" +
-		"Где взять: nexusmods.com → настройки сайта (Site preferences) → страница API Access → Personal API Key.\n\n" +
-		"Ключ хранится в учётных данных Windows; в файлы программы он не попадает.")
-	if user := a.m.NexusUser(); user != "" {
-		ask.Message = i18n.Sprintf("Сейчас сохранён ключ пользователя %s.\n\nВведите другой ключ, чтобы заменить его, или оставьте поле пустым, чтобы программа забыла ключ.", user)
-	}
-	return ask
+// LoginResult is the outcome of a sign-in; an empty Message means it was
+// cancelled.
+type LoginResult struct {
+	State   manager.State `json:"state"`
+	Message string        `json:"message"`
 }
 
-// NexusLogin проверяет и запоминает ключ; пустой ключ — забыть сохранённый.
-func (a *App) NexusLogin(key string) (manager.State, error) {
-	if strings.TrimSpace(key) == "" {
-		if a.m.NexusUser() == "" {
-			return a.m.State()
-		}
-		return a.m.NexusLogout()
+// NexusLogin opens the Nexus sign-in page in the browser and waits until the
+// user allows access or the page calls CancelNexusLogin.
+func (a *App) NexusLogin() (LoginResult, error) {
+	ctx, cancel := context.WithCancel(a.ctx)
+	a.mu.Lock()
+	if a.cancelLogin != nil {
+		a.cancelLogin() // a second click starts over
 	}
-	return a.m.NexusLogin(a.ctx, key)
+	a.cancelLogin = cancel
+	a.mu.Unlock()
+	defer cancel()
+	state, err := a.m.NexusLogin(ctx, func(link string) error {
+		a.mu.Lock()
+		a.loginPage = link
+		a.mu.Unlock()
+		runtime.BrowserOpenURL(a.ctx, link)
+		return nil
+	})
+	if errors.Is(err, context.Canceled) {
+		state, err = a.m.State()
+		return LoginResult{State: state}, err
+	}
+	if err != nil {
+		return LoginResult{}, err
+	}
+	return LoginResult{State: state, Message: i18n.Sprintf("Вход в Nexus выполнен: %s", a.m.NexusUser())}, nil
 }
+
+// ReopenNexusLogin opens the sign-in page again: the browser may not have
+// come up or the tab was closed.
+func (a *App) ReopenNexusLogin() {
+	a.mu.Lock()
+	page := a.loginPage
+	a.mu.Unlock()
+	if page != "" {
+		runtime.BrowserOpenURL(a.ctx, page)
+	}
+}
+
+// CancelNexusLogin stops waiting for the browser.
+func (a *App) CancelNexusLogin() {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.cancelLogin != nil {
+		a.cancelLogin()
+		a.cancelLogin = nil
+	}
+}
+
+// NexusLogoutAsk asks before signing out.
+func (a *App) NexusLogoutAsk() Ask {
+	return Ask{
+		Title:   i18n.T("Выйти из Nexus"),
+		Message: i18n.Sprintf("Выйти из учётной записи %s? Modvault отзовёт свой доступ на Nexus. Моды останутся на месте; чтобы снова ставить их с сайта и проверять обновления, понадобится войти заново.", a.m.NexusUser()),
+		OK:      i18n.T("Выйти"),
+	}
+}
+
+// NexusLogout signs out and revokes access on Nexus.
+func (a *App) NexusLogout() (manager.State, error) { return a.m.NexusLogout(a.ctx) }
 
 // CheckUpdates проверяет на Nexus, вышли ли новые версии модов.
 // О ходе проверки страница узнаёт из событий «checking».

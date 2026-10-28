@@ -449,8 +449,7 @@ func (a *Manager) ImportCollection(ctx context.Context, link string) (ImportResu
 	a.mu.Lock()
 	real, herr := a.hasMods()
 	domain, derr := a.domain()
-	key, _ := a.keys.Load()
-	c := newClient(a.nexusBase, key)
+	c := a.anyClient()
 	a.mu.Unlock()
 	if err := errors.Join(herr, derr); err != nil {
 		return ImportResult{}, err

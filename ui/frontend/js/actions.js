@@ -80,6 +80,56 @@ function ask(question) {
   });
 }
 
+// signIn shows the Nexus sign-in window: first what signing in gives, then,
+// after "Sign in through Nexus", the wait for the browser. Resolves to the
+// new state; Esc and "Cancel" stop the sign-in.
+function signIn() {
+  return new Promise((resolve) => {
+    const box = $("login");
+    let over = false;
+    const step = (waiting) => {
+      $("login-intro").hidden = waiting;
+      $("login-wait").hidden = !waiting;
+      $("login-go").hidden = waiting;
+      $("login-again").hidden = !waiting;
+    };
+    const close = (next) => {
+      over = true;
+      box.hidden = true;
+      box.removeEventListener("keydown", onKey);
+      $("login-go").onclick = $("login-cancel").onclick = $("login-again").onclick = null;
+      resolve(next);
+    };
+    const cancel = () => {
+      backend().CancelNexusLogin();
+      close(state);
+    };
+    const onKey = (event) => {
+      if (event.key === "Escape") cancel();
+    };
+    $("login-cancel").onclick = cancel;
+    $("login-again").onclick = () => backend().ReopenNexusLogin();
+    $("login-go").onclick = async () => {
+      step(true);
+      $("login-cancel").focus();
+      try {
+        const res = await backend().NexusLogin();
+        if (over) return; // cancelled meanwhile
+        close(res.state);
+        if (res.message) toast(res.message);
+      } catch (err) {
+        if (over) return;
+        close(state);
+        toast(String(err), "error");
+      }
+    };
+    step(false);
+    box.addEventListener("keydown", onKey);
+    box.hidden = false;
+    $("login-go").focus();
+  });
+}
+
 // confirmThen спрашивает вопрос, полученный от программы, и при согласии
 // выполняет действие; при отказе состояние остаётся прежним.
 async function confirmThen(question, action) {
@@ -96,10 +146,8 @@ const commands = {
   Sort: () => confirmThen(() => backend().SortAsk(), () => backend().Sort()),
   EnableMod: (id) => backend().SetEnabled(id, true),
   DisableMod: (id) => backend().SetEnabled(id, false),
-  NexusKey: async () => {
-    const key = await ask(await backend().NexusKeyAsk());
-    return key === null ? state : backend().NexusLogin(key);
-  },
+  NexusLogin: () => signIn(),
+  NexusLogout: () => confirmThen(() => backend().NexusLogoutAsk(), () => backend().NexusLogout()),
   ToggleNxm: () => confirmThen(() => backend().NxmAsk(), () => backend().ToggleNxm()),
   ShowFiles: async () => {
     await showFiles();
