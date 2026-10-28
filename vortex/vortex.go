@@ -28,8 +28,14 @@ const (
 type Deployment struct {
 	Instance string `json:"instance"`
 	Method   string `json:"deploymentMethod"`
-	Files    []File `json:"files"`
+	// Staging is the folder Vortex keeps mods in; older manifests lack it.
+	Staging string `json:"stagingPath"`
+	Files   []File `json:"files"`
 }
+
+// moveMethod is the Vortex deployment that moves files into the game instead
+// of linking them: its staging folder holds no mod files.
+const moveMethod = "move_activator"
 
 // File — развёрнутый файл: путь в игре и папка мода в хранилище Vortex.
 type File struct {
@@ -74,14 +80,25 @@ func (d *Deployment) Sources() []string {
 	return out
 }
 
-// FindStaging находит папку-хранилище Vortex: файлы в игре — жёсткие ссылки
-// на её файлы, так что достаточно найти другое имя одного из них.
+// FindStaging finds the Vortex staging folder. Vortex names it in its
+// deployment file; without that, the game files lead to it: they are hard
+// links or symlinks to its files.
 func FindStaging(gameDir string, d *Deployment) (string, error) {
+	if d.Method == moveMethod {
+		return "", i18n.NewError("Vortex перенёс файлы модов в игру (Move Deployment), а не сослался на них: перенять их так нельзя. В настройках Vortex выберите Hardlink Deployment или Symlink Deployment, разверните моды заново и повторите")
+	}
+	// The marker proves the folder really is the staging folder.
+	if d.Staging != "" && IsStaging(d.Staging) {
+		return filepath.Clean(d.Staging), nil
+	}
 	for _, f := range d.Files {
 		game := filepath.Join(gameDir, filepath.FromSlash(f.RelPath))
-		names, err := hardLinks(game)
-		if err != nil {
-			continue
+		names, _ := hardLinks(game)
+		if target, err := os.Readlink(game); err == nil {
+			if !filepath.IsAbs(target) {
+				target = filepath.Join(filepath.Dir(game), target)
+			}
+			names = append(names, filepath.Clean(target))
 		}
 		suffix := strings.ToLower(string(filepath.Separator) + f.Source + string(filepath.Separator) + filepath.FromSlash(f.RelPath))
 		for _, name := range names {
