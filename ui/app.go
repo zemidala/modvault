@@ -95,6 +95,7 @@ type App struct {
 	window WindowState // размер и место окна с прошлого запуска
 
 	cancelLogin context.CancelFunc // stops a Nexus sign-in in progress
+	loginPage   string             // the Nexus sign-in page of that sign-in
 }
 
 func NewApp(m *manager.Manager) *App {
@@ -389,9 +390,16 @@ func (a *App) DeleteSetAsk(name string) Ask {
 // DeleteSet удаляет набор.
 func (a *App) DeleteSet(name string) (manager.State, error) { return a.m.DeleteSet(name) }
 
+// LoginResult is the outcome of a sign-in; an empty Message means it was
+// cancelled.
+type LoginResult struct {
+	State   manager.State `json:"state"`
+	Message string        `json:"message"`
+}
+
 // NexusLogin opens the Nexus sign-in page in the browser and waits until the
 // user allows access or the page calls CancelNexusLogin.
-func (a *App) NexusLogin() (manager.State, error) {
+func (a *App) NexusLogin() (LoginResult, error) {
 	ctx, cancel := context.WithCancel(a.ctx)
 	a.mu.Lock()
 	if a.cancelLogin != nil {
@@ -401,13 +409,31 @@ func (a *App) NexusLogin() (manager.State, error) {
 	a.mu.Unlock()
 	defer cancel()
 	state, err := a.m.NexusLogin(ctx, func(link string) error {
+		a.mu.Lock()
+		a.loginPage = link
+		a.mu.Unlock()
 		runtime.BrowserOpenURL(a.ctx, link)
 		return nil
 	})
 	if errors.Is(err, context.Canceled) {
-		return a.m.State()
+		state, err = a.m.State()
+		return LoginResult{State: state}, err
 	}
-	return state, err
+	if err != nil {
+		return LoginResult{}, err
+	}
+	return LoginResult{State: state, Message: i18n.Sprintf("Вход в Nexus выполнен: %s", a.m.NexusUser())}, nil
+}
+
+// ReopenNexusLogin opens the sign-in page again: the browser may not have
+// come up or the tab was closed.
+func (a *App) ReopenNexusLogin() {
+	a.mu.Lock()
+	page := a.loginPage
+	a.mu.Unlock()
+	if page != "" {
+		runtime.BrowserOpenURL(a.ctx, page)
+	}
 }
 
 // CancelNexusLogin stops waiting for the browser.

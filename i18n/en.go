@@ -617,5 +617,5 @@ var en = map[string]string{
 	"выход из Nexus выполнен, доступ отозван": "signed out of Nexus, access revoked",
 	"Выйти из Nexus":                          "Sign out of Nexus",
 	"Выйти из учётной записи %s? Modvault отзовёт свой доступ на Nexus. Моды останутся на месте; чтобы снова ставить их с сайта и проверять обновления, понадобится войти заново.": "Sign out of the %s account? Modvault will revoke its access on Nexus. Your mods stay where they are; to install mods from the site and check for updates you will need to sign in again.",
-	"Выйти": "Sign out",
+	"Выйти": "Sign out", "Вход в Nexus выполнен: %s": "Signed in to Nexus: %s",
 }

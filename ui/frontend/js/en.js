@@ -265,5 +265,15 @@ window.MODVAULT_EN = {
   "с диска": "from disk",
   "ссылка на папку проекта": "link to a project folder",
   "требует другие моды": "requires other mods",
-  "у выбранного: что ему нужно": "for the selected mod: what it needs"
+  "у выбранного: что ему нужно": "for the selected mod: what it needs",
+  "Вход в Nexus": "Sign in to Nexus",
+  "После входа Modvault сможет:": "Once signed in, Modvault can:",
+  "ставить моды кнопкой «Mod Manager Download» на сайте;": "install mods with the “Mod Manager Download” button on the site;",
+  "проверять, вышли ли новые версии ваших модов;": "check whether new versions of your mods are out;",
+  "одобрять моды и писать их авторам.": "endorse mods and message their authors.",
+  "Вход — на странице Nexus в браузере. Пароль Modvault не видит, доступ можно отозвать на сайте в любой момент.": "You sign in on the Nexus page in your browser. Modvault never sees your password, and you can revoke its access on the site at any time.",
+  "В браузере открылась страница Nexus. Нажмите там «Authorise»: Modvault войдёт сам.": "The Nexus page has opened in your browser. Click “Authorise” there and Modvault signs in by itself.",
+  "Страница не открылась или вы её закрыли — откройте её ещё раз.": "If the page did not open or you closed it, open it again.",
+  "Открыть страницу ещё раз": "Open the page again",
+  "Войти через Nexus": "Sign in through Nexus"
 };

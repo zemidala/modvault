@@ -213,6 +213,31 @@
   </section>
 </div>
 
+<div class="sheet-backdrop" id="login" hidden>
+  <section class="sheet ask frame" role="dialog" aria-modal="true" aria-labelledby="login-title">
+    <div class="heading"><h2 id="login-title">Вход в Nexus</h2><span class="rule"></span><span class="diamond"></span></div>
+    <div class="login-step" id="login-intro">
+      <p>После входа Modvault сможет:</p>
+      <ul class="login-list">
+        <li>ставить моды кнопкой «Mod Manager Download» на сайте;</li>
+        <li>проверять, вышли ли новые версии ваших модов;</li>
+        <li>одобрять моды и писать их авторам.</li>
+      </ul>
+      <p class="muted small">Вход — на странице Nexus в браузере. Пароль Modvault не видит, доступ можно отозвать на сайте в любой момент.</p>
+    </div>
+    <div class="login-step" id="login-wait" role="status" hidden>
+      <p>В браузере открылась страница Nexus. Нажмите там «Authorise»: Modvault войдёт сам.</p>
+      <div class="bar indeterminate"><div class="bar-fill"></div></div>
+      <p class="muted small">Страница не открылась или вы её закрыли — откройте её ещё раз.</p>
+    </div>
+    <div class="sheet-actions">
+      <button class="ghost" id="login-again" hidden>Открыть страницу ещё раз</button>
+      <button class="ghost" id="login-cancel">Отмена</button>
+      <button class="plate" id="login-go">Войти через Nexus</button>
+    </div>
+  </section>
+</div>
+
 <div class="sheet-backdrop" id="compose" hidden>
   <section class="sheet ask frame" role="dialog" aria-modal="true" aria-labelledby="compose-title">
     <div class="heading"><h2 id="compose-title"></h2><span class="rule"></span><span class="diamond"></span></div>
