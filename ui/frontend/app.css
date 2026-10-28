@@ -73,6 +73,11 @@ h1, h2 { margin: 0; font-weight: 400; }
   padding: 10px 20px;
   color: var(--black);
   background-color: var(--orange-worn);
+  background-image:
+    radial-gradient(ellipse at 12% 20%, rgba(7, 8, 11, 0.16), transparent 45%),
+    radial-gradient(ellipse at 80% 90%, rgba(7, 8, 11, 0.2), transparent 40%),
+    radial-gradient(ellipse at 48% 0%, rgba(255, 255, 255, 0.08), transparent 35%),
+    repeating-linear-gradient(115deg, rgba(7, 8, 11, 0.05) 0 2px, transparent 2px 9px);
   border-bottom: 3px double var(--black);
 }
 

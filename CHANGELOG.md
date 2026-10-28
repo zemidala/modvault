@@ -11,14 +11,14 @@ points also go to the Nexus Mods changelog.
 
 **Download `Modvault.exe` below** and replace the old exe with it — your mods and settings stay.
 
-- New look: the header is in the brand orange without the worn texture, section titles and the main buttons use the Russo One font, and captions are brighter and easier to read.
+- New look: the header is in the brand orange, section titles and the main buttons use the Russo One font, and captions are brighter and easier to read.
 - The **Sign in with Nexus** button is a dark plate with orange lettering instead of a bright orange one.
 
 ---
 
 Скачайте **`Modvault.exe`** ниже и замените им старый файл — моды и настройки сохранятся.
 
-- Новое оформление: шапка в фирменном оранжевом без потёртостей, заголовки разделов и главные кнопки шрифтом Russo One, подписи светлее и читаются легче.
+- Новое оформление: шапка в фирменном оранжевом, заголовки разделов и главные кнопки шрифтом Russo One, подписи светлее и читаются легче.
 - Кнопка **«Войти через Nexus»** — тёмная плашка с оранжевой надписью вместо ярко-оранжевой.
 
 ## 0.3.0
