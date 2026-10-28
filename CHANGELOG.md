@@ -11,14 +11,14 @@ points also go to the Nexus Mods changelog.
 
 **Download `Modvault.exe` below** and replace the old exe with it — your mods and settings stay.
 
-- New look: the header is in the brand orange, section titles and the main buttons use the Russo One font, and captions are brighter and easier to read.
+- New look in the spirit of the Imperium: brass frames with rivets, gothic capitals in section titles and on the main buttons, a yellow-and-black hazard stripe under the worn orange header. Captions are brighter and easier to read.
 - The **Sign in with Nexus** button is a dark plate with orange lettering instead of a bright orange one.
 
 ---
 
 Скачайте **`Modvault.exe`** ниже и замените им старый файл — моды и настройки сохранятся.
 
-- Новое оформление: шапка в фирменном оранжевом, заголовки разделов и главные кнопки шрифтом Russo One, подписи светлее и читаются легче.
+- Новое оформление в духе Империума: латунные рамки с заклёпками, готические капители в заголовках разделов и на главных кнопках, жёлто-чёрная полоса опасности под потёртой оранжевой шапкой. Подписи светлее и читаются легче.
 - Кнопка **«Войти через Nexus»** — тёмная плашка с оранжевой надписью вместо ярко-оранжевой.
 
 ## 0.3.0
