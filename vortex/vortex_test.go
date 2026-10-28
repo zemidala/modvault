@@ -3,6 +3,7 @@ package vortex
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -76,6 +77,58 @@ func TestFindStaging(t *testing.T) {
 	os.Remove(filepath.Join(staging, stagingMarker))
 	if _, err := FindStaging(game, d); err == nil {
 		t.Error("папка без маркера принята за хранилище Vortex")
+	}
+}
+
+// fakeStaging makes a Vortex staging folder with one mod file and an empty
+// game folder; it returns the game folder, the staging folder and the file.
+func fakeStaging(t *testing.T) (game, staging, src string) {
+	base := t.TempDir()
+	game = filepath.Join(base, "Игра")
+	staging = filepath.Join(base, "Vortex Mods", "warhammer40kdarktide")
+	src = filepath.Join(staging, "AFK-33", "mods", "afk", "afk.mod")
+	os.MkdirAll(filepath.Dir(src), 0o755)
+	os.WriteFile(src, []byte("return {}"), 0o644)
+	os.WriteFile(filepath.Join(staging, stagingMarker), []byte(`{"instance":"abc"}`), 0o644)
+	os.MkdirAll(filepath.Join(game, "mods", "afk"), 0o755)
+	return game, staging, src
+}
+
+// Vortex names the staging folder in its deployment file: it is found even
+// when the game files are plain copies.
+func TestFindStagingFromManifest(t *testing.T) {
+	game, staging, src := fakeStaging(t)
+	data, _ := os.ReadFile(src)
+	os.WriteFile(filepath.Join(game, "mods", "afk", "afk.mod"), data, 0o644)
+	d := &Deployment{Staging: staging, Files: []File{{RelPath: "mods/afk/afk.mod", Source: "AFK-33"}}}
+	if got, err := FindStaging(game, d); err != nil || !sameDir(got, staging) {
+		t.Errorf("хранилище из учёта = %q, %v", got, err)
+	}
+	// A path without the Vortex marker is not trusted.
+	os.Remove(filepath.Join(staging, stagingMarker))
+	if _, err := FindStaging(game, d); err == nil {
+		t.Error("папка из учёта без маркера принята за хранилище Vortex")
+	}
+}
+
+// Symlink Deployment: the game files are symlinks into the staging folder,
+// which Vortex picks when that folder is on another drive.
+func TestFindStagingSymlinks(t *testing.T) {
+	game, staging, src := fakeStaging(t)
+	if err := os.Symlink(src, filepath.Join(game, "mods", "afk", "afk.mod")); err != nil {
+		t.Skipf("символические ссылки недоступны: %v", err)
+	}
+	d := &Deployment{Method: "symlink_activator", Files: []File{{RelPath: "mods/afk/afk.mod", Source: "AFK-33"}}}
+	if got, err := FindStaging(game, d); err != nil || !sameDir(got, staging) {
+		t.Errorf("хранилище по символической ссылке = %q, %v", got, err)
+	}
+}
+
+func TestFindStagingMoved(t *testing.T) {
+	game, staging, _ := fakeStaging(t)
+	d := &Deployment{Method: moveMethod, Staging: staging, Files: []File{{RelPath: "mods/afk/afk.mod", Source: "AFK-33"}}}
+	if _, err := FindStaging(game, d); err == nil || !strings.Contains(err.Error(), "Move Deployment") {
+		t.Errorf("перенос файлов: %v", err)
 	}
 }
 

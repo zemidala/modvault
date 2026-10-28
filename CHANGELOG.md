@@ -7,6 +7,16 @@ SmartScreen note, the build details and the SHA-256 line itself. The English bul
 points also go to the Nexus Mods changelog.
 -->
 
+## Unreleased
+
+### Fixed
+- **Take over from Vortex** stopped with "could not find the folder where Vortex keeps mods" when Vortex had deployed mods with symlinks. Vortex does that when its mod folder is on a different drive from the game (Symlink Deployment). Modvault now takes the folder from Vortex's own deployment file and follows symlinks too. If Vortex moved the files into the game instead (Move Deployment), Modvault explains how to switch Vortex to Hardlink or Symlink Deployment first.
+
+---
+
+### Исправлено
+- **«Перенять у Vortex»** останавливалось с ошибкой «не найдена папка, где Vortex хранит моды», если Vortex разложил моды символическими ссылками. Так он делает, когда его папка с модами лежит на другом диске, не там, где игра (Symlink Deployment). Теперь Modvault берёт папку из файла учёта самого Vortex и понимает символические ссылки. Если Vortex перенёс файлы в игру (Move Deployment), Modvault подскажет сначала переключить Vortex на Hardlink или Symlink Deployment.
+
 ## 0.2.3
 
 **Download `Modvault.exe` below** and replace the old exe with it — your mods and settings stay.

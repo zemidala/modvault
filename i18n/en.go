@@ -618,4 +618,5 @@ var en = map[string]string{
 	"Выйти из Nexus":                          "Sign out of Nexus",
 	"Выйти из учётной записи %s? Modvault отзовёт свой доступ на Nexus. Моды останутся на месте; чтобы снова ставить их с сайта и проверять обновления, понадобится войти заново.": "Sign out of the %s account? Modvault will revoke its access on Nexus. Your mods stay where they are; to install mods from the site and check for updates you will need to sign in again.",
 	"Выйти": "Sign out", "Вход в Nexus выполнен: %s": "Signed in to Nexus: %s",
+	"Vortex перенёс файлы модов в игру (Move Deployment), а не сослался на них: перенять их так нельзя. В настройках Vortex выберите Hardlink Deployment или Symlink Deployment, разверните моды заново и повторите": "Vortex moved the mod files into the game (Move Deployment) instead of linking them, so they cannot be taken over. In Vortex settings choose Hardlink Deployment or Symlink Deployment, deploy the mods again and retry",
 }

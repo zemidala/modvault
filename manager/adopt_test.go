@@ -28,6 +28,16 @@ const (
 
 func newVortexSetup(t *testing.T, base string) *vortexSetup {
 	t.Helper()
+	return newVortexSetupWith(t, base, "hardlink")
+}
+
+// newVortexSetupWith lays out the game the way Vortex deploys with mode:
+// "hardlink" (Hardlink Deployment), "symlink" (Symlink Deployment, used when
+// the staging folder is on another drive; its manifest here has no
+// stagingPath, like older ones) or "copy" (files that link nowhere, with
+// stagingPath in the manifest).
+func newVortexSetupWith(t *testing.T, base, mode string) *vortexSetup {
+	t.Helper()
 	v := &vortexSetup{game: filepath.Join(base, "Warhammer 40,000 DARKTIDE"), staging: filepath.Join(base, "warhammer40kdarktide")}
 	write := func(path string, data []byte) {
 		os.MkdirAll(filepath.Dir(path), 0o755)
@@ -68,14 +78,28 @@ func newVortexSetup(t *testing.T, base string) *vortexSetup {
 			}
 			files = append(files, depFile{strings.ReplaceAll(rel, "/", `\`), src})
 			gameFile := filepath.Join(v.game, filepath.FromSlash(rel))
+			stagedFile := filepath.Join(v.staging, src, filepath.FromSlash(rel))
 			os.MkdirAll(filepath.Dir(gameFile), 0o755)
-			if err := os.Link(filepath.Join(v.staging, src, filepath.FromSlash(rel)), gameFile); err != nil {
-				t.Skipf("жёсткие ссылки недоступны: %v", err)
+			switch mode {
+			case "hardlink":
+				if err := os.Link(stagedFile, gameFile); err != nil {
+					t.Skipf("жёсткие ссылки недоступны: %v", err)
+				}
+				v.links = append(v.links, rel)
+			case "symlink":
+				if err := os.Symlink(stagedFile, gameFile); err != nil {
+					t.Skipf("символические ссылки недоступны: %v", err)
+				}
+			default:
+				write(gameFile, []byte(content(staged[src], rel)))
 			}
-			v.links = append(v.links, rel)
 		}
 	}
-	dep, _ := json.Marshal(map[string]any{"version": 1, "instance": "abc", "deploymentMethod": "hardlink_activator", "files": files})
+	manifest := map[string]any{"version": 1, "instance": "abc", "deploymentMethod": mode + "_activator", "files": files}
+	if mode == "copy" {
+		manifest["stagingPath"] = v.staging
+	}
+	dep, _ := json.Marshal(manifest)
 	write(filepath.Join(v.game, "vortex.deployment.json"), dep)
 
 	write(filepath.Join(v.game, "binaries", "Darktide.exe"), []byte("exe"))
@@ -86,6 +110,50 @@ func newVortexSetup(t *testing.T, base string) *vortexSetup {
 	write(filepath.Join(v.game, "mods", "afk", "afk.mod.vortex_backup"), []byte("файл до Vortex"))
 	write(filepath.Join(v.game, "mods", "afk", "__folder_managed_by_vortex"), []byte("{}"))
 	return v
+}
+
+func content(files map[string]string, rel string) string { return files[rel] }
+
+// Vortex does not always deploy with hard links: with Symlink Deployment the
+// game files point into its staging folder, and newer manifests name the
+// folder outright. Adoption must work either way (modvault-releases issue #3).
+func TestAdoptWithoutHardLinks(t *testing.T) {
+	for _, mode := range []string{"copy", "symlink"} {
+		t.Run(mode, func(t *testing.T) {
+			base := t.TempDir()
+			v := newVortexSetupWith(t, base, mode)
+			a := NewAt(filepath.Join(base, "Modvault"))
+			a.game = &darktide.Darktide{Patcher: fakePatcher}
+			if _, err := a.setGame(v.game); err != nil {
+				t.Fatal(err)
+			}
+			rep, err := a.Adopt(false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if rep.Mods != 5 || len(rep.Problems) != 0 || !sameDir(rep.Staging, v.staging) {
+				t.Errorf("отчёт: %+v", rep)
+			}
+			// The Vortex layout is taken as is: only the load order waits for
+			// a deploy, just as with hard links.
+			if s := state(t, a); s.PlanTitle != "План развёртывания: 1 изменение" || strings.Contains(issueTitles(s), "изменён") {
+				t.Errorf("после приёма: план %q, замечания %s", s.PlanTitle, issueTitles(s))
+			}
+			// The next deploy runs over the adopted files without complaint.
+			if _, err := a.Deploy(); err != nil {
+				t.Fatal(err)
+			}
+			if got := statusValue(state(t, a), "Файлы в игре"); got != "совпадают с набором" {
+				t.Errorf("после развёртывания файлы в игре: %q", got)
+			}
+		})
+	}
+}
+
+func sameDir(a, b string) bool {
+	ai, err1 := os.Stat(a)
+	bi, err2 := os.Stat(b)
+	return err1 == nil && err2 == nil && os.SameFile(ai, bi)
 }
 
 func (v *vortexSetup) checkLinks(t *testing.T) {
