@@ -3,7 +3,6 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"flag"
@@ -12,7 +11,9 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/zemidala/modvault/core/fsx"
 	"github.com/zemidala/modvault/i18n"
 	"github.com/zemidala/modvault/internal/version"
 	"github.com/zemidala/modvault/manager"
@@ -28,9 +29,6 @@ const (
 	exitError = 1
 	exitUsage = 2
 )
-
-// stdin — откуда команды читают ввод пользователя.
-var stdin io.Reader = os.Stdin
 
 // errUsage — команда вызвана неправильно; справка уже выведена.
 var errUsage = i18n.NewError("неверный вызов")
@@ -138,9 +136,9 @@ Vortex:
   release [--dry-run]       вернуть управление Vortex
 
 Nexus:
-  nexus                     чей ключ сохранён
-  nexus login               сохранить ключ API (читается со стандартного ввода)
-  nexus logout              забыть ключ
+  nexus                     кто вошёл
+  nexus login               войти через страницу Nexus в браузере
+  nexus logout              выйти и отозвать доступ
   nexus check               проверить, вышли ли новые версии модов
   nexus get <ссылка nxm>    скачать и поставить мод по ссылке с сайта
   nexus collection <ссылка> создать набор по коллекции Nexus
@@ -655,27 +653,30 @@ func (c *cli) nexus(args []string) error {
 	switch args[0] {
 	case "status":
 		if user := m.NexusUser(); user != "" {
-			i18n.Fprintf(c.out, "ключ Nexus сохранён: %s\n", user)
+			i18n.Fprintf(c.out, "вход в Nexus: %s\n", user)
 		} else {
-			fmt.Fprintln(c.out, i18n.T("ключ Nexus не задан: modvault nexus login"))
+			fmt.Fprintln(c.out, i18n.T("вход в Nexus не выполнен: modvault nexus login"))
 		}
 		return nil
 	case "login":
-		fmt.Fprint(c.out, i18n.T("Ключ API (nexusmods.com → Site preferences → API Access → Personal API Key): "))
-		key, err := bufio.NewReader(stdin).ReadString('\n')
-		if err != nil && key == "" {
-			return i18n.NewError("ключ не введён")
+		open := func(link string) error {
+			i18n.Fprintf(c.out, "Откроется страница Nexus: разрешите доступ для Modvault. Если браузер не открылся, откройте адрес сами:\n%s\n", link)
+			fsx.OpenURL(link) // the address above is enough if the browser does not open
+			return nil
 		}
-		if _, err := m.NexusLogin(ctx, key); err != nil {
+		// A sign-in left alone in the browser should not hang the console forever.
+		ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+		defer cancel()
+		if _, err := m.NexusLogin(ctx, open); err != nil {
 			return err
 		}
-		i18n.Fprintf(c.out, "ключ принят и сохранён: %s\n", m.NexusUser())
+		i18n.Fprintf(c.out, "вход выполнен: %s\n", m.NexusUser())
 		return nil
 	case "logout":
-		if _, err := m.NexusLogout(); err != nil {
+		if _, err := m.NexusLogout(ctx); err != nil {
 			return err
 		}
-		fmt.Fprintln(c.out, i18n.T("ключ Nexus забыт"))
+		fmt.Fprintln(c.out, i18n.T("выход из Nexus выполнен, доступ отозван"))
 		return nil
 	case "check":
 		rep, err := m.CheckUpdates(ctx, func(p manager.CheckProgress) {

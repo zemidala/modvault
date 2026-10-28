@@ -96,10 +96,8 @@ const commands = {
   Sort: () => confirmThen(() => backend().SortAsk(), () => backend().Sort()),
   EnableMod: (id) => backend().SetEnabled(id, true),
   DisableMod: (id) => backend().SetEnabled(id, false),
-  NexusKey: async () => {
-    const key = await ask(await backend().NexusKeyAsk());
-    return key === null ? state : backend().NexusLogin(key);
-  },
+  NexusLogin: () => backend().NexusLogin(),
+  NexusLogout: () => confirmThen(() => backend().NexusLogoutAsk(), () => backend().NexusLogout()),
   ToggleNxm: () => confirmThen(() => backend().NxmAsk(), () => backend().ToggleNxm()),
   ShowFiles: async () => {
     await showFiles();

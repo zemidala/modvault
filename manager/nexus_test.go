@@ -3,13 +3,20 @@ package manager
 import (
 	"bytes"
 	"context"
+	"crypto"
 	"crypto/md5"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -61,11 +68,98 @@ type fakeNexus struct {
 	messages []string
 	// collections — коллекции по коду: готовый ответ collectionRevision.
 	collections map[string]map[string]any
+
+	// Sign-in: the signing key, valid access tokens, the valid refresh
+	// token and the tokens revoked on sign-out.
+	key     *rsa.PrivateKey
+	tokens  map[string]bool
+	refresh string
+	issued  int
+	revoked []string
+}
+
+// authorized reports whether the request carries a valid access token or
+// the developer key "good".
+func (f *fakeNexus) authorized(r *http.Request) bool {
+	if r.Header.Get("apikey") == "good" {
+		return true
+	}
+	token, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+	return ok && f.tokens[token]
+}
+
+// signIn plays the Nexus sign-in server.
+func (f *fakeNexus) signIn(w http.ResponseWriter, r *http.Request) {
+	r.ParseForm()
+	form := r.PostForm
+	if r.URL.Path == "/oauth/revoke" {
+		f.revoked = append(f.revoked, form.Get("token"))
+		return
+	}
+	if form.Get("code") != "the-code" && (form.Get("refresh_token") == "" || form.Get("refresh_token") != f.refresh) {
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprint(w, `{"error":"invalid_grant"}`)
+		return
+	}
+	f.issued++
+	f.refresh = fmt.Sprintf("refresh-%d", f.issued)
+	roles := []string{"member"}
+	if f.premium {
+		roles = append(roles, "premium")
+	}
+	enc := func(v any) string {
+		data, _ := json.Marshal(v)
+		return base64.RawURLEncoding.EncodeToString(data)
+	}
+	head := enc(map[string]string{"alg": "RS256"}) + "." +
+		enc(map[string]any{"jti": f.issued, "user": map[string]any{"id": 1, "username": "zd", "membership_roles": roles}})
+	sum := sha256.Sum256([]byte(head))
+	sig, _ := rsa.SignPKCS1v15(rand.Reader, f.key, crypto.SHA256, sum[:])
+	access := head + "." + base64.RawURLEncoding.EncodeToString(sig)
+	f.tokens[access] = true
+	json.NewEncoder(w).Encode(map[string]any{"access_token": access, "refresh_token": f.refresh, "expires_in": 21600})
+}
+
+// revokeOnSite plays a user who revoked Modvault's access on the site.
+func (f *fakeNexus) revokeOnSite() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.tokens, f.refresh = map[string]bool{}, "gone"
+}
+
+// browser plays the browser: it sends answer (by default the right code)
+// back to Modvault.
+func browser(t *testing.T, answer url.Values) func(string) error {
+	return func(link string) error {
+		u, err := url.Parse(link)
+		if err != nil {
+			return err
+		}
+		q := u.Query()
+		if answer == nil {
+			answer = url.Values{"code": {"the-code"}}
+		}
+		answer.Set("state", q.Get("state"))
+		go func() {
+			resp, err := http.Get(q.Get("redirect_uri") + "?" + answer.Encode())
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			resp.Body.Close()
+		}()
+		return nil
+	}
 }
 
 func newFakeNexus(t *testing.T) *fakeNexus {
 	f := &fakeNexus{mods: map[int]*fakeMod{}, changed: map[int]int64{}, cut: map[int]int{}, broken: map[int]bool{}, foreign: map[int]bool{},
-		endorsed: map[int]string{}, versions: map[int]string{}}
+		endorsed: map[int]string{}, versions: map[int]string{}, tokens: map[string]bool{}}
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.key = key
 	f.srv = httptest.NewServer(http.HandlerFunc(f.serve))
 	t.Cleanup(f.srv.Close)
 	old := nexus.RetryDelay
@@ -141,7 +235,7 @@ func (f *fakeNexus) serve(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		switch {
-		case r.Header.Get("apikey") != "good":
+		case !f.authorized(r):
 			w.WriteHeader(http.StatusUnauthorized)
 		case !strings.Contains(q.Query, "createMessage") || len(q.Variables.To) != 1:
 			json.NewEncoder(w).Encode(map[string]any{"errors": []map[string]string{{"message": "bad query"}}})
@@ -170,8 +264,13 @@ func (f *fakeNexus) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if strings.HasPrefix(path, "/oauth/") {
+		f.signIn(w, r)
+		return
+	}
+
 	f.requests = append(f.requests, path)
-	if r.Header.Get("apikey") != "good" {
+	if !f.authorized(r) {
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
@@ -287,12 +386,15 @@ func nexusApp(t *testing.T) (*Manager, *fakeNexus, string) {
 	}
 	f := newFakeNexus(t)
 	a.nexusBase = f.srv.URL
+	a.nexusAuth = &nexus.Auth{Base: f.srv.URL + "/oauth", Callback: "http://127.0.0.1:0/callback", Key: &f.key.PublicKey, Version: "test"}
 	return a, f, home
 }
 
 func login(t *testing.T, a *Manager) {
 	t.Helper()
-	if _, err := a.NexusLogin(context.Background(), " good\n"); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if _, err := a.NexusLogin(ctx, browser(t, nil)); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -310,30 +412,31 @@ func TestNexusLogin(t *testing.T) {
 	a, f, home := nexusApp(t)
 	ctx := context.Background()
 
-	if v := statusValue(state(t, a), "Nexus"); v != "ключ не задан" {
+	if v := statusValue(state(t, a), "Nexus"); v != "вход не выполнен" {
 		t.Errorf("до входа: %q", v)
 	}
-	if _, err := a.InstallLink(ctx, link(22, 1), nil); err == nil || !strings.Contains(err.Error(), "ключ Nexus не задан") {
-		t.Errorf("загрузка без ключа: %v", err)
+	if _, err := a.InstallLink(ctx, link(22, 1), nil); err == nil || !strings.Contains(err.Error(), "вход в Nexus не выполнен") {
+		t.Errorf("загрузка без входа: %v", err)
 	}
-	if _, err := a.NexusLogin(ctx, "bad"); err == nil {
-		t.Error("плохой ключ принят")
+	// Access denied on the Nexus page: nothing is saved.
+	if _, err := a.NexusLogin(ctx, browser(t, url.Values{"error": {"access_denied"}})); !errors.Is(err, nexus.ErrDenied) {
+		t.Errorf("отказ на сайте: %v", err)
 	}
-	if key, _ := a.keys.Load(); key != "" {
-		t.Errorf("плохой ключ сохранён: %q", key)
+	if token, _ := a.keys.Load(); token != "" {
+		t.Errorf("после отказа сохранено %q", token)
 	}
 
 	login(t, a)
-	if key, _ := a.keys.Load(); key != "good" {
-		t.Errorf("ключ = %q", key)
+	if token, _ := a.keys.Load(); token != "refresh-1" {
+		t.Errorf("токен обновления = %q", token)
 	}
 	if v := statusValue(state(t, a), "Nexus"); v != "zd" {
 		t.Errorf("после входа: %q", v)
 	}
-	// Ключ не попадает в файлы программы.
+	// Tokens never land in program files.
 	for path, data := range snapshot(t, home) {
-		if strings.Contains(data, "good") {
-			t.Errorf("ключ записан в %s", path)
+		if strings.Contains(data, "refresh-") || strings.Contains(data, "eyJ") {
+			t.Errorf("токен записан в %s", path)
 		}
 	}
 
@@ -342,14 +445,55 @@ func TestNexusLogin(t *testing.T) {
 	if v := statusValue(state(t, a), "Nexus"); v != "zd · Premium" {
 		t.Errorf("Premium: %q", v)
 	}
-	if _, err := a.NexusLogout(); err != nil {
+
+	// Access revoked on the site: the next request finds out and Modvault
+	// shows that nobody is signed in.
+	f.revokeOnSite()
+	c, err := a.client()
+	if err != nil {
 		t.Fatal(err)
 	}
-	if key, _ := a.keys.Load(); key != "" || a.NexusUser() != "" {
-		t.Errorf("после выхода: ключ %q, имя %q", key, a.NexusUser())
+	if _, err := c.Validate(ctx); !errors.Is(err, nexus.ErrSignedOut) {
+		t.Errorf("после отзыва на сайте: %v", err)
+	}
+	if token, _ := a.keys.Load(); token != "" || a.NexusUser() != "" {
+		t.Errorf("после отзыва на сайте: токен %q, имя %q", token, a.NexusUser())
+	}
+
+	login(t, a)
+	if _, err := a.NexusLogout(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if token, _ := a.keys.Load(); token != "" || a.NexusUser() != "" || len(f.revoked) != 1 {
+		t.Errorf("после выхода: токен %q, имя %q, отозвано %v", token, a.NexusUser(), f.revoked)
 	}
 	if _, err := a.CheckUpdates(ctx, nil); err == nil {
-		t.Error("проверка обновлений без ключа прошла")
+		t.Error("проверка обновлений без входа прошла")
+	}
+}
+
+func TestDeveloperKey(t *testing.T) {
+	a, _, _ := nexusApp(t)
+	t.Setenv(devKeyEnv, "good")
+	if _, err := a.CheckUpdates(context.Background(), nil); err != nil {
+		t.Errorf("ключ разработчика: %v", err)
+	}
+	if token, _ := a.keys.Load(); token != "" {
+		t.Errorf("ключ разработчика сохранён: %q", token)
+	}
+}
+
+func TestForgetOldKey(t *testing.T) {
+	a, _, _ := nexusApp(t)
+	a.settings.NexusUser = "zd" // signed in with a personal key in 0.2.x
+	a.forgetOldKey()
+	if a.NexusUser() != "" {
+		t.Errorf("пользователь старого ключа остался: %q", a.NexusUser())
+	}
+	login(t, a)
+	a.forgetOldKey()
+	if a.NexusUser() != "zd" {
+		t.Error("вход через OAuth забыт")
 	}
 }
 
@@ -896,7 +1040,7 @@ func TestImportCollection(t *testing.T) {
 	if _, err := a.InstallLink(ctx, link(22, 9), nil); err != nil {
 		t.Fatal(err)
 	}
-	a.NexusLogout() // состав коллекции читается и без ключа
+	a.NexusLogout(ctx) // состав коллекции читается и без ключа
 
 	file := func(id, modID int, name, version string, optional bool) map[string]any {
 		return map[string]any{"fileId": id, "optional": optional, "version": version,

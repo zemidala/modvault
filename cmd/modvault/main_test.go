@@ -97,13 +97,13 @@ func TestHelpAndVersion(t *testing.T) {
 		{[]string{"profile", "new"}, exitUsage, "", "использование: modvault profile new"},
 		{[]string{"profile", "switch"}, exitUsage, "", "использование: modvault profile switch"},
 		{[]string{"profile", "switch", "Нет такого"}, exitError, "", "набор «Нет такого» не найден"},
-		{[]string{"nexus"}, exitOK, "ключ Nexus не задан", ""},
+		{[]string{"nexus"}, exitOK, "вход в Nexus не выполнен", ""},
 		{[]string{"nexus", "get"}, exitUsage, "", "использование: modvault nexus get"},
 		{[]string{"nexus", "nope"}, exitUsage, "", "неизвестная команда Nexus: nope"},
 		{[]string{"nexus", "get", "https://example.com"}, exitError, "", "ссылка nxm не разобрана"},
-		{[]string{"nexus", "get", "nxm://warhammer40kdarktide/mods/1/files/2"}, exitError, "", "ключ Nexus не задан"},
-		{[]string{"nexus", "check"}, exitError, "", "ключ Nexus не задан"},
-		{[]string{"nexus", "logout"}, exitOK, "ключ Nexus забыт", ""},
+		{[]string{"nexus", "get", "nxm://warhammer40kdarktide/mods/1/files/2"}, exitError, "", "вход в Nexus не выполнен"},
+		{[]string{"nexus", "check"}, exitError, "", "вход в Nexus не выполнен"},
+		{[]string{"nexus", "logout"}, exitOK, "выход из Nexus выполнен", ""},
 	}
 	for _, tt := range tests {
 		code, out, errOut := e.run(tt.args...)

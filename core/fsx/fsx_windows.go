@@ -118,6 +118,19 @@ func linkError(err error) error {
 	return err
 }
 
+// OpenURL opens a web address in the default browser.
+func OpenURL(u string) error {
+	if !strings.HasPrefix(u, "https://") && !strings.HasPrefix(u, "http://") {
+		return fmt.Errorf("%s: not a web address", u)
+	}
+	verb, _ := windows.UTF16PtrFromString("open")
+	target, err := windows.UTF16PtrFromString(u)
+	if err != nil {
+		return err
+	}
+	return windows.ShellExecute(0, verb, target, nil, nil, windows.SW_SHOWNORMAL)
+}
+
 // OpenFolder показывает папку в Проводнике.
 func OpenFolder(dir string) error {
 	if fi, err := os.Stat(dir); err != nil {
