@@ -4,6 +4,7 @@
 @font-face { font-family: "PT Sans"; font-weight: 400; src: url("fonts/PTSans-Regular.ttf"); }
 @font-face { font-family: "PT Sans"; font-weight: 700; src: url("fonts/PTSans-Bold.ttf"); }
 @font-face { font-family: "Saira Stencil One"; src: url("fonts/SairaStencilOne-Regular.ttf"); }
+@font-face { font-family: "Russo One"; src: url("fonts/RussoOne-Regular.ttf"); }
 
 :root {
   --iron-deep: #14110e;
@@ -14,14 +15,14 @@
   --brass-line: #5a4a2c;
   --brass-frame: #6b5830;
   --brass: #b89650;
-  --gold: #d4b46a;
+  --gold: #ecd394;
   --parchment: #e9dfc8;
-  --muted: #b3a68c;
+  --muted: #dbd1b9;
   --black: #07080b;
-  --orange-worn: #cf6b35;
-  --orange-text: #e07a40;
+  --orange-worn: #ff6a14;
+  --orange-text: #ffa070;
   --ok: #7fbf9a;
-  --error: #e8695c;
+  --error: #ff9a8c;
   --error-line: #7a2a24;
   --cut: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
 }
@@ -72,11 +73,6 @@ h1, h2 { margin: 0; font-weight: 400; }
   padding: 10px 20px;
   color: var(--black);
   background-color: var(--orange-worn);
-  background-image:
-    radial-gradient(ellipse at 12% 20%, rgba(7, 8, 11, 0.16), transparent 45%),
-    radial-gradient(ellipse at 80% 90%, rgba(7, 8, 11, 0.2), transparent 40%),
-    radial-gradient(ellipse at 48% 0%, rgba(255, 255, 255, 0.08), transparent 35%),
-    repeating-linear-gradient(115deg, rgba(7, 8, 11, 0.05) 0 2px, transparent 2px 9px);
   border-bottom: 3px double var(--black);
 }
 
@@ -113,14 +109,16 @@ h1, h2 { margin: 0; font-weight: 400; }
   border: 0;
   background: var(--orange-worn);
   color: var(--black);
-  font-family: "Forum", serif;
-  font-size: 18px;
-  letter-spacing: 0.12em;
+  font-family: "Russo One", sans-serif;
+  font-size: 15px;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   clip-path: var(--cut);
 }
 .plate:hover { filter: brightness(1.12); }
 .plate-dark { background: var(--iron-deep); color: var(--parchment); }
+/* Sign-in button: a dark plate with orange lettering, calmer than the orange one. */
+#login .plate { background: var(--iron-deep); color: #ff9a5c; font-family: "PT Sans", sans-serif; font-size: 17px; font-weight: 700; letter-spacing: 0; text-transform: none; }
 
 .ghost {
   min-height: 44px;
@@ -171,9 +169,9 @@ main section { display: flex; flex-direction: column; gap: 8px; }
 
 .heading { display: flex; align-items: center; gap: 12px; }
 .heading h1, .heading h2 {
-  font-family: "Forum", serif;
-  font-size: 20px;
-  letter-spacing: 0.14em;
+  font-family: "Russo One", sans-serif;
+  font-size: 18px;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--gold);
 }
