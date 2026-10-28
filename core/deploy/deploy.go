@@ -315,6 +315,13 @@ func (d *Deployer) Plan(sources []Source, winners map[string]string) (*Plan, err
 		if err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return nil, err
 		}
+		// Vortex Symlink Deployment leaves symlinks to files: after adoption
+		// they count as files. Moving or removing one touches only the link.
+		if exists && info.Mode()&fs.ModeSymlink != 0 {
+			if target, err := os.Stat(abs); err == nil {
+				info = target
+			}
+		}
 		if exists && !info.Mode().IsRegular() {
 			return nil, i18n.Errorf("%s: на месте файла лежит папка или ссылка", rel)
 		}

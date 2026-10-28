@@ -146,6 +146,25 @@ func TestAdoptWithoutHardLinks(t *testing.T) {
 			if got := statusValue(state(t, a), "Файлы в игре"); got != "совпадают с набором" {
 				t.Errorf("после развёртывания файлы в игре: %q", got)
 			}
+			// Disabling a mod takes its files out of the game and brings back
+			// the original Vortex kept. With symlinks only the link goes: the
+			// file in the Vortex folder stays.
+			if _, err := a.SetEnabled("afk", false); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := a.Deploy(); err != nil {
+				t.Fatal(err)
+			}
+			gameFile := filepath.Join(v.game, "mods", "afk", "afk.mod")
+			if info, err := os.Lstat(gameFile); err != nil || !info.Mode().IsRegular() || readFile(t, gameFile) != "файл до Vortex" {
+				t.Errorf("в игре вместо оригинала: %v, %v", info, err)
+			}
+			if _, err := os.Lstat(filepath.Join(v.game, "mods", "afk", "scripts", "afk.lua")); err == nil {
+				t.Error("файл выключенного мода остался в игре")
+			}
+			if got, _ := os.ReadFile(filepath.Join(v.staging, srcAFK, "mods", "afk", "afk.mod")); string(got) != "return {}" {
+				t.Errorf("файл в папке Vortex: %q", got)
+			}
 		})
 	}
 }
